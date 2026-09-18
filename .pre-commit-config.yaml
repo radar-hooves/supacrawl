@@ -29,6 +29,13 @@ repos:
         language: system
         types: [text]
 
+      - id: rules-fence
+        name: 'governance - Rule content lands only at an open sunset-review sitting'
+        entry: household-precommit-rules-fence
+        language: system
+        pass_filenames: true
+        files: '^\.claude/rules/.*\.md$'
+
       - id: check-history
         name: 'governance - A file states what is, not what was'
         entry: household-precommit-history
