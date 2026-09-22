@@ -160,6 +160,7 @@ class TestDetectPdfContentType:
         from supacrawl.services.pdf import detect_pdf_content_type
 
         mock_response = MagicMock()
+        mock_response.status_code = 200
         mock_response.headers = {"content-type": "application/pdf"}
 
         with patch("supacrawl.services.pdf.guarded_request", AsyncMock(return_value=mock_response)):
@@ -171,6 +172,7 @@ class TestDetectPdfContentType:
         from supacrawl.services.pdf import detect_pdf_content_type
 
         mock_response = MagicMock()
+        mock_response.status_code = 200
         mock_response.headers = {"content-type": "text/html; charset=utf-8"}
 
         with patch("supacrawl.services.pdf.guarded_request", AsyncMock(return_value=mock_response)):
@@ -186,6 +188,70 @@ class TestDetectPdfContentType:
             AsyncMock(side_effect=Exception("Connection refused")),
         ):
             result = await detect_pdf_content_type("https://unreachable.com/file")
+            assert result is False
+
+    @pytest.mark.asyncio
+    async def test_head_405_falls_back_to_get_content_type(self):
+        """A dynamically-generated download endpoint that answers HEAD with 405
+        (legislation.gov.au's compilation PDFs, master-project#350) is not
+        misread as non-PDF from the 405 error page's own Content-Type: the
+        fallback GET's real Content-Type decides it instead."""
+        from supacrawl.services.pdf import detect_pdf_content_type
+
+        head_response = MagicMock()
+        head_response.status_code = 405
+        head_response.headers = {"content-type": "text/html"}
+        get_response = MagicMock()
+        get_response.status_code = 200
+        get_response.headers = {"content-type": "application/pdf"}
+        get_response.content = b"%PDF-1.4\n..."
+
+        with patch(
+            "supacrawl.services.pdf.guarded_request",
+            AsyncMock(side_effect=[head_response, get_response]),
+        ):
+            result = await detect_pdf_content_type("https://www.legislation.gov.au/C0000A00000/latest/pdf")
+            assert result is True
+
+    @pytest.mark.asyncio
+    async def test_head_405_falls_back_to_byte_sniff_when_get_content_type_is_generic(self):
+        """When even the fallback GET's Content-Type is generic (e.g.
+        application/octet-stream), the body's ``%PDF-`` signature is the last
+        word, exactly as the HTTP-first path already sniffs it."""
+        from supacrawl.services.pdf import detect_pdf_content_type
+
+        head_response = MagicMock()
+        head_response.status_code = 405
+        head_response.headers = {"content-type": "text/html"}
+        get_response = MagicMock()
+        get_response.status_code = 200
+        get_response.headers = {"content-type": "application/octet-stream"}
+        get_response.content = b"%PDF-1.4\n..."
+
+        with patch(
+            "supacrawl.services.pdf.guarded_request",
+            AsyncMock(side_effect=[head_response, get_response]),
+        ):
+            result = await detect_pdf_content_type("https://example.com/download")
+            assert result is True
+
+    @pytest.mark.asyncio
+    async def test_head_405_and_non_pdf_body_returns_false(self):
+        from supacrawl.services.pdf import detect_pdf_content_type
+
+        head_response = MagicMock()
+        head_response.status_code = 405
+        head_response.headers = {"content-type": "text/html"}
+        get_response = MagicMock()
+        get_response.status_code = 200
+        get_response.headers = {"content-type": "application/octet-stream"}
+        get_response.content = b"not a pdf at all"
+
+        with patch(
+            "supacrawl.services.pdf.guarded_request",
+            AsyncMock(side_effect=[head_response, get_response]),
+        ):
+            result = await detect_pdf_content_type("https://example.com/download")
             assert result is False
 
 

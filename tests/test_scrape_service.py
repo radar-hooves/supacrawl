@@ -4,8 +4,26 @@ import inspect
 
 import pytest
 
+from supacrawl.exceptions import ProviderError, ValidationError
 from supacrawl.models import ScrapeResult
+from supacrawl.services.browser import PageContent, PageMetadata
 from supacrawl.services.scrape import ScrapeService
+
+
+def _fake_metadata() -> PageMetadata:
+    return PageMetadata(
+        title="T",
+        description=None,
+        language=None,
+        keywords=None,
+        robots=None,
+        canonical_url=None,
+        og_title=None,
+        og_description=None,
+        og_image=None,
+        og_url=None,
+        og_site_name=None,
+    )
 
 
 class TestScrapeServiceSignature:
@@ -17,6 +35,93 @@ class TestScrapeServiceSignature:
         params = inspect.signature(ScrapeService.scrape).parameters
         assert "proxy" in params
         assert params["proxy"].default is None
+
+
+class TestJsonFormatRefusal:
+    """formats=["json"] refuses cleanly instead of quietly degrading to a
+    markdown-only result with no extraction (master-project#350).
+    """
+
+    @pytest.mark.asyncio
+    async def test_missing_schema_and_prompt_raises_before_any_fetch(self) -> None:
+        """No schema or prompt means there is nothing to tell the LLM to pull
+        out, so the call is refused before any network or browser activity —
+        no BrowserManager is patched here because none should be constructed."""
+        service = ScrapeService()
+        with pytest.raises(ValidationError, match="json_schema or json_prompt"):
+            await service.scrape("https://example.com", formats=["json"])
+
+    @pytest.mark.asyncio
+    async def test_extract_json_strict_raises_when_llm_not_configured(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("SUPACRAWL_LLM_PROVIDER", raising=False)
+        monkeypatch.delenv("SUPACRAWL_LLM_MODEL", raising=False)
+        service = ScrapeService()
+
+        with pytest.raises(ProviderError) as exc_info:
+            await service._extract_json("some page content", None, "extract stuff", strict=True)
+
+        assert exc_info.value.context.get("provider") == "llm"
+
+    @pytest.mark.asyncio
+    async def test_extract_json_non_strict_still_returns_none_on_failure(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """The changeTracking json-comparison path calls _extract_json without
+        strict=True and must keep its existing best-effort, non-raising
+        contract — only the primary "json" format path is made strict."""
+        monkeypatch.delenv("SUPACRAWL_LLM_PROVIDER", raising=False)
+        monkeypatch.delenv("SUPACRAWL_LLM_MODEL", raising=False)
+        service = ScrapeService()
+
+        result = await service._extract_json("some page content", None, "extract stuff")
+
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_scrape_refuses_without_escalating_when_llm_not_configured(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A real end-to-end scrape (fake browser, no network) with a well-formed
+        json request but no LLM configured raises ProviderError directly out of
+        scrape() rather than being swallowed into a success=False result and
+        retried through the anti-bot escalation ladder, which cannot fix a
+        missing LLM configuration."""
+        monkeypatch.delenv("SUPACRAWL_LLM_PROVIDER", raising=False)
+        monkeypatch.delenv("SUPACRAWL_LLM_MODEL", raising=False)
+
+        class FakeBrowser:
+            def __init__(self, **_kwargs: object) -> None:
+                pass
+
+            async def __aenter__(self) -> "FakeBrowser":
+                return self
+
+            async def __aexit__(self, *_args: object) -> bool:
+                return False
+
+            async def fetch_page(self, url: str, **_kwargs: object) -> PageContent:
+                return PageContent(
+                    url=url,
+                    html="<html><body><main><p>"
+                    + " ".join(f"word{i}" for i in range(80))
+                    + "</p></main></body></html>",
+                    title="T",
+                    status_code=200,
+                )
+
+            async def extract_metadata(self, _html: str) -> PageMetadata:
+                return _fake_metadata()
+
+        monkeypatch.setattr("supacrawl.services.scrape.BrowserManager", FakeBrowser)
+
+        service = ScrapeService()
+        with pytest.raises(ProviderError) as exc_info:
+            await service.scrape(
+                "https://example.com",
+                formats=["json"],
+                json_prompt="extract the title",
+                http_first=False,
+            )
+
+        assert exc_info.value.context.get("provider") == "llm"
 
 
 @pytest.mark.e2e
@@ -94,23 +199,28 @@ class TestScrapeService:
 
     @pytest.mark.asyncio
     async def test_scrape_returns_json_with_prompt(self):
-        """Test that scrape returns JSON data when json format requested with prompt."""
+        """When the LLM is configured, json format returns extracted data;
+        when it is not, scrape refuses with a typed ProviderError rather than
+        a silent markdown-only success (master-project#350)."""
         service = ScrapeService()
-        result = await service.scrape(
-            "https://example.com",
-            formats=["json"],
-            json_prompt="Extract the page title and domain name",
-        )
+        try:
+            result = await service.scrape(
+                "https://example.com",
+                formats=["json"],
+                json_prompt="Extract the page title and domain name",
+            )
+        except ProviderError as e:
+            assert e.context.get("provider") == "llm"
+            return
         assert result.success
         assert result.data is not None
-        # JSON extraction may fail if Ollama is not running, but should not crash
-        # We just check the structure is correct
-        if result.data.llm_extraction is not None:
-            assert isinstance(result.data.llm_extraction, dict)
+        assert isinstance(result.data.llm_extraction, dict)
 
     @pytest.mark.asyncio
     async def test_scrape_returns_json_with_schema(self):
-        """Test that scrape returns JSON data when json format requested with schema."""
+        """When the LLM is configured, json format returns extracted data;
+        when it is not, scrape refuses with a typed ProviderError rather than
+        a silent markdown-only success (master-project#350)."""
         schema = {
             "type": "object",
             "properties": {
@@ -120,32 +230,38 @@ class TestScrapeService:
             "required": ["title", "domain"],
         }
         service = ScrapeService()
-        result = await service.scrape(
-            "https://example.com",
-            formats=["json"],
-            json_schema=schema,
-        )
+        try:
+            result = await service.scrape(
+                "https://example.com",
+                formats=["json"],
+                json_schema=schema,
+            )
+        except ProviderError as e:
+            assert e.context.get("provider") == "llm"
+            return
         assert result.success
         assert result.data is not None
-        # JSON extraction may fail if Ollama is not running, but should not crash
-        # We just check the structure is correct
-        if result.data.llm_extraction is not None:
-            assert isinstance(result.data.llm_extraction, dict)
+        assert isinstance(result.data.llm_extraction, dict)
 
     @pytest.mark.asyncio
     async def test_scrape_returns_multiple_formats_including_json(self):
-        """Test that scrape can return multiple formats including JSON."""
+        """When the LLM is configured, markdown and json both come back;
+        when it is not, scrape refuses with a typed ProviderError rather than
+        a silent markdown-only success (master-project#350)."""
         service = ScrapeService()
-        result = await service.scrape(
-            "https://example.com",
-            formats=["markdown", "json"],
-            json_prompt="Extract page info",
-        )
+        try:
+            result = await service.scrape(
+                "https://example.com",
+                formats=["markdown", "json"],
+                json_prompt="Extract page info",
+            )
+        except ProviderError as e:
+            assert e.context.get("provider") == "llm"
+            return
         assert result.success
         assert result.data is not None
         assert result.data.markdown is not None
-        # JSON may be None if extraction fails, but shouldn't crash
-        assert result.data.llm_extraction is None or isinstance(result.data.llm_extraction, dict)
+        assert isinstance(result.data.llm_extraction, dict)
 
     @pytest.mark.asyncio
     async def test_scrape_returns_images_when_requested(self):

@@ -150,6 +150,15 @@ def needs_content_type_check(url: str) -> bool:
 async def detect_pdf_content_type(url: str, timeout: float = 10.0) -> bool:
     """Send a HEAD request and check for ``application/pdf`` Content-Type.
 
+    Falls back to a GET when HEAD is not itself a success response: a
+    dynamically-generated download endpoint commonly answers HEAD with 405
+    Method Not Allowed (e.g. legislation.gov.au's compilation PDFs, served as
+    a Content-Disposition attachment) or another non-2xx status, and that
+    response's body is an error page, not the resource — its Content-Type is
+    not evidence either way. The fallback checks the GET's own Content-Type
+    and, failing that, sniffs the body for the ``%PDF-`` signature the same
+    way the HTTP-first path already does for an ambiguous content type.
+
     Returns False on any network error rather than raising.
     """
     try:
@@ -161,8 +170,15 @@ async def detect_pdf_content_type(url: str, timeout: float = 10.0) -> bool:
             headers={"User-Agent": "Mozilla/5.0 (compatible; supacrawl)"},
         ) as client:
             response = await guarded_request(client, "HEAD", url)
-            content_type = response.headers.get("content-type", "")
-            return "application/pdf" in content_type.lower()
+            if response.status_code < 300:
+                content_type = response.headers.get("content-type", "")
+                return "application/pdf" in content_type.lower()
+
+            fallback = await guarded_request(client, "GET", url)
+            content_type = fallback.headers.get("content-type", "")
+            if "application/pdf" in content_type.lower():
+                return True
+            return is_pdf_bytes(fallback.content)
     except Exception:
         return False
 

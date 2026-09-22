@@ -35,7 +35,7 @@ if TYPE_CHECKING:
 from bs4 import BeautifulSoup
 
 from supacrawl.cache import CacheManager
-from supacrawl.exceptions import generate_correlation_id
+from supacrawl.exceptions import ProviderError, ValidationError, generate_correlation_id
 from supacrawl.models import (
     ActionsOutput,
     QualityAssessment,
@@ -909,6 +909,17 @@ class ScrapeService:
             ScrapeResult with scraped content
         """
         formats = formats or ["markdown"]
+
+        # A "json" request with neither schema nor prompt has nothing to tell the
+        # LLM to pull out, so it is refused here, before any fetch, rather than
+        # left to fail quietly inside _extract_json after a full page scrape.
+        if "json" in formats and not json_schema and not json_prompt:
+            raise ValidationError(
+                "formats=['json'] requires json_schema or json_prompt so the extractor "
+                "knows what to pull from the page",
+                field="json_schema",
+            )
+
         wants_change_tracking = "changeTracking" in formats
 
         # Field telemetry (#137): time the whole top-level scrape. None on escalated
@@ -1316,6 +1327,22 @@ class ScrapeService:
                 if owns_browser and browser:
                     await browser.__aexit__(None, None, None)
 
+        except ProviderError as e:
+            if e.context.get("provider") == "llm":
+                # A json-extraction failure is an LLM/config problem, not a
+                # site-fetch problem: the escalation ladder below only varies
+                # the browser engine, which cannot fix it, so refuse cleanly
+                # rather than spending its retry budget on a rescrape.
+                raise
+            http2_error = "ERR_HTTP2_PROTOCOL_ERROR" in str(e)
+            this_result = self._build_failure_result(
+                url=url,
+                error=e,
+                wants_change_tracking=wants_change_tracking,
+                previous_entry=previous_entry,
+            )
+            expect_met = False
+            escalation_platform = None
         except Exception as e:
             # A mid-fetch error (network, timeout, TLS/HTTP-2 rejection, browser
             # crash) becomes a clean failure result with an honest verdict and an
@@ -2046,7 +2073,7 @@ class ScrapeService:
 
         if "json" in formats:
             # Perform LLM extraction
-            json_data = await self._extract_json(markdown or "", json_schema, json_prompt)
+            json_data = await self._extract_json(markdown or "", json_schema, json_prompt, strict=True)
 
         if "summary" in formats:
             # Generate LLM summary of the page content
@@ -2234,8 +2261,8 @@ class ScrapeService:
         json_data = None
         summary = None
 
-        if "json" in formats and markdown:
-            json_data = await self._extract_json(markdown, json_schema, json_prompt)
+        if "json" in formats:
+            json_data = await self._extract_json(markdown or "", json_schema, json_prompt, strict=True)
 
         if "summary" in formats and markdown:
             summary = await self._generate_summary(markdown)
@@ -2393,6 +2420,8 @@ class ScrapeService:
         markdown: str,
         schema: dict[str, Any] | None,
         prompt: str | None,
+        *,
+        strict: bool = False,
     ) -> dict[str, Any] | None:
         """Extract structured JSON data from markdown using LLM.
 
@@ -2400,9 +2429,20 @@ class ScrapeService:
             markdown: Markdown content to extract from
             schema: JSON schema for structured extraction
             prompt: Custom extraction prompt
+            strict: Raise instead of returning None when extraction fails.
+                Set by the primary "json" format path, where a caller who asked
+                for structured data should get a typed refusal naming what
+                went wrong rather than a quiet markdown-only result. Left
+                False for the changeTracking json-comparison path, where a
+                missed diff is a best-effort extra, not the caller's request.
 
         Returns:
-            Extracted JSON data or None on failure
+            Extracted JSON data, or None on failure when not strict.
+
+        Raises:
+            ProviderError: strict=True and extraction failed (LLM not
+                configured, the extraction call itself failed, or it returned
+                no usable data), carrying provider="llm" in its context.
         """
         from supacrawl.services.extract import ExtractService
 
@@ -2434,16 +2474,29 @@ class ScrapeService:
                 schema=schema,
             )
 
-            if result.success and result.data and len(result.data) > 0:
-                item = result.data[0]
-                if item.success and item.data:
-                    return item.data
+            item = result.data[0] if result.success and result.data else None
+            if item is not None and item.success and item.data:
+                return item.data
 
-            LOGGER.warning("JSON extraction failed or returned no data")
+            reason = item.error if item is not None and item.error else "LLM returned no usable data"
+            LOGGER.warning(f"JSON extraction failed or returned no data: {reason}")
+            if strict:
+                raise ProviderError(f"json format extraction failed: {reason}", provider="llm")
             return None
 
+        except ProviderError:
+            if strict:
+                raise
+            LOGGER.error("JSON extraction error", exc_info=True)
+            return None
         except Exception as e:
             LOGGER.error(f"JSON extraction error: {e}", exc_info=True)
+            if strict:
+                # provider="llm" (not the fetch engine) lets the caller in
+                # scrape() tell this apart from a site-fetch failure and refuse
+                # cleanly instead of spending the anti-bot escalation ladder on
+                # a rescrape that could never fix an LLM-side problem.
+                raise ProviderError(f"json format extraction failed: {e}", provider="llm") from e
             return None
 
     async def _generate_summary(self, markdown: str) -> str | None:
