@@ -368,6 +368,7 @@ class QualityVerdict(str, Enum):
     GARBLED_PDF = "garbled_pdf"  # PDF text extracted but spacing/encoding is corrupt
     EMPTY = "empty"  # no content could be extracted at all
     INFRASTRUCTURE = "infrastructure"  # supacrawl's own engine failed; says nothing about the site
+    TARPIT = "tarpit"  # a self-referential link maze of generated content (Nepenthes/iocaine-style)
 
 
 # Verdicts that mean no usable content was returned, so ``success`` must be False.
@@ -379,6 +380,7 @@ HARD_FAIL_VERDICTS: frozenset[QualityVerdict] = frozenset(
         QualityVerdict.GARBLED_PDF,
         QualityVerdict.EMPTY,
         QualityVerdict.INFRASTRUCTURE,
+        QualityVerdict.TARPIT,
     }
 )
 
@@ -429,6 +431,12 @@ VERDICT_SUGGESTIONS: dict[QualityVerdict, str] = {
         "the scraper's environment is broken (missing browser binaries, out of memory, or no shared memory): "
         "restart the supacrawl server and check its logs. Changing engine, wait_for, or other scrape options "
         "will not help."
+    ),
+    QualityVerdict.TARPIT: (
+        "This page is a crawler tarpit: an infinite maze of generated content designed to poison and trap "
+        "bots, not a real page. Do not retry with a different engine or a longer wait_for — the maze "
+        "regenerates on every fetch. Treat the URL as unreachable and find the real resource via the site's "
+        "own search or navigation instead."
     ),
 }
 

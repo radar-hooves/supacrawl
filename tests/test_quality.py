@@ -159,6 +159,88 @@ def test_verdict_and_score_never_contradict(status: int, html: str | None, md: s
         assert q.verdict == QualityVerdict.OK
 
 
+def test_crawler_tarpit_link_maze_is_hard_fail() -> None:
+    # Reproduced 24/09/2026 from a real Nepenthes/iocaine-style tarpit hit
+    # (correlation_id 65227d3d): a soft-404 report path on
+    # reports.exodus-privacy.eu.org served an HTTP 200 with plausible word
+    # count and Markov word-salad prose, but every link/image was a freshly
+    # minted child of the page's own URL.
+    url = "https://reports.exodus-privacy.eu.org/en/reports/com.blake.readingeggs.android/latest/"
+    salad = (
+        "Le tribunal populaire a condamne le dissident pour subversion contre "
+        "le pouvoir de l'Etat proletarien pendant les evenements de la place "
+    ) * 6
+    links = "\n".join(
+        f"- [{slug}]({url}{slug}/)"
+        for slug in [
+            "stood-thinning-unreeling.nude",
+            "stood-thinning-unreeling.Proletarian",
+            "stood-thinning-unreeling.%E5%A4%A9%E5%AE%89%E9%96%80",
+            "hollow-veering-clamouring.subversive",
+            "gnawing-rusting-billowing.dissident",
+            "muffled-creaking-loitering.censorship",
+        ]
+    )
+    image = f"![]({url}stood-thinning-unreeling.%E5%A4%A9%E5%AE%89%E9%96%80.svg)"
+    md = f"{salad}\n\n{links}\n\n{image}"
+
+    q = assess_quality(status_code=200, html=f"<html><body>{md}</body></html>", markdown=md, url=url)
+    assert q.verdict == QualityVerdict.TARPIT
+    assert q.is_usable is False
+    assert q.verdict in HARD_FAIL_VERDICTS
+    assert q.score <= 20
+    assert q.suggestion is not None
+
+
+def test_real_article_with_many_same_site_links_stays_ok() -> None:
+    # Guard against the obvious false positive: a genuine article/index page
+    # commonly links sideways to sibling articles and up to categories/home —
+    # none of those are path-descendants of the page's own URL.
+    url = "https://example.com/blog/2026/how-crawlers-work/"
+    body = " ".join(f"word{i}" for i in range(300))
+    links = "\n".join(
+        f"- [Related]({href})"
+        for href in [
+            "https://example.com/",
+            "https://example.com/blog/",
+            "https://example.com/blog/2026/anti-bot-defences/",
+            "https://example.com/blog/2025/scraping-basics/",
+            "https://example.com/about/",
+            "https://example.com/blog/2026/how-crawlers-work/#comments",
+        ]
+    )
+    md = f"{body}\n\n{links}"
+    q = assess_quality(status_code=200, html=f"<html><body>{md}</body></html>", markdown=md, url=url)
+    assert q.verdict == QualityVerdict.OK
+    assert q.is_usable is True
+
+
+def test_docs_toc_page_linking_to_its_own_subsections_stays_ok() -> None:
+    # A legitimate index page CAN link to its own children (a docs TOC), but
+    # real subsection slugs are short and topic-derived, not chained dictionary
+    # words — this must not trip the generated-slug half of the signal.
+    url = "https://docs.example.com/guide/"
+    body = " ".join(f"word{i}" for i in range(300))
+    links = "\n".join(
+        f"- [{slug}]({url}{slug}/)"
+        for slug in ["installation", "configuration", "authentication", "deployment", "troubleshooting"]
+    )
+    md = f"{body}\n\n{links}"
+    q = assess_quality(status_code=200, html=f"<html><body>{md}</body></html>", markdown=md, url=url)
+    assert q.verdict == QualityVerdict.OK
+    assert q.is_usable is True
+
+
+def test_link_maze_signal_needs_a_page_url() -> None:
+    # No url → the maze check cannot resolve relative links, so it must not
+    # fire (never a spurious TARPIT just because the caller omitted the url).
+    url = "https://reports.exodus-privacy.eu.org/en/reports/x/latest/"
+    links = "\n".join(f"- [x]({url}{a}-{b}-{c}/)" for a, b, c in [("a", "b", "c")] * 6)
+    md = " ".join(f"word{i}" for i in range(200)) + "\n\n" + links
+    q = assess_quality(status_code=200, html=f"<html><body>{md}</body></html>", markdown=md)
+    assert q.verdict == QualityVerdict.OK
+
+
 def test_runtime_verdict_agrees_with_bench_composite() -> None:
     # The runtime quality signal and the offline benchmark share one definition
     # (supacrawl.quality), so their judgements must move together: a clean page

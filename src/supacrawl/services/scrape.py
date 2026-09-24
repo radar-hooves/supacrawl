@@ -119,6 +119,11 @@ _LOW_DENSITY_WORDS_PER_KB = 1.0
 # classified BOT_CHALLENGE instead (see quality._classify), so it keeps
 # escalating. SUPACRAWL_CAPTCHA_FAIL_FAST=0 restores the walk-the-whole-ladder
 # behaviour (see _captcha_fail_fast).
+#
+# TARPIT is likewise deliberately absent: a Nepenthes/iocaine-style crawler
+# tarpit serves a fresh page of generated content and generated links on every
+# fetch, so a stronger stealth engine or a longer wait_for just buys another
+# maze page at higher cost. Fail fast on it the same way as CAPTCHA.
 _ESCALATABLE_VERDICTS: frozenset[QualityVerdict] = frozenset(
     {
         QualityVerdict.BOT_CHALLENGE,
@@ -2129,6 +2134,7 @@ class ScrapeService:
             html=page_content.html,
             markdown=markdown,
             visible_text=quality_text if markdown is None else None,
+            url=url,
         )
         quality_error = _quality_error(quality)
 

@@ -16,6 +16,7 @@ capture) stay in ``benchmark.metrics`` because they only make sense offline.
 from __future__ import annotations
 
 import re
+from urllib.parse import unquote, urljoin, urlparse
 
 from supacrawl.models import HARD_FAIL_VERDICTS, QualityAssessment, QualityVerdict
 
@@ -204,6 +205,117 @@ def word_spacing(markdown: str) -> float | None:
 
 
 # ---------------------------------------------------------------------------
+# Crawler-tarpit / link-maze detection
+# ---------------------------------------------------------------------------
+# Nepenthes/iocaine-style AI-crawler tarpits serve real HTTP 200s with a
+# plausible word count, so the density gate above waves them through — the
+# tell is structural, not textual: every link on the page is a freshly minted
+# child of the page's OWN url, and the crawler that follows one just gets
+# another page with the same shape, forever. A genuine article's links point
+# sideways (other articles) or up (categories, home), never recursively into
+# paths that only exist because the page itself made them up.
+
+# Markdown link/image target extraction, capturing the URL rather than merely
+# counting it (unlike `_LINK_RE`/`_IMAGE_RE` above).
+_LINK_TARGET_RE = re.compile(r"(?<!!)\[[^\]]*\]\(([^)\s]+)(?:\s+\"[^\"]*\")?\)")
+_IMAGE_TARGET_RE = re.compile(r"!\[[^\]]*\]\(([^)\s]+)(?:\s+\"[^\"]*\")?\)")
+
+# A path segment built from three or more hyphen-joined dictionary-looking
+# words ("stood-thinning-unreeling") reads as generated filler: a real slug is
+# usually one to three words lifted from the page's own title, not an
+# arbitrary chain of unrelated terms. Combined with a raw non-ASCII codepoint
+# (a tarpit's poison keywords, CJK included, land straight in the URL) this
+# distinguishes generated children from a legitimate nested doc/category page.
+_GENERATED_WORD_RUN_RE = re.compile(r"^[a-z]+(?:-[a-z]+){2,}", re.IGNORECASE)
+
+# Minimum same-host links needed before the maze ratio means anything — a page
+# with a handful of links proves nothing either way.
+_TARPIT_MIN_LINKS = 5
+# Share of same-host links that must be strict path-children of the page's own
+# URL. High on purpose: a real category/TOC page mixes in siblings, a home
+# link, breadcrumbs — a page that links to almost nothing BUT its own children
+# is not a plausible human information architecture.
+_TARPIT_DESCENDANT_RATIO = 0.8
+# Of those descendant links, the share that must look machine-generated.
+_TARPIT_GENERATED_RATIO = 0.5
+
+
+def _extract_link_targets(markdown: str) -> list[str]:
+    """Pull every markdown link/image target URL, in document order.
+
+    Args:
+        markdown: Markdown source.
+
+    Returns:
+        Raw target strings exactly as written (may be relative).
+    """
+    return _LINK_TARGET_RE.findall(markdown) + _IMAGE_TARGET_RE.findall(markdown)
+
+
+def _is_generated_slug(path: str) -> bool:
+    """True when a URL path's last segment looks machine-generated, not authored.
+
+    Args:
+        path: A URL path (not the full URL).
+
+    Returns:
+        True when the final segment is a raw non-ASCII codepoint or a run of
+        three or more hyphen-joined alphabetic words.
+    """
+    segment = unquote(path.rstrip("/").rsplit("/", 1)[-1])
+    if not segment:
+        return False
+    if any(ord(ch) > 127 for ch in segment):
+        return True
+    return bool(_GENERATED_WORD_RUN_RE.match(segment))
+
+
+def link_maze_signal(markdown: str, page_url: str | None) -> tuple[float, float, int] | None:
+    """Measure how much a page's own links look like a self-referential maze.
+
+    Args:
+        markdown: Extracted markdown carrying the page's links/images.
+        page_url: The URL that was scraped, used to resolve relative links and
+            to test whether a link is a path-descendant of the page itself.
+
+    Returns:
+        ``(descendant_ratio, generated_ratio, same_host_count)`` — the share of
+        same-host links that are a strict path-descendant of the page's own
+        URL, the share of those descendants with a generated-looking slug, and
+        how many same-host links were found — or ``None`` when there is no
+        page URL to resolve against or no same-host links to judge.
+    """
+    if not page_url:
+        return None
+    targets = _extract_link_targets(markdown)
+    if not targets:
+        return None
+
+    page = urlparse(page_url)
+    own_path = page.path.rstrip("/")
+
+    same_host = 0
+    descendant = 0
+    generated = 0
+    for target in targets:
+        resolved = urlparse(urljoin(page_url, target))
+        if resolved.netloc != page.netloc:
+            continue
+        same_host += 1
+        candidate_path = resolved.path.rstrip("/")
+        if candidate_path != own_path and candidate_path.startswith(own_path + "/"):
+            descendant += 1
+            if _is_generated_slug(resolved.path):
+                generated += 1
+
+    if same_host == 0:
+        return None
+    descendant_ratio = descendant / same_host
+    generated_ratio = generated / descendant if descendant else 0.0
+    return descendant_ratio, generated_ratio, same_host
+
+
+# ---------------------------------------------------------------------------
 # Runtime quality assessment (gate-then-grade)
 # ---------------------------------------------------------------------------
 
@@ -232,6 +344,7 @@ _VERDICT_SCORE_CEILING: dict[QualityVerdict, int] = {
     QualityVerdict.ERROR_STATUS: 10,
     QualityVerdict.GARBLED_PDF: 25,
     QualityVerdict.EMPTY: 0,
+    QualityVerdict.TARPIT: 10,
 }
 
 
@@ -267,6 +380,7 @@ def _classify(
     word_count: int,
     is_pdf: bool,
     spacing: float | None,
+    page_url: str | None = None,
 ) -> tuple[QualityVerdict, list[str]]:
     """Resolve the verdict from cheap structural signals (the "gate").
 
@@ -349,6 +463,19 @@ def _classify(
             return QualityVerdict.PAYWALL, [f"only {word_count} words behind an apparent login/paywall"]
         return QualityVerdict.THIN, [f"only {word_count} words extracted"]
 
+    maze = link_maze_signal(text, page_url)
+    if maze is not None:
+        descendant_ratio, generated_ratio, same_host_count = maze
+        if (
+            same_host_count >= _TARPIT_MIN_LINKS
+            and descendant_ratio >= _TARPIT_DESCENDANT_RATIO
+            and generated_ratio >= _TARPIT_GENERATED_RATIO
+        ):
+            return QualityVerdict.TARPIT, [
+                f"{descendant_ratio:.0%} of {same_host_count} same-host links are generated-looking children "
+                "of this page's own URL (Nepenthes/iocaine-style crawler tarpit)"
+            ]
+
     return QualityVerdict.OK, reasons
 
 
@@ -359,13 +486,15 @@ def assess_quality(
     markdown: str | None,
     visible_text: str | None = None,
     is_pdf: bool = False,
+    url: str | None = None,
 ) -> QualityAssessment:
     """Assess how usable a scrape result is: a verdict plus a 0-100 score.
 
     Gate-then-grade. The verdict is resolved first from cheap structural signals
-    (HTTP status, anti-bot fingerprints, content density). The score then grades
-    fidelity within that verdict using the shared reference-free metrics, and is
-    capped so a numeric score can never contradict a non-OK verdict.
+    (HTTP status, anti-bot fingerprints, content density, link-maze shape). The
+    score then grades fidelity within that verdict using the shared
+    reference-free metrics, and is capped so a numeric score can never
+    contradict a non-OK verdict.
 
     Args:
         status_code: HTTP status of the response, or None when unknown.
@@ -374,6 +503,8 @@ def assess_quality(
         visible_text: Pre-computed visible text fallback when no markdown was
             produced (e.g. a links-only request), so density is still judged.
         is_pdf: True when this is a PDF extraction (no HTML; spacing matters).
+        url: The URL that was scraped, needed to detect a self-referential
+            crawler-tarpit link maze; omitted, that check simply never fires.
 
     Returns:
         A :class:`QualityAssessment` carrying the verdict, score, reasons, and a
@@ -390,6 +521,7 @@ def assess_quality(
         word_count=word_count,
         is_pdf=is_pdf,
         spacing=spacing,
+        page_url=url,
     )
 
     link_count = count_structure(text)["links"] if text else 0
@@ -410,6 +542,7 @@ __all__ = [
     "assess_quality",
     "count_structure",
     "link_density",
+    "link_maze_signal",
     "strip_markdown",
     "substring_absent_rate",
     "substring_hit_rate",
