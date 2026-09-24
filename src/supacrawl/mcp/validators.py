@@ -347,12 +347,9 @@ def validate_urls(
     """
     Validate a list of URLs.
 
-    Accepts a native list, a JSON-encoded array string (some MCP clients
-    serialise list arguments as a string), or a single bare URL string —
-    the same three shapes the tool schemas advertise via ``list[str] | str``
-    (mcp_common's own registration layer already unwraps a JSON-array
-    string before this validator runs; the bare-string branch here covers
-    a single URL, which is not valid JSON, so it never reaches that path).
+    Accepts every shape the tool schemas advertise (``list[str] | str``): a
+    list, a JSON-encoded array string (some MCP clients send lists that way),
+    or one bare URL.
 
     Args:
         value: The value to validate (list of URL strings, a JSON-encoded
@@ -380,7 +377,7 @@ def validate_urls(
         if stripped.startswith("["):
             try:
                 parsed = json.loads(stripped)
-            except json.JSONDecodeError, ValueError:
+            except ValueError:
                 parsed = None
         value = parsed if isinstance(parsed, list) else [stripped]
 
