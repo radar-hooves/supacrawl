@@ -154,6 +154,29 @@ class TestValidateUrls:
             validate_urls(urls, "urls")
         assert "invalid-url" in str(exc_info.value)
 
+    def test_accepts_a_single_bare_url_string(self):
+        """A non-JSON string is treated as one URL, not refused as 'not a list'
+        (the failure mode from correlation_id 6a66d610)."""
+        result = validate_urls("https://example.com/a", "urls")
+        assert result == ["https://example.com/a"]
+
+    def test_accepts_a_json_encoded_array_string(self):
+        """A JSON-encoded array string is parsed into its URL list."""
+        result = validate_urls('["https://example.com/1", "https://example.com/2"]', "urls")
+        assert result == ["https://example.com/1", "https://example.com/2"]
+
+    def test_rejects_invalid_bare_url_string(self):
+        """A bare string that isn't a valid URL still fails URL validation."""
+        with pytest.raises(SupacrawlValidationError) as exc_info:
+            validate_urls("not-a-url", "urls")
+        assert "not-a-url" in str(exc_info.value)
+
+    def test_rejects_non_string_non_list(self):
+        """A type that is neither list nor string is still refused."""
+        with pytest.raises(SupacrawlValidationError) as exc_info:
+            validate_urls(42, "urls")
+        assert "int" in str(exc_info.value)
+
 
 class TestValidateLimit:
     """Test limit validation."""

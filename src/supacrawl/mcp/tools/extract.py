@@ -19,7 +19,9 @@ from supacrawl.services.registry import SupacrawlServices
 
 async def supacrawl_extract(
     api_client: SupacrawlServices,
-    urls: Annotated[list[str] | str, Field(description="URLs to extract data from (1-10 URLs)")],
+    urls: Annotated[
+        list[str] | str, Field(description="URLs to extract data from (1-10 URLs). Also accepts a single URL string.")
+    ],
     prompt: Annotated[
         str | None,
         Field(

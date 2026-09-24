@@ -4,6 +4,7 @@ Provides input validation with helpful error messages for all tool parameters.
 Wraps mcp_common validators with Supacrawl-specific exception types.
 """
 
+import json
 import re
 from datetime import datetime, timezone
 from typing import Any
@@ -346,8 +347,16 @@ def validate_urls(
     """
     Validate a list of URLs.
 
+    Accepts a native list, a JSON-encoded array string (some MCP clients
+    serialise list arguments as a string), or a single bare URL string —
+    the same three shapes the tool schemas advertise via ``list[str] | str``
+    (mcp_common's own registration layer already unwraps a JSON-array
+    string before this validator runs; the bare-string branch here covers
+    a single URL, which is not valid JSON, so it never reaches that path).
+
     Args:
-        value: The value to validate (list of URL strings)
+        value: The value to validate (list of URL strings, a JSON-encoded
+            array string, or a single URL string)
         field_name: Name of the field for error messages
         min_count: Minimum number of URLs required (default: 1)
         max_count: Maximum number of URLs allowed (default: 100)
@@ -365,9 +374,20 @@ def validate_urls(
             value=value,
         )
 
+    if isinstance(value, str):
+        stripped = value.strip()
+        parsed: Any = None
+        if stripped.startswith("["):
+            try:
+                parsed = json.loads(stripped)
+            except json.JSONDecodeError, ValueError:
+                parsed = None
+        value = parsed if isinstance(parsed, list) else [stripped]
+
     if not isinstance(value, list):
         raise SupacrawlValidationError(
-            f"{field_name} must be a list, got {type(value).__name__}",
+            f"{field_name} must be a list, a single URL string, or a JSON-encoded array of URLs, "
+            f"got {type(value).__name__}",
             field=field_name,
             value=value,
         )

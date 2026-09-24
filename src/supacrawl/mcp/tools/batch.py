@@ -20,7 +20,9 @@ from supacrawl.services.registry import SupacrawlServices
 
 async def supacrawl_batch(
     api_client: SupacrawlServices,
-    urls: Annotated[list[str], Field(description="Ordered list of URLs to scrape (1–100).")],
+    urls: Annotated[
+        list[str] | str, Field(description="Ordered list of URLs to scrape (1–100). Also accepts a single URL string.")
+    ],
     formats: Annotated[
         list[
             Literal[
