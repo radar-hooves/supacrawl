@@ -6,6 +6,7 @@ Zero-infrastructure CLI web scraper with LLM extraction, for developers working 
 
 - **Does**: CLI commands (`scrape`, `crawl`, `map`, `search`, `llm-extract`, `agent`, `cache`) plus an optional REST API (`supacrawl serve`, `supacrawl[api]`) and an MCP server (`supacrawl-mcp`).
 - **Does not**: no web UI; no database — output goes to stdout/files and a local cache; no auth beyond browser-level; not a hosted service (local execution only).
+- **Owns**: faithful-rendering and scrape-quality knowledge belongs here, never in a consumer's config.
 
 ## Design constraints
 
