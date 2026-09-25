@@ -95,7 +95,7 @@ camoufox = [
   # Browser.setDefaultViewport `isMobile` property ("not described in this
   # scheme"), so any camoufox launch fails at new_page. Lift the ceiling
   # once a camoufox release accepts the 1.61 protocol.
-  "playwright<1.61",
+  "playwright<1.64",
 ]
 captcha = [
   "2captcha-python>=2.0.3",
