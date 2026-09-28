@@ -1219,8 +1219,8 @@ wheels = [
 
 [[package]]
 name = "mcp-common"
-version = "2026.6.6"
-source = { editable = "../mcp-servers/mcp-common" }
+version = "2026.9.1002"
+source = { registry = "https://pypi.godswood.au/poodle64/prod/+simple/" }
 dependencies = [
     { name = "api-common", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "cryptography", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
@@ -1236,25 +1236,9 @@ dependencies = [
     { name = "redactyl-core", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "uvicorn", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
 ]
-
-[package.metadata]
-requires-dist = [
-    { name = "api-common", index = "https://pypi.godswood.au/poodle64/prod/+simple/" },
-    { name = "asyncssh", marker = "extra == 'docker'", specifier = ">=2.21.0" },
-    { name = "cryptography", specifier = ">=42.0.0" },
-    { name = "fastmcp", specifier = "==4.0.1" },
-    { name = "httpx", specifier = ">=0.28.0" },
-    { name = "httpx2", specifier = ">=2.12.0" },
-    { name = "portcullis-client", index = "https://pypi.godswood.au/poodle64/prod/+simple/" },
-    { name = "pydantic", specifier = ">=2.12.0" },
-    { name = "pydantic-settings", specifier = ">=2.12.0" },
-    { name = "pyrage", specifier = ">=1.3.0" },
-    { name = "python-dotenv", specifier = ">=1.2.0" },
-    { name = "pyyaml", specifier = ">=6.0.2" },
-    { name = "redactyl-core", index = "https://pypi.godswood.au/poodle64/prod/+simple/" },
-    { name = "uvicorn", specifier = ">=0.34.0" },
+wheels = [
+    { url = "https://pypi.godswood.au/poodle64/prod/+f/f99/146edac22a9bb/mcp_common-2026.9.1002-py3-none-any.whl", hash = "sha256:f99146edac22a9bbb6a5270caf76c76e96ab6f0bad6b08982efc707fdee9b5ab" },
 ]
-provides-extras = ["docker"]
 
 [[package]]
 name = "mcp-types"
@@ -2500,9 +2484,11 @@ dev = [
 ]
 mcp-common-dev = [
     { name = "mcp-common", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
+    { name = "portcullis-client", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
 ]
 mcp-dev = [
     { name = "mcp-common", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
+    { name = "portcullis-client", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "supacrawl", extra = ["mcp"], marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
 ]
 
@@ -2553,9 +2539,13 @@ dev = [
     { name = "types-aiofiles", specifier = ">=25.1.0.20251011" },
     { name = "types-pyyaml", specifier = ">=6.0.12.20250915" },
 ]
-mcp-common-dev = [{ name = "mcp-common", editable = "../mcp-servers/mcp-common" }]
+mcp-common-dev = [
+    { name = "mcp-common", index = "https://pypi.godswood.au/poodle64/prod/+simple/", conflict = { package = "supacrawl", group = "mcp-common-dev" } },
+    { name = "portcullis-client", index = "https://pypi.godswood.au/poodle64/prod/+simple/", conflict = { package = "supacrawl", group = "mcp-common-dev" } },
+]
 mcp-dev = [
     { name = "mcp-common" },
+    { name = "portcullis-client" },
     { name = "supacrawl", extras = ["mcp"] },
 ]
 

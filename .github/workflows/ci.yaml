@@ -29,9 +29,8 @@ jobs:
           python-version: '3.14'
           enable-cache: true
 
-      # --no-group mcp-dev: the mcp-dev/mcp-common-dev groups carry
-      # supacrawl[mcp] plus editable path sources into the mcp-servers and
-      # api-clients siblings, which do not exist on a bare runner checkout.
+      # --no-group mcp-dev: the MCP surface (supacrawl[mcp], mcp-common) is
+      # not installed here.
       # Ruff is a pure static-AST linter — it needs no packages importable —
       # so this only trims what gets installed, not what gets linted.
       - name: Install dependencies
