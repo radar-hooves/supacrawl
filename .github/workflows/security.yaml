@@ -16,17 +16,6 @@ name: Security
 on:
   schedule:
     - cron: '0 18 * * 0' # Monday 04:00 AEST
-  push:
-    branches: [main]
-    paths:
-      - '**/pyproject.toml'
-      - '**/uv.lock'
-      - '**/package.json'
-      - '**/pnpm-lock.yaml'
-      - '**/Cargo.lock'
-      - '**/go.sum'
-      - '**/Dockerfile*'
-      - '.github/workflows/security.yaml'
   pull_request:
     paths:
       - '**/pyproject.toml'
