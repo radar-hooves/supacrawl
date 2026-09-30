@@ -143,7 +143,19 @@ jobs:
           enable-cache: true
 
       # --no-group mcp-dev: see the lint job comment above.
+      # redactyl-core resolves from the household private index (godswood).
+      # lint/typecheck run on [self-hosted, atlas] and inherit the runner's
+      # own vended NETRC (#275) for free; this job runs on ubuntu-latest
+      # (Playwright's --with-deps needs apt+sudo the atlas runner lacks), a
+      # GitHub-hosted box with no access to that host file, so the index
+      # credential must arrive as a secret instead — uv's documented
+      # per-index auth shape (UV_INDEX_<NAME>_USERNAME/PASSWORD, NAME
+      # uppercased from the index's `name = "godswood"`), same as
+      # api-clients' conformance.yaml.
       - name: Install dependencies
+        env:
+          UV_INDEX_GODSWOOD_USERNAME: ${{ secrets.UV_INDEX_GODSWOOD_USERNAME }}
+          UV_INDEX_GODSWOOD_PASSWORD: ${{ secrets.UV_INDEX_GODSWOOD_PASSWORD }}
         run: uv sync --no-group mcp-dev
 
       - name: Install Playwright browsers
@@ -227,7 +239,15 @@ jobs:
 
       # The dev group pulls in the stealth + camoufox extras (patchright,
       # camoufox); --no-group mcp-dev keeps the unresolvable MCP slice out.
+      # redactyl-core resolves from the household private index (godswood);
+      # this job runs on ubuntu-latest (see the runs-on comment above), which
+      # has no access to the atlas runner's own vended NETRC (#275), so the
+      # index credential arrives as a secret instead — same shape as the
+      # `test` job and api-clients' conformance.yaml.
       - name: Install dependencies
+        env:
+          UV_INDEX_GODSWOOD_USERNAME: ${{ secrets.UV_INDEX_GODSWOOD_USERNAME }}
+          UV_INDEX_GODSWOOD_PASSWORD: ${{ secrets.UV_INDEX_GODSWOOD_PASSWORD }}
         run: uv sync --no-group mcp-dev
 
       # Every engine's browser binary must be present for a real launch:
