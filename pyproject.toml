@@ -90,7 +90,11 @@ stealth = [
   "patchright>=1.40.0",  # Keep >=1.40.0 for NixOS — see #79, #104
 ]
 camoufox = [
-  "camoufox[geoip]>=0.4.11",
+  # 0.4.11's validate_config() raised UnknownProperty for any config key
+  # missing from the fetched browser build's properties.json, so a browser
+  # release that drops a property (navigator.appCodeName, v156.0.1-beta.33)
+  # breaks every launch. 0.5.6 made that skip-and-log instead of fatal.
+  "camoufox[geoip]>=0.5.6",
   # camoufox's bundled Firefox juggler rejects playwright >= 1.61's
   # Browser.setDefaultViewport `isMobile` property ("not described in this
   # scheme"), so any camoufox launch fails at new_page. Lift the ceiling
