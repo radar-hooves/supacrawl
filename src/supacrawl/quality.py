@@ -215,10 +215,10 @@ def word_spacing(markdown: str) -> float | None:
 # sideways (other articles) or up (categories, home), never recursively into
 # paths that only exist because the page itself made them up.
 
-# Markdown link/image target extraction, capturing the URL rather than merely
-# counting it (unlike `_LINK_RE`/`_IMAGE_RE` above).
-_LINK_TARGET_RE = re.compile(r"(?<!!)\[[^\]]*\]\(([^)\s]+)(?:\s+\"[^\"]*\")?\)")
-_IMAGE_TARGET_RE = re.compile(r"!\[[^\]]*\]\(([^)\s]+)(?:\s+\"[^\"]*\")?\)")
+# Markdown link/image text+target extraction, capturing both the anchor text
+# and the URL (unlike `_LINK_RE`/`_IMAGE_RE` above, which only count).
+_LINK_TARGET_RE = re.compile(r"(?<!!)\[([^\]]*)\]\(([^)\s]+)(?:\s+\"[^\"]*\")?\)")
+_IMAGE_TARGET_RE = re.compile(r"!\[([^\]]*)\]\(([^)\s]+)(?:\s+\"[^\"]*\")?\)")
 
 # A path segment built from three or more hyphen-joined dictionary-looking
 # words ("stood-thinning-unreeling") reads as generated filler: a real slug is
@@ -240,34 +240,68 @@ _TARPIT_DESCENDANT_RATIO = 0.8
 _TARPIT_GENERATED_RATIO = 0.5
 
 
-def _extract_link_targets(markdown: str) -> list[str]:
-    """Pull every markdown link/image target URL, in document order.
+def _extract_link_targets(markdown: str) -> list[tuple[str, str]]:
+    """Pull every markdown link/image (anchor text, target URL) pair, in document order.
 
     Args:
         markdown: Markdown source.
 
     Returns:
-        Raw target strings exactly as written (may be relative).
+        ``(text, target)`` tuples; ``target`` is exactly as written (may be
+        relative), ``text`` is the anchor text (empty for a bare image alt).
     """
     return _LINK_TARGET_RE.findall(markdown) + _IMAGE_TARGET_RE.findall(markdown)
 
 
-def _is_generated_slug(path: str) -> bool:
+def _slugify(value: str) -> str:
+    """Normalise arbitrary text to the dash-joined lowercase token form a slug uses.
+
+    Args:
+        value: Any text — prose or an already-slug-shaped path segment.
+
+    Returns:
+        Lowercase alphanumeric tokens joined with ``-``, so a title and the
+        slug it was generated from compare equal regardless of punctuation.
+    """
+    return "-".join(token for token in re.split(r"[^a-z0-9]+", value.lower()) if token)
+
+
+def _is_generated_slug(path: str, anchor_text: str = "") -> bool:
     """True when a URL path's last segment looks machine-generated, not authored.
+
+    A section-index card whose href is slugified from its own title (e.g.
+    "Cyber security principles" -> `cyber-security-principles`) also matches
+    the multi-word-run shape below, but it is not a maze: a real Nepenthes/
+    iocaine tarpit glues its random dictionary words straight into the anchor
+    text too, so the text is itself already slug-shaped (no whitespace) and
+    never reads as a natural, space-written title. A card's whole link often
+    wraps the title AND its description ("### Title\n\nDescription sentence."),
+    so the check is a token PREFIX match, not equality: the slug only has to
+    be exactly the leading words of real, space-written anchor text for the
+    link to be authored rather than generated.
 
     Args:
         path: A URL path (not the full URL).
+        anchor_text: The link/image text pointing at this path, if any.
 
     Returns:
-        True when the final segment is a raw non-ASCII codepoint or a run of
-        three or more hyphen-joined alphabetic words.
+        True when the final segment is a raw non-ASCII codepoint, or a run of
+        three or more hyphen-joined alphabetic words that is not simply the
+        slugified lead-in of its own naturally-written anchor text.
     """
     segment = unquote(path.rstrip("/").rsplit("/", 1)[-1])
     if not segment:
         return False
     if any(ord(ch) > 127 for ch in segment):
         return True
-    return bool(_GENERATED_WORD_RUN_RE.match(segment))
+    if not _GENERATED_WORD_RUN_RE.match(segment):
+        return False
+    if " " in anchor_text.strip():
+        anchor_slug = _slugify(anchor_text)
+        segment_slug = _slugify(segment)
+        if segment_slug and (anchor_slug == segment_slug or anchor_slug.startswith(segment_slug + "-")):
+            return False
+    return True
 
 
 def link_maze_signal(markdown: str, page_url: str | None) -> tuple[float, float, int] | None:
@@ -297,7 +331,7 @@ def link_maze_signal(markdown: str, page_url: str | None) -> tuple[float, float,
     same_host = 0
     descendant = 0
     generated = 0
-    for target in targets:
+    for text, target in targets:
         resolved = urlparse(urljoin(page_url, target))
         if resolved.netloc != page.netloc:
             continue
@@ -305,7 +339,7 @@ def link_maze_signal(markdown: str, page_url: str | None) -> tuple[float, float,
         candidate_path = resolved.path.rstrip("/")
         if candidate_path != own_path and candidate_path.startswith(own_path + "/"):
             descendant += 1
-            if _is_generated_slug(resolved.path):
+            if _is_generated_slug(resolved.path, text):
                 generated += 1
 
     if same_host == 0:

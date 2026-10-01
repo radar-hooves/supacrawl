@@ -231,6 +231,54 @@ def test_docs_toc_page_linking_to_its_own_subsections_stays_ok() -> None:
     assert q.is_usable is True
 
 
+def test_section_index_with_titled_children_stays_ok() -> None:
+    # Reproduced 01/10/2026 (correlation_id 89a255c0) from a real false
+    # positive: cyber.gov.au's ISM landing page was called a tarpit because
+    # its 7 same-host links are all path-children whose slugs are 3+
+    # hyphen-joined words, tripping the generated-word-run shape. The
+    # distinguishing fact a real Nepenthes/iocaine maze lacks: each slug is
+    # exactly the slugified LEAD-IN of its OWN naturally-written (space-
+    # carrying) anchor text, not a word glued straight into slug-shaped
+    # anchor text. The link text is the markdown Supacrawl actually produced
+    # for each card — the whole "### Title\n\nDescription." block, not just
+    # the title — so a naive exact-match on title alone would not catch this.
+    url = "https://www.cyber.gov.au/business-government/asds-cyber-security-frameworks/ism"
+    body = " ".join(f"word{i}" for i in range(300))
+    children = [
+        (
+            "Using the cyber security framework",
+            "This chapter of the Information security manual (ISM) provides guidance on using the ISM.",
+            "using-the-cyber-security-framework",
+        ),
+        (
+            "Cyber security principles",
+            "Follow the Information security manual (ISM)'s cyber security principles to protect "
+            "information technology and operational technology systems from cyber threats.",
+            "cyber-security-principles",
+        ),
+        (
+            "Archived ISM releases",
+            "List of archived ISM releases.",
+            "archived-ism-releases",
+        ),
+        (
+            "ISM feedback form",
+            "ISM feedback and enquiries.",
+            "ism-feedback-form",
+        ),
+        (
+            "Cyber security guidelines",
+            "Practical guidance on how an organisation can protect their systems from cyber threats.",
+            "cyber-security-guidelines",
+        ),
+    ]
+    links = "\n".join(f"[### {title}\n\n{description}]({url}/{slug})" for title, description, slug in children)
+    md = f"{body}\n\n{links}"
+    q = assess_quality(status_code=200, html=f"<html><body>{md}</body></html>", markdown=md, url=url)
+    assert q.verdict == QualityVerdict.OK
+    assert q.is_usable is True
+
+
 def test_link_maze_signal_needs_a_page_url() -> None:
     # No url → the maze check cannot resolve relative links, so it must not
     # fire (never a spurious TARPIT just because the caller omitted the url).
