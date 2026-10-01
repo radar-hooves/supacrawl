@@ -242,6 +242,89 @@ class TestProvenanceUnderConcurrentScrape:
             await service.close()
 
 
+class TestFallbackFailureAttribution:
+    """When the fallback ALSO fails, the caller reads the configured backend's
+    error, never the fallback's (radar-hooves/cadmus #Nightjar, 01/10/2026).
+
+    A domain-restricted query raised SearXNG's own "N upstream engines
+    unresponsive" ProviderError — naming exactly which engines were down — but
+    the chain's unqualified ``last_error = e`` reassignment let the DuckDuckGo
+    fallback's later, opaque "CAPTCHA challenge" overwrite it. The caller then
+    saw a failure that read as "the DuckDuckGo fallback is broken" when the
+    real, actionable story was "SearXNG's own engines are down" — exactly the
+    attribution the #161 ``unresponsive_engines`` surfacing exists to give.
+    """
+
+    def _searxng_and_broken_ddg_client(self) -> httpx.AsyncClient:
+        def handler(request: httpx.Request) -> httpx.Response:
+            host = request.url.host
+            if "searxng" in host:
+                return httpx.Response(200, json=_BROKEN_SEARXNG)
+            if "duckduckgo" in host:
+                return httpx.Response(200, text="<div class='anomaly-modal'>captcha</div>")
+            return httpx.Response(500, text="unexpected host")
+
+        return httpx.AsyncClient(transport=httpx.MockTransport(handler))
+
+    def _service_with_both_down(self) -> tuple[SearchService, httpx.AsyncClient]:
+        with patch.dict(
+            os.environ,
+            {
+                "SEARXNG_URL": "http://searxng.invalid",
+                "SUPACRAWL_SEARCH_PROVIDERS": "searxng",
+                "SUPACRAWL_SEARCH_PUBLIC_FALLBACK": "1",
+                "SUPACRAWL_SEARCH_STRICT_PROVIDERS": "",
+            },
+        ):
+            service = SearchService(providers=["searxng"])
+
+        client = self._searxng_and_broken_ddg_client()
+        for provider in service.provider_chain.providers:
+            if isinstance(provider, (SearXNGProvider, DuckDuckGoProvider)):
+                provider._http_client = client
+        return service, client
+
+    @pytest.mark.asyncio
+    async def test_configured_backend_error_survives_a_failed_fallback(self) -> None:
+        service, client = self._service_with_both_down()
+        try:
+            result = await service.search("site:aph.gov.au Ghost Bat", limit=5)
+
+            assert result.success is False
+            assert "duckduckgo" not in (result.error or "").lower(), (
+                f"the caller must never be told DuckDuckGo failed when SearXNG failed first, got: {result.error!r}"
+            )
+            assert "unresponsive" in (result.error or "").lower()
+            engines = {e.engine for e in result.unresponsive_engines}
+            assert {"brave", "wikibooks", "wikinews"} <= engines, (
+                f"SearXNG's own dead-engine list must survive the fallback also failing, got: {engines}"
+            )
+        finally:
+            await service.close()
+            await client.aclose()
+
+    @pytest.mark.asyncio
+    async def test_provider_chain_raises_the_configured_providers_error(self) -> None:
+        """Unit-level: the chain itself, not just the service wrapper, prefers it."""
+
+        class _FailingProvider(_StubProvider):
+            async def search_web(self, *_a: object, **_k: object) -> list:
+                raise TimeoutError(f"{self.name} down")
+
+        chain = ProviderChain(configured_names=["searxng"])
+        chain.add(_FailingProvider("searxng"))
+        chain.add(_FailingProvider("duckduckgo"))
+
+        with pytest.raises(TimeoutError, match="searxng down") as exc_info:
+            await chain.search("web", "q", 1, "corr")
+
+        assert "duckduckgo" not in str(exc_info.value)
+        # The fallback was genuinely consulted (not skipped) — it just must not
+        # win attribution for the final raised error.
+        assert chain._health["searxng"].consecutive_failures == 1
+        assert chain._health["duckduckgo"].consecutive_failures == 1
+
+
 class TestFallbackServingSignal:
     def test_false_before_any_search(self) -> None:
         chain = ProviderChain(configured_names=["searxng"])

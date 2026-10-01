@@ -490,6 +490,13 @@ class ProviderChain:
         # all-empty result to the configured backend and hide that the public
         # engine was queried (#158 audit trail).
         consulted_unconfigured: str | None = None
+        # The most recent failure from a provider the operator actually configured.
+        # Kept separate from ``last_error`` so a terminal failure always reports the
+        # configured backend's own diagnostic (e.g. SearXNG naming its dead upstream
+        # engines) rather than an unconfigured public fallback's less informative
+        # one — a caller must never read "DuckDuckGo CAPTCHA'd" as the reason a
+        # configured, self-hosted backend failed (#161 extended).
+        last_configured_error: BaseException | None = None
 
         for provider in active:
             health = self._health[provider.name]
@@ -520,6 +527,8 @@ class ProviderChain:
                 # so must NOT count as a consultation.)
                 if is_unconfigured:
                     consulted_unconfigured = provider.name
+                else:
+                    last_configured_error = e
                 last_error = e
                 error_msg = str(e)
                 health.record_failure(error_msg)
@@ -618,7 +627,14 @@ class ProviderChain:
             self.last_provider = consulted_unconfigured or empty_provider
             return empty_results
 
-        # All providers failed with fallback-eligible errors
+        # All providers failed with fallback-eligible errors. A configured
+        # backend's own failure outranks an unconfigured fallback's: the fallback
+        # was only ever consulted because the configured backend failed first, so
+        # raising ITS error (SearXNG naming its dead engines) rather than the
+        # fallback's (DuckDuckGo's opaque CAPTCHA) is what lets the caller tell a
+        # configured-backend outage from "the public last resort also failed".
+        if last_configured_error is not None:
+            raise last_configured_error
         if last_error is None:
             raise RuntimeError("All providers exhausted with no error recorded")
         raise last_error
