@@ -198,6 +198,4 @@ pytest --cov=supacrawl --cov-report=html
 
 ## References
 
-- `.claude/rules/testing-patterns.md` - Testing pattern requirements
-- `.claude/rules/master/71-testing-patterns.md` - Universal testing requirements
 - `docs/development/error-handling.md` - Error handling patterns

@@ -285,6 +285,4 @@ Logs include correlation IDs in structured format:
 
 ## References
 
-- `.claude/rules/error-handling.md` - Error handling requirements
-- `.claude/rules/master/70-reliability.md` - Universal error handling principles
 - `docs/development/retry-logic.md` - Retry logic patterns
