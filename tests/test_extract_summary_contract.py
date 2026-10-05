@@ -82,6 +82,22 @@ class TestExtractFollowsSchema:
         repair_turn = llm_wire.requests[1]["messages"][-1]["content"]
         assert "'cheap' is not of type 'number'" in repair_turn
 
+    async def test_a_reply_that_is_not_json_gets_the_repair_turn(self, llm_wire: LLMWire) -> None:
+        llm_wire.replies += ["The widget is $9.50.", '{"name": "Widget", "price": 9.5}']
+
+        data = await _extract_service(PageScrape()).extract_one(URL, schema=SCHEMA)
+
+        assert data == {"name": "Widget", "price": 9.5}
+        assert "not valid JSON" in llm_wire.requests[1]["messages"][-1]["content"]
+
+    async def test_a_schema_without_a_root_type_still_needs_an_object(self, llm_wire: LLMWire) -> None:
+        from supacrawl.exceptions import ExtractionSchemaError
+
+        llm_wire.replies += ['[{"name": "Widget"}]', "null"]
+
+        with pytest.raises(ExtractionSchemaError, match="not a JSON object"):
+            await _extract_service(PageScrape()).extract_one(URL, schema={"properties": {"name": {"type": "string"}}})
+
     async def test_a_reply_that_never_conforms_is_a_typed_error(self, llm_wire: LLMWire) -> None:
         from supacrawl.exceptions import ExtractionSchemaError
 

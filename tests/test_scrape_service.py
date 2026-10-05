@@ -52,6 +52,13 @@ class TestJsonFormatRefusal:
             await service.scrape("https://example.com", formats=["json"])
 
     @pytest.mark.asyncio
+    async def test_an_invalid_schema_raises_before_any_fetch(self) -> None:
+        """A schema the extractor would refuse is refused here, before a page is fetched."""
+        service = ScrapeService()
+        with pytest.raises(ValidationError, match="schema"):
+            await service.scrape("https://example.com", formats=["json"], json_schema={"type": "array"})
+
+    @pytest.mark.asyncio
     async def test_extract_json_strict_raises_when_llm_not_configured(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("SUPACRAWL_LLM_PROVIDER", raising=False)
         monkeypatch.delenv("SUPACRAWL_LLM_MODEL", raising=False)

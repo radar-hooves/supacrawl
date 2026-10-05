@@ -27,13 +27,15 @@ def clip_content(content: str) -> str:
 
 
 def bound_words(text: str, max_words: int) -> str:
-    """``text`` cut to ``max_words`` words, at the last sentence end when one falls in the kept half."""
+    """``text`` cut to ``max_words`` words, after the last sentence-ending word in the kept half."""
     words = text.split()
     if len(words) <= max_words:
         return text
-    clipped = " ".join(words[:max_words])
-    end = max(clipped.rfind(mark) for mark in ".!?")
-    return clipped[: end + 1] if end >= len(clipped) // 2 else clipped + "…"
+    kept = words[:max_words]
+    for i in range(len(kept) - 1, len(kept) // 2 - 1, -1):
+        if kept[i].rstrip("\"')]\u201d\u2019").endswith((".", "!", "?")):
+            return " ".join(kept[: i + 1])
+    return " ".join(kept) + "\u2026"
 
 
 class LLMClient:
@@ -178,10 +180,14 @@ class LLMClient:
         turn = messages
         for _ in range(SCHEMA_ATTEMPTS):
             content = await self.chat(turn, json_mode=True, schema=schema)
-            data = self._parse_json(content)
-            errors = schema_errors(validator, data)
-            if not errors:
-                return data
+            try:
+                data = self._parse_json(content)
+            except ProviderError:
+                errors = ["$: the reply is not valid JSON"]
+            else:
+                errors = schema_errors(validator, data)
+                if not errors:
+                    return data
             turn = [
                 *messages,
                 {"role": "assistant", "content": content},

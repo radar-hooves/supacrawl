@@ -32,7 +32,7 @@ class SummaryRequest(BaseModel):
     """Body for POST /supacrawl/summary."""
 
     url: str
-    max_length: int | None = Field(default=None, alias="maxLength")
+    max_length: int | None = Field(default=None, alias="maxLength", ge=1)
     focus: str | None = None
 
     model_config = {"populate_by_name": True}
@@ -128,7 +128,7 @@ async def summary(
     services: SupacrawlServices = Depends(get_services),
     _api_key: str | None = Depends(get_api_key),
 ) -> dict[str, Any]:
-    """Scrape a URL and return content ready for summarisation."""
+    """Scrape a URL and return a word-bounded summary from the configured LLM."""
     from supacrawl.services.summary import supacrawl_summary
 
     return await supacrawl_summary(

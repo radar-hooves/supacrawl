@@ -10,7 +10,7 @@ from typing import Annotated, Any
 from api_common.correlation import generate_correlation_id
 from pydantic import Field
 
-from supacrawl.exceptions import ConfigurationError, ValidationError
+from supacrawl.exceptions import ConfigurationError, ProviderError, ValidationError
 from supacrawl.mcp.config import logger
 from supacrawl.mcp.exceptions import SupacrawlValidationError, log_tool_exception, map_exception
 from supacrawl.mcp.validators import validate_json_object, validate_prompt, validate_urls
@@ -132,8 +132,13 @@ async def supacrawl_extract(
                     failures.append(e)
                     results.append({"url": url, "success": False, "error": str(e)})
 
-        if len(failures) == len(results):
+        if len(failures) == 1 == len(results):
             raise failures[0]
+        if len(failures) == len(results):
+            raise ProviderError(
+                "Every URL failed: " + "; ".join(f"{r['url']}: {r['error']}" for r in results),
+                provider="extract",
+            )
 
         succeeded_count = len(results) - len(failures)
         return {

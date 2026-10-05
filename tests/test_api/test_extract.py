@@ -105,6 +105,19 @@ class TestExtractCreate:
         assert "id" in body
         assert isinstance(body["id"], str)
 
+    def test_an_invalid_schema_is_answered_not_queued(
+        self, extract_client: TestClient, mock_extract_service: AsyncMock
+    ) -> None:
+        resp = extract_client.post(
+            "/extract",
+            json={"urls": ["https://example.com"], "schema": {"type": "object", "properties": {"x": {"type": 7}}}},
+        )
+
+        body = resp.json()
+        assert body["success"] is False
+        assert "not valid JSON Schema" in body["error"]
+        mock_extract_service.extract.assert_not_called()
+
     def test_missing_urls_returns_400(self, extract_client: TestClient) -> None:
         resp = extract_client.post("/extract", json={})
         assert resp.status_code == 400

@@ -17,6 +17,8 @@ from supacrawl.api.models.extract import (
     ExtractRequest,
     ExtractStatusResponse,
 )
+from supacrawl.exceptions import ValidationError
+from supacrawl.llm.schema import schema_validator
 from supacrawl.services.extract import ExtractService
 
 logger = logging.getLogger("supacrawl.api.extract")
@@ -90,6 +92,13 @@ async def extract_create(
 ) -> ExtractCreateResponse | ErrorResponse:
     """Start an async extract job and return its ID."""
     job_store = _get_job_store(request)
+
+    # A bad schema is the caller's to fix, so it is answered here, not buried in a failed job
+    if req.schema_ is not None:
+        try:
+            schema_validator(req.schema_)
+        except ValidationError as exc:
+            return ErrorResponse(error=exc.message)
 
     try:
         job = job_store.create_job(total=0)

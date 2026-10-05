@@ -36,6 +36,7 @@ from bs4 import BeautifulSoup
 
 from supacrawl.cache import CacheManager
 from supacrawl.exceptions import ProviderError, ValidationError, generate_correlation_id
+from supacrawl.llm.schema import schema_validator
 from supacrawl.models import (
     ActionsOutput,
     QualityAssessment,
@@ -924,6 +925,8 @@ class ScrapeService:
                 "knows what to pull from the page",
                 field="json_schema",
             )
+        if "json" in formats and json_schema is not None:
+            schema_validator(json_schema)
 
         wants_change_tracking = "changeTracking" in formats
 

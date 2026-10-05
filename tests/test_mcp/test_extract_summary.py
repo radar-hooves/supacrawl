@@ -58,6 +58,16 @@ class TestExtract:
         with pytest.raises(ToolError, match="does not conform to the schema"):
             await _call(surface, "supacrawl_extract", {"urls": [URL], "schema": SCHEMA})
 
+    async def test_every_url_failing_names_each_url(self, surface: FastMCP, llm_wire: LLMWire) -> None:
+        llm_wire.replies += ['{"name": "Widget"}'] * 4
+        other = "https://shop.example.com/gadget"
+
+        with pytest.raises(ToolError) as exc_info:
+            await _call(surface, "supacrawl_extract", {"urls": [URL, other], "schema": SCHEMA})
+
+        assert URL in str(exc_info.value)
+        assert other in str(exc_info.value)
+
     async def test_without_an_llm_the_call_fails_before_any_fetch(
         self, surface: FastMCP, mock_api_client, no_llm: None
     ) -> None:

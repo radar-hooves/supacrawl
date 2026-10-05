@@ -136,6 +136,15 @@ class TestLLMClient:
 
         assert result == "One two three."
 
+    def test_bound_words_cuts_after_a_sentence_ending_word(self) -> None:
+        """A decimal is not a sentence end, and a closing quote stays with its sentence."""
+        from supacrawl.llm.client import bound_words
+
+        assert bound_words('Version 2.5 shipped. He said "it works." Then more text follows here', 8) == (
+            'Version 2.5 shipped. He said "it works."'
+        )
+        assert bound_words("no sentence ends anywhere in this text", 4) == "no sentence ends anywhere\u2026"
+
     def test_extract_json_from_plain_json(self, ollama_config: LLMConfig) -> None:
         """Test extracting plain JSON."""
         client = LLMClient(ollama_config)
