@@ -75,74 +75,45 @@ async def get_extract_data_prompt() -> str:
     return """# Extracting Structured Data with Supacrawl
 
 ## Overview
-Use `supacrawl_extract` to scrape pages and get content ready for extraction.
-**You (the calling LLM) perform the extraction** - no internal LLM required.
-
-## How It Works
-1. Tool scrapes the URLs and returns markdown content
-2. Tool includes your prompt/schema in the response
-3. YOU parse the content and extract structured data
-
-## Basic Extraction
-```
-result = supacrawl_extract(
-    urls=["https://example.com/product"],
-    prompt="Extract the product name, price, and availability"
-)
-
-# Result contains:
-# - data: [{url, markdown, metadata}, ...]
-# - extraction_context: {prompt, schema, instruction}
-
-# YOU then extract from the markdown based on the prompt
-```
+`supacrawl_extract` scrapes each URL and has the server's LLM extract what you
+ask for. It needs an LLM configured on the server (`SUPACRAWL_LLM_PROVIDER`,
+`SUPACRAWL_LLM_MODEL`); without one the call fails and names what to set.
 
 ## Schema-Based Extraction
-Provide a JSON schema to guide your extraction:
+With a schema, each URL's `data` conforms to it. The schema goes to the
+model's structured-output setting, the reply is validated, and a reply that
+still breaks it after one repair turn fails that URL. The root must be an object.
 ```
 result = supacrawl_extract(
     urls=["https://example.com/product"],
+    prompt="Extract the product name, price, and availability",
     schema={
         "type": "object",
         "properties": {
             "name": {"type": "string"},
             "price": {"type": "number"},
-            "currency": {"type": "string"},
             "in_stock": {"type": "boolean"}
         },
         "required": ["name", "price"]
     }
 )
-
-# Parse result.data[0].markdown and return JSON matching the schema
+# result["data"] == [{"url": ..., "success": true, "data": {"name": ..., "price": ...}}]
 ```
 
 ## Multi-URL Extraction
-Extract from multiple pages (up to 10):
-```
-supacrawl_extract(
-    urls=[
-        "https://example.com/product/1",
-        "https://example.com/product/2",
-        "https://example.com/product/3"
-    ],
-    prompt="Extract product details"
-)
-# Returns markdown for each URL; you extract from each
-```
+Up to 10 URLs. A URL that fails carries `success: false` and its `error`;
+`partial` is true when some succeeded. If every URL fails the call fails.
 
 ## When to Use Extract vs Scrape
-- **extract**: When you need structured data from multiple URLs
-- **scrape**: When you need raw content from a single URL
-
-Both work without LLM configuration - YOU are the LLM.
+- **extract**: structured fields from one or more pages
+- **scrape** with `formats=["structuredData"]`: facts the site already publishes
+  (schema.org, OpenGraph), no LLM needed
+- **scrape** with `formats=["markdown"]`: the page itself
 
 ## Best Practices
-1. Use clear, specific prompts to guide your own extraction
-2. Provide JSON schema for consistent output structure
-3. Test with single URL before batch processing
-4. Check each URL's success field before extracting
-5. Return valid JSON matching the provided schema
+1. Give both a prompt and a schema
+2. Keep schemas flat, with descriptive field names
+3. Mark the fields you need as `required`
 """
 
 
@@ -151,54 +122,22 @@ async def get_summary_prompt() -> str:
     return """# Summarising Web Pages with Supacrawl
 
 ## Overview
-Use `supacrawl_summary` to scrape a page and get content ready for summarisation.
-**You (the calling LLM) generate the summary** - no internal LLM required.
+`supacrawl_summary` scrapes a page and has the server's LLM summarise it. It
+returns the summary, never the page body. It needs an LLM configured on the
+server (`SUPACRAWL_LLM_PROVIDER`, `SUPACRAWL_LLM_MODEL`).
 
-## How It Works
-1. Tool scrapes the URL and returns markdown content
-2. Tool includes your focus/length hints in the response
-3. YOU read the content and produce the summary
-
-## Basic Summary
-```
-result = supacrawl_summary(url="https://example.com/article")
-
-# Result contains:
-# - data: {url, markdown, metadata}
-# - summary_context: {max_length, focus, instruction}
-
-# YOU then summarise the markdown content
-```
-
-## Focused Summary
-Guide what to focus on:
 ```
 result = supacrawl_summary(
     url="https://example.com/article",
+    max_length=100,                       # most words; default 120, cap 1000
     focus="technical implementation details"
 )
-```
-
-## Length Control
-Hint at desired length:
-```
-result = supacrawl_summary(
-    url="https://example.com/article",
-    max_length=100  # ~100 words
-)
+# result["data"] == {"url": ..., "title": ..., "summary": "..."}
 ```
 
 ## When to Use Summary vs Scrape
-- **summary**: When you specifically need to summarise content
-- **scrape**: When you need the full content for other purposes
-
-Both work without LLM configuration - YOU are the LLM.
-
-## Best Practices
-1. Use `focus` to guide what aspects matter
-2. Use `max_length` for length control
-3. Check `success` before summarising
-4. Be concise - capture key points only
+- **summary**: the gist of a page without its text in your context
+- **scrape**: the full content
 """
 
 

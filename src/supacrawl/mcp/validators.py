@@ -413,6 +413,39 @@ def validate_urls(
     return validated_urls
 
 
+def validate_json_object(value: Any, field_name: str) -> dict[str, Any] | None:
+    """
+    Validate a JSON object argument.
+
+    Accepts a dict or a JSON-encoded object string (some MCP clients send
+    objects that way); ``None`` passes through.
+
+    Raises:
+        SupacrawlValidationError: If the value is not a JSON object
+    """
+    if value is None:
+        return None
+
+    if isinstance(value, str):
+        try:
+            value = json.loads(value)
+        except ValueError as e:
+            raise SupacrawlValidationError(
+                f"{field_name} is not valid JSON: {e}",
+                field=field_name,
+                value=value,
+            ) from e
+
+    if not isinstance(value, dict):
+        raise SupacrawlValidationError(
+            f"{field_name} must be a JSON object, got {type(value).__name__}",
+            field=field_name,
+            value=value,
+        )
+
+    return value
+
+
 def validate_formats(
     value: Any,
     field_name: str = "formats",
@@ -614,6 +647,7 @@ __all__ = [
     "validate_timeout",
     "validate_limit",
     "validate_urls",
+    "validate_json_object",
     "validate_formats",
     "validate_sources",
     "validate_prompt",

@@ -632,7 +632,7 @@ curl -s http://localhost:8308/supacrawl/diagnose \
 
 ### POST /supacrawl/summary
 
-Scrape a URL and return a summary of its content.
+Scrape a URL and return a summary of its content from the configured LLM (`SUPACRAWL_LLM_PROVIDER`, `SUPACRAWL_LLM_MODEL`). The page body is never returned; with no LLM configured the request fails before the page is fetched.
 
 **Request body:**
 
@@ -647,7 +647,7 @@ Scrape a URL and return a summary of its content.
 | Field       | Type    | Default  | Description                |
 | ----------- | ------- | -------- | -------------------------- |
 | `url`       | string  | required | URL to summarise           |
-| `maxLength` | integer | `null`   | Maximum summary length     |
+| `maxLength` | integer | `120`    | Most words in the summary, capped at 1000 |
 | `focus`     | string  | `null`   | Focus area for the summary |
 
 **Example:**
@@ -656,6 +656,20 @@ Scrape a URL and return a summary of its content.
 curl -s http://localhost:8308/supacrawl/summary \
   -H 'Content-Type: application/json' \
   -d '{"url": "https://example.com/article", "focus": "conclusions"}'
+```
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "url": "https://example.com/article",
+    "title": "Article title",
+    "summary": "..."
+  },
+  "correlation_id": "1a2b3c4d"
+}
 ```
 
 ## Async Jobs

@@ -141,44 +141,7 @@ class TestExtractTools:
     """Test extract-related tools."""
 
     @pytest.mark.asyncio
-    async def test_extract_with_prompt(self, mock_api_client):
-        """Extract tool should scrape and return content with extraction context."""
-        from supacrawl.mcp.tools.extract import supacrawl_extract
-
-        result = await supacrawl_extract(
-            api_client=mock_api_client,
-            urls=["https://example.com"],
-            prompt="Extract the title",
-        )
-
-        assert result["success"] is True
-        assert "data" in result
-        assert "extraction_context" in result
-        assert result["extraction_context"]["prompt"] == "Extract the title"
-        # Extract now uses scrape_service, not extract_service
-        mock_api_client.scrape_service.scrape.assert_called()
-
-    @pytest.mark.asyncio
-    async def test_extract_with_schema(self, mock_api_client):
-        """Extract tool should return schema in extraction context."""
-        from supacrawl.mcp.tools.extract import supacrawl_extract
-
-        schema = {
-            "type": "object",
-            "properties": {"name": {"type": "string"}},
-        }
-
-        result = await supacrawl_extract(
-            api_client=mock_api_client,
-            urls=["https://example.com"],
-            schema=schema,
-        )
-
-        assert result["success"] is True
-        assert result["extraction_context"]["schema"] == schema
-
-    @pytest.mark.asyncio
-    async def test_extract_partial_batch_success(self, mock_api_client):
+    async def test_extract_partial_batch_success(self, mock_api_client, llm_wire):
         """Extract should surface successful URL data even when one URL fails."""
         from supacrawl.mcp.tools.extract import supacrawl_extract
 
@@ -202,6 +165,7 @@ class TestExtractTools:
             raise RuntimeError("Connection refused")
 
         mock_api_client.scrape_service.scrape = AsyncMock(side_effect=scrape_side_effect)
+        llm_wire.replies.append('{"title": "Test Page"}')
 
         result = await supacrawl_extract(
             api_client=mock_api_client,
@@ -219,11 +183,11 @@ class TestExtractTools:
         data = result["data"]
         assert len(data) == 2
 
-        # Successful entry carries markdown content
+        # Successful entry carries the extracted data
         successful = [r for r in data if r["success"]]
         assert len(successful) == 1
         assert successful[0]["url"] == "https://example.com/a"
-        assert "markdown" in successful[0]
+        assert successful[0]["data"] == {"title": "Test Page"}
 
         # Failed entry carries an error field
         failed = [r for r in data if not r["success"]]
@@ -281,41 +245,6 @@ class TestExtractTools:
             )
 
         assert str(exc_info.value)
-
-
-class TestSummaryTools:
-    """Test summary-related tools."""
-
-    @pytest.mark.asyncio
-    async def test_summary_basic(self, mock_api_client):
-        """Summary tool should scrape and return content with summary context."""
-        from supacrawl.mcp.tools.summary import supacrawl_summary
-
-        result = await supacrawl_summary(
-            api_client=mock_api_client,
-            url="https://example.com",
-        )
-
-        assert result["success"] is True
-        assert "data" in result
-        assert "summary_context" in result
-        mock_api_client.scrape_service.scrape.assert_called()
-
-    @pytest.mark.asyncio
-    async def test_summary_with_focus(self, mock_api_client):
-        """Summary tool should include focus in context."""
-        from supacrawl.mcp.tools.summary import supacrawl_summary
-
-        result = await supacrawl_summary(
-            api_client=mock_api_client,
-            url="https://example.com",
-            focus="technical details",
-            max_length=100,
-        )
-
-        assert result["success"] is True
-        assert result["summary_context"]["focus"] == "technical details"
-        assert result["summary_context"]["max_length"] == 100
 
 
 class TestMapTools:

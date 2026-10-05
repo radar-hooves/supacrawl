@@ -208,8 +208,8 @@ async def get_capabilities_resource(api_client: "SupacrawlServices | None" = Non
             "map": "URL discovery without content extraction",
             "crawl": "Multi-page website crawling",
             "search": "Web search with optional result scraping",
-            "extract": "Scrape URLs, return content for calling LLM to extract structured data",
-            "summary": "Scrape URL, return content for calling LLM to summarise",
+            "extract": "Scrape URLs and extract structured data with the server LLM, conforming to a JSON schema",
+            "summary": "Scrape a URL and return a word-bounded summary from the server LLM",
             "health": "Check server health status",
         },
         "design_note": (

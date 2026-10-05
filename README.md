@@ -118,8 +118,8 @@ This is opt-in and MCP-only. Leave `SEARXNG_PORTCULLIS_CREDENTIAL` unset (the de
 | `supacrawl_crawl`    | Crawl multiple pages from a site                    |
 | `supacrawl_map`      | Discover URLs on a website without fetching content |
 | `supacrawl_search`   | Web search with multi-provider fallback             |
-| `supacrawl_extract`  | Scrape pages for LLM-powered structured extraction  |
-| `supacrawl_summary`  | Scrape a page for LLM-powered summarisation         |
+| `supacrawl_extract`  | Structured data from pages, conforming to a JSON schema (server LLM) |
+| `supacrawl_summary`  | A word-bounded summary of a page (server LLM)       |
 | `supacrawl_diagnose` | Diagnose scraping issues (CDN, bot detection, etc.) |
 | `supacrawl_health`   | Server health check and capability report           |
 
@@ -298,7 +298,7 @@ Each markdown file includes YAML frontmatter with source URL and metadata.
 
 ### LLM Features
 
-Required for `llm-extract`, `agent`, and `--summarize`:
+Required for `llm-extract`, `agent`, `--summarize`, and the MCP `supacrawl_extract` and `supacrawl_summary` tools:
 
 | Variable                 | Description                             |
 | ------------------------ | --------------------------------------- |

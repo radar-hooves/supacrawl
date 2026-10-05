@@ -147,3 +147,16 @@ class ProviderError(SupacrawlError):
         if provider is not None:
             context["provider"] = provider
         super().__init__(message, correlation_id=correlation_id, context=context)
+
+
+class ExtractionSchemaError(ProviderError):
+    """Raised when the model's output still breaks the caller's JSON schema after its repair turn."""
+
+    def __init__(self, errors: list[str], correlation_id: str | None = None) -> None:
+        self.errors = errors
+        super().__init__(
+            "LLM output does not conform to the schema: " + "; ".join(errors),
+            provider="llm",
+            correlation_id=correlation_id,
+            context={"schema_errors": errors},
+        )

@@ -1,19 +1,31 @@
-"""
-Summary tool for Supacrawl MCP server.
-
-Scrapes web pages and returns content ready for the calling LLM to summarise.
-No internal LLM is used - the MCP client (which is an LLM) performs the summarisation.
-"""
+"""Summarise one web page with the configured LLM; shared by the MCP tool and the REST endpoint."""
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from supacrawl.exceptions import generate_correlation_id
+from supacrawl.exceptions import ProviderError, ValidationError, generate_correlation_id
+from supacrawl.llm import LLMClient, load_llm_config
 from supacrawl.services.validation import validate_url
 
 if TYPE_CHECKING:
     from supacrawl.services.registry import SupacrawlServices
+
+DEFAULT_SUMMARY_WORDS = 120
+MAX_SUMMARY_WORDS = 1000
+
+
+def _summary_words(max_length: Any) -> int:
+    """The word bound: the default when unset, refused below one, capped at ``MAX_SUMMARY_WORDS``."""
+    if max_length is None:
+        return DEFAULT_SUMMARY_WORDS
+    try:
+        words = int(max_length)
+    except (TypeError, ValueError) as e:
+        raise ValidationError("max_length must be a whole number of words", field="max_length", value=max_length) from e
+    if words < 1:
+        raise ValidationError(f"max_length must be at least 1 word, got {words}", field="max_length", value=max_length)
+    return min(words, MAX_SUMMARY_WORDS)
 
 
 async def supacrawl_summary(
@@ -23,107 +35,45 @@ async def supacrawl_summary(
     focus: str | None = None,
 ) -> dict[str, Any]:
     """
-    Generate a summary of a web page.
+    Scrape ``url`` and summarise it in at most ``max_length`` words.
 
-    This tool scrapes the specified URL and returns content ready for
-    the calling LLM to summarise. No internal LLM is used.
+    Returns ``{"success": True, "data": {"url", "title", "summary"}, "correlation_id"}``;
+    the page body is never returned.
 
-    **When to use this tool:**
-    - You need a quick overview of a page without reading all content
-    - You're triaging multiple pages to find relevant ones
-    - You want to understand what a page is about before deeper analysis
-    - You're aggregating information from multiple sources
-
-    **Best for:**
-    - Quick overviews of long articles
-    - Understanding page content before deeper analysis
-    - Research and content aggregation
-    - Getting the gist of documentation pages
-
-    **Common patterns:**
-    - Use focus parameter to target specific aspects ("pricing", "features", "requirements")
-    - Use max_length for consistent summary sizes when comparing pages
-    - Chain with search: search first, then summarise top results
-    - For technical content: use focus="technical details" or focus="API usage"
-
-    **Prefer other tools when:**
-    - You need the full content → use supacrawl_scrape
-    - You need structured data → use supacrawl_extract
-    - You need multiple pages summarised → loop over supacrawl_summary or use supacrawl_crawl
-
-    Args:
-        api_client: Injected SupacrawlServices instance
-        url: The URL to summarise
-        max_length: Optional hint for summary length (e.g., 100 for ~100 words)
-        focus: Optional focus area for the summary (e.g., "technical details",
-            "pricing information", "key findings")
-
-    Returns:
-        Summary-ready result with scraped content:
-        {
-            "success": true,
-            "data": {
-                "url": "...",
-                "markdown": "...",
-                "metadata": {"title": "...", "description": "..."}
-            },
-            "summary_context": {
-                "max_length": 100,
-                "focus": "...",
-                "instruction": "Summarise the content..."
-            }
-        }
-
-    Note:
-        This tool returns content for the calling LLM to summarise.
-        No internal LLM is used - you (the MCP client) perform the summarisation
-        using the provided context.
+    Raises:
+        ValidationError: ``url`` or ``max_length`` is invalid.
+        LLMNotConfiguredError: no LLM is configured; raised before the page is fetched.
+        ProviderError: the page could not be fetched or had no content, or the model call failed.
     """
-    # Generate correlation ID for request tracking
     correlation_id = generate_correlation_id()
-
-    # Validate inputs
     validated_url = validate_url(url)
     assert validated_url is not None  # validate_url raises on None
+    max_words = _summary_words(max_length)
+    client = LLMClient(load_llm_config())
 
-    # Scrape the URL
-    scrape_result = await api_client.scrape_service.scrape(
-        url=validated_url,
-        formats=["markdown"],
-        only_main_content=True,
-    )
+    try:
+        scrape_result = await api_client.scrape_service.scrape(
+            url=validated_url,
+            formats=["markdown"],
+            only_main_content=True,
+        )
+        page = scrape_result.data if scrape_result.success else None
+        if page is None or not (page.markdown or "").strip():
+            raise ProviderError(
+                scrape_result.error or "No content scraped from page",
+                provider="scrape",
+                correlation_id=correlation_id,
+            )
+        summary = await client.summarize(page.markdown or "", max_words, focus)
+    finally:
+        await client.close()
 
-    if not scrape_result.success or not scrape_result.data:
-        return {
-            "success": False,
-            "error": scrape_result.error or "Failed to scrape page",
-            "data": None,
-            "correlation_id": correlation_id,
-        }
-
-    # Build instruction based on parameters
-    instruction_parts = ["Summarise the content above."]
-    if max_length:
-        instruction_parts.append(f"Keep the summary to approximately {max_length} words.")
-    if focus:
-        instruction_parts.append(f"Focus on: {focus}.")
-    instruction_parts.append("Be concise and capture the key points.")
-
-    # Return content ready for the calling LLM to summarise
     return {
         "success": True,
         "data": {
             "url": validated_url,
-            "markdown": scrape_result.data.markdown,
-            "metadata": {
-                "title": scrape_result.data.metadata.title if scrape_result.data.metadata else None,
-                "description": scrape_result.data.metadata.description if scrape_result.data.metadata else None,
-            },
-        },
-        "summary_context": {
-            "max_length": max_length,
-            "focus": focus,
-            "instruction": " ".join(instruction_parts),
+            "title": page.metadata.title if page.metadata else None,
+            "summary": summary,
         },
         "correlation_id": correlation_id,
     }

@@ -6,12 +6,34 @@ from typing import Any
 
 import httpx
 
-from supacrawl.exceptions import ProviderError, generate_correlation_id
+from supacrawl.exceptions import ExtractionSchemaError, ProviderError, generate_correlation_id
 from supacrawl.llm.config import LLMConfig
 from supacrawl.llm.response import strip_reasoning_preamble, text_from_blocks
+from supacrawl.llm.schema import schema_errors, schema_validator
 from supacrawl.utils import log_with_correlation
 
 LOGGER = logging.getLogger(__name__)
+
+MAX_CONTENT_CHARS = 50_000
+# The first reply plus one repair turn that is shown its schema errors.
+SCHEMA_ATTEMPTS = 2
+
+
+def clip_content(content: str) -> str:
+    """Page content cut to what a prompt carries."""
+    if len(content) <= MAX_CONTENT_CHARS:
+        return content
+    return content[:MAX_CONTENT_CHARS] + "\n\n[Content truncated...]"
+
+
+def bound_words(text: str, max_words: int) -> str:
+    """``text`` cut to ``max_words`` words, at the last sentence end when one falls in the kept half."""
+    words = text.split()
+    if len(words) <= max_words:
+        return text
+    clipped = " ".join(words[:max_words])
+    end = max(clipped.rfind(mark) for mark in ".!?")
+    return clipped[: end + 1] if end >= len(clipped) // 2 else clipped + "…"
 
 
 class LLMClient:
@@ -70,6 +92,8 @@ class LLMClient:
         self,
         messages: list[dict[str, str]],
         json_mode: bool = False,
+        schema: dict[str, Any] | None = None,
+        think: bool | None = None,
     ) -> str:
         """
         Send chat messages and return response content.
@@ -77,6 +101,11 @@ class LLMClient:
         Args:
             messages: List of message dicts with 'role' and 'content' keys.
             json_mode: If True, request JSON formatted output.
+            schema: JSON schema for the provider's structured-output setting
+                (Ollama ``format``, OpenAI ``response_format``); Anthropic has
+                it from the prompt only.
+            think: Ollama's switch for a reasoning model's thinking; None
+                leaves the model's default.
 
         Returns:
             Assistant's response content, with any reasoning preamble or
@@ -87,9 +116,9 @@ class LLMClient:
                 text content at all.
         """
         if self._config.provider == "ollama":
-            content = await self._chat_ollama(messages, json_mode)
+            content = await self._chat_ollama(messages, json_mode, schema, think)
         elif self._config.provider == "openai":
-            content = await self._chat_openai(messages, json_mode)
+            content = await self._chat_openai(messages, json_mode, schema)
         elif self._config.provider == "anthropic":
             content = await self._chat_anthropic(messages, json_mode)
         else:
@@ -119,22 +148,55 @@ class LLMClient:
             )
         return content
 
-    async def chat_json(self, messages: list[dict[str, str]]) -> dict[str, Any]:
+    async def chat_json(
+        self,
+        messages: list[dict[str, str]],
+        schema: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         """
         Send chat messages and parse JSON response.
 
         Args:
             messages: List of message dicts with 'role' and 'content' keys.
+            schema: JSON schema the reply must conform to. It goes to the
+                provider's structured-output setting and the reply is
+                validated against it; a reply that breaks it is sent back once
+                with its errors.
 
         Returns:
-            Parsed JSON response as a dict.
+            Parsed JSON response as a dict, conforming to ``schema`` when given.
 
         Raises:
+            ValidationError: ``schema`` is not valid JSON Schema for an object.
+            ExtractionSchemaError: the repaired reply still breaks ``schema``.
             ProviderError: If request or JSON parsing fails.
         """
-        correlation_id = generate_correlation_id()
-        content = await self.chat(messages, json_mode=True)
+        if schema is None:
+            return self._parse_json(await self.chat(messages, json_mode=True))
 
+        validator = schema_validator(schema)
+        turn = messages
+        for _ in range(SCHEMA_ATTEMPTS):
+            content = await self.chat(turn, json_mode=True, schema=schema)
+            data = self._parse_json(content)
+            errors = schema_errors(validator, data)
+            if not errors:
+                return data
+            turn = [
+                *messages,
+                {"role": "assistant", "content": content},
+                {
+                    "role": "user",
+                    "content": "That JSON does not conform to the schema:\n- "
+                    + "\n- ".join(errors)
+                    + "\nReply with the corrected JSON only.",
+                },
+            ]
+        raise ExtractionSchemaError(errors)
+
+    def _parse_json(self, content: str) -> dict[str, Any]:
+        """Parse a JSON reply, falling back to a fenced code block inside it."""
+        correlation_id = generate_correlation_id()
         try:
             return json.loads(content)
         except json.JSONDecodeError:
@@ -156,27 +218,26 @@ class LLMClient:
                 context={"content_preview": content[:200]},
             ) from None
 
-    async def summarize(self, text: str, max_length: int | None = None) -> str:
+    async def summarize(self, text: str, max_words: int, focus: str | None = None) -> str:
         """
-        Summarize text content.
+        Summarise web page content in at most ``max_words`` words.
 
-        Args:
-            text: Text content to summarize.
-            max_length: Optional maximum length for summary in words.
-
-        Returns:
-            Summarized text.
+        The model is asked for the bound and its reply is cut to it, so an
+        overrun never reaches the caller. A reasoning model is told not to
+        think: on a whole page it outran the client timeout (atlas, 05/10/2026:
+        120 s with thinking, 6 s without).
 
         Raises:
             ProviderError: If request fails.
         """
-        prompt = "Summarize the following text concisely, preserving key information:\n\n"
-        if max_length:
-            prompt += f"Keep the summary under {max_length} words.\n\n"
-        prompt += text
-
-        messages = [{"role": "user", "content": prompt}]
-        return await self.chat(messages)
+        instruction = f"Summarise the following web page in at most {max_words} words, keeping its key information."
+        if focus:
+            instruction += f" Focus on: {focus}."
+        messages = [
+            {"role": "system", "content": "You summarise web pages. Reply with the summary only, as plain text."},
+            {"role": "user", "content": f"{instruction}\n\n{clip_content(text)}"},
+        ]
+        return bound_words(await self.chat(messages, think=False), max_words)
 
     async def check_health(self) -> bool:
         """
@@ -204,7 +265,13 @@ class LLMClient:
         except Exception:
             return False
 
-    async def _chat_ollama(self, messages: list[dict[str, str]], json_mode: bool) -> str:
+    async def _chat_ollama(
+        self,
+        messages: list[dict[str, str]],
+        json_mode: bool,
+        schema: dict[str, Any] | None,
+        think: bool | None,
+    ) -> str:
         """Call Ollama API."""
         correlation_id = generate_correlation_id()
         client = await self._get_ollama_client()
@@ -222,7 +289,9 @@ class LLMClient:
 
             kwargs: dict[str, Any] = {"model": self._config.model, "messages": messages}
             if json_mode:
-                kwargs["format"] = "json"
+                kwargs["format"] = schema or "json"
+            if think is not None:
+                kwargs["think"] = think
 
             response = await client.chat(**kwargs)
             content = strip_reasoning_preamble(response.message.content or "").strip()
@@ -253,7 +322,7 @@ class LLMClient:
                 context={"model": self._config.model, "error": str(exc)},
             ) from exc
 
-    async def _chat_openai(self, messages: list[dict[str, str]], json_mode: bool) -> str:
+    async def _chat_openai(self, messages: list[dict[str, str]], json_mode: bool, schema: dict[str, Any] | None) -> str:
         """Call OpenAI API."""
         correlation_id = generate_correlation_id()
         client = await self._get_http_client()
@@ -271,7 +340,12 @@ class LLMClient:
                 "model": self._config.model,
                 "messages": messages,
             }
-            if json_mode:
+            if schema:
+                request_body["response_format"] = {
+                    "type": "json_schema",
+                    "json_schema": {"name": "extraction", "schema": schema},
+                }
+            elif json_mode:
                 request_body["response_format"] = {"type": "json_object"}
 
             response = await client.post(

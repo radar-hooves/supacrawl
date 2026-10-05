@@ -1,9 +1,8 @@
 """
 Extract tool for Supacrawl MCP server.
 
-Scrapes web pages and returns content ready for the calling LLM to extract
-structured data. No internal LLM is used - the MCP client (which is an LLM)
-performs the extraction.
+Scrapes web pages and has the server's configured LLM pull structured data out
+of them, conforming to the caller's JSON schema when one is given.
 """
 
 from typing import Annotated, Any
@@ -11,9 +10,11 @@ from typing import Annotated, Any
 from api_common.correlation import generate_correlation_id
 from pydantic import Field
 
+from supacrawl.exceptions import ConfigurationError, ValidationError
 from supacrawl.mcp.config import logger
 from supacrawl.mcp.exceptions import SupacrawlValidationError, log_tool_exception, map_exception
-from supacrawl.mcp.validators import validate_prompt, validate_urls
+from supacrawl.mcp.validators import validate_json_object, validate_prompt, validate_urls
+from supacrawl.services.extract import ExtractService
 from supacrawl.services.registry import SupacrawlServices
 
 
@@ -31,7 +32,7 @@ async def supacrawl_extract(
     schema: Annotated[
         dict[str, Any] | str | None,
         Field(
-            description='JSON schema defining the structure of extracted data. Example: {"type": "object", "properties": {"name": {"type": "string"}}}'
+            description='JSON schema each URL\'s extracted data conforms to; the root must be an object. Example: {"type": "object", "properties": {"name": {"type": "string"}}}'
         ),
     ] = None,
     allow_external_links: Annotated[
@@ -41,8 +42,11 @@ async def supacrawl_extract(
     """
     Extract structured information from web pages using LLM.
 
-    This tool scrapes the specified URLs and uses an LLM to extract
-    structured data according to your prompt and/or schema.
+    This tool scrapes the specified URLs and has the server's LLM extract
+    structured data according to your prompt and/or schema. With a schema,
+    each URL's `data` conforms to it: the schema goes to the model's
+    structured-output setting, the reply is validated against it, and a reply
+    that still breaks it after one repair turn fails that URL.
 
     Use this tool when you need structured data out of one or more pages:
     - You need structured data (JSON) from web pages
@@ -59,7 +63,7 @@ async def supacrawl_extract(
 
     **Common patterns:**
     - Provide both prompt AND schema for best results
-    - Keep schemas simple and flat when possible
+    - Keep schemas simple and flat when possible; the root must be an object
     - Use descriptive field names in schema (LLM uses them as hints)
     - For e-commerce: extract from product listing pages, not search results
     - Batch related URLs together (same site/structure) for consistency
@@ -67,118 +71,77 @@ async def supacrawl_extract(
     **Prefer other tools when:**
     - You just need the page content → use supacrawl_scrape with formats=["markdown"]
     - You need a summary, not structured data → use supacrawl_summary
-    - You want to scrape with your own processing → use supacrawl_scrape
+    - The site already publishes the facts (prices, ratings, dates) → use
+      supacrawl_scrape with formats=["structuredData"], which needs no LLM
 
     Args:
         api_client: Injected SupacrawlServices instance
         urls: URLs to extract data from (1-10 URLs)
         prompt: Natural language description of what to extract.
             Example: "Extract the product name, price, and availability"
-        schema: JSON schema defining the structure of extracted data.
+        schema: JSON schema each URL's data must conform to (an object, or
+            that object JSON-encoded as a string).
             Example: {"type": "object", "properties": {"name": {"type": "string"}}}
         allow_external_links: Whether to follow and extract from external links
 
     Returns:
-        Extraction-ready result with scraped content:
         {
             "success": true,          # True when at least one URL succeeded
             "partial": false,         # True when some URLs succeeded and some failed
-            "succeeded_count": 1,     # Number of URLs that returned content
-            "failed_count": 0,        # Number of URLs that failed
+            "succeeded_count": 1,
+            "failed_count": 0,
             "data": [
-                {
-                    "url": "...",
-                    "success": true,
-                    "markdown": "...",
-                    "metadata": {"title": "...", "description": "..."}
-                }
+                {"url": "...", "success": true, "data": {...}},   # conforms to schema
+                {"url": "...", "success": false, "error": "..."}
             ],
-            "extraction_context": {
-                "prompt": "...",
-                "schema": {...},
-                "instruction": "Extract structured data..."
-            }
+            "correlation_id": "..."
         }
 
     Raises:
-        SupacrawlValidationError: `urls` or `prompt` failed validation.
-        SupacrawlMCPError: any other whole-call failure, mapped from the
-            underlying exception by `map_exception`.
-
-    Note:
-        This tool returns content for the calling LLM to extract.
-        No internal LLM is used - you (the MCP client) perform the extraction
-        using the provided schema and prompt.
+        SupacrawlValidationError: `urls`, `prompt` or `schema` failed
+            validation, or neither `prompt` nor `schema` was given.
+        SupacrawlMCPError: no LLM is configured on the server, or every URL
+            failed (the page could not be fetched, or the model's output
+            does not conform to the schema).
     """
-    # Generate correlation ID for request tracking
     correlation_id = generate_correlation_id()
 
     try:
-        # Validate inputs
         validated_urls = validate_urls(urls, "urls", min_count=1, max_count=10)
         validated_prompt = validate_prompt(prompt, "prompt", allow_none=True)
+        validated_schema = validate_json_object(schema, "schema")
+        if validated_prompt is None and validated_schema is None:
+            raise SupacrawlValidationError(
+                "Provide a prompt or schema (or both) saying what to extract",
+                field="prompt",
+                value=None,
+            )
 
-        # Scrape all URLs and collect content
-        results = []
-        for url in validated_urls:
-            try:
-                scrape_result = await api_client.scrape_service.scrape(
-                    url=url,
-                    formats=["markdown"],
-                    only_main_content=True,
-                )
+        results: list[dict[str, Any]] = []
+        failures: list[Exception] = []
+        async with ExtractService(scrape_service=api_client.scrape_service) as service:
+            for url in validated_urls:
+                try:
+                    data = await service.extract_one(url, validated_prompt, validated_schema)
+                    results.append({"url": url, "success": True, "data": data})
+                except ConfigurationError, ValidationError:
+                    # No LLM, or a schema no URL could satisfy: the whole call fails
+                    raise
+                except Exception as e:
+                    logger.warning(f"Failed to extract from {url}: {e}")
+                    failures.append(e)
+                    results.append({"url": url, "success": False, "error": str(e)})
 
-                if scrape_result.success and scrape_result.data:
-                    results.append(
-                        {
-                            "url": url,
-                            "success": True,
-                            "markdown": scrape_result.data.markdown,
-                            "metadata": {
-                                "title": scrape_result.data.metadata.title if scrape_result.data.metadata else None,
-                                "description": scrape_result.data.metadata.description
-                                if scrape_result.data.metadata
-                                else None,
-                            },
-                        }
-                    )
-                else:
-                    results.append(
-                        {
-                            "url": url,
-                            "success": False,
-                            "error": scrape_result.error or "Failed to scrape page",
-                        }
-                    )
-            except Exception as e:
-                logger.warning(f"Failed to scrape {url}: {e}")
-                results.append(
-                    {
-                        "url": url,
-                        "success": False,
-                        "error": str(e),
-                    }
-                )
+        if len(failures) == len(results):
+            raise failures[0]
 
-        succeeded_count = sum(1 for r in results if r.get("success", False))
-        failed_count = len(results) - succeeded_count
-
-        # Return content ready for the calling LLM to extract
+        succeeded_count = len(results) - len(failures)
         return {
-            "success": any(r.get("success", False) for r in results),
-            "partial": succeeded_count > 0 and failed_count > 0,
+            "success": True,
+            "partial": bool(failures),
             "succeeded_count": succeeded_count,
-            "failed_count": failed_count,
+            "failed_count": len(failures),
             "data": results,
-            "extraction_context": {
-                "prompt": validated_prompt,
-                "schema": schema,
-                "instruction": (
-                    "Extract structured data from the markdown content above. "
-                    "Use the provided schema to structure your response. "
-                    "Return valid JSON matching the schema."
-                ),
-            },
             "correlation_id": correlation_id,
         }
 

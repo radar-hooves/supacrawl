@@ -28,6 +28,7 @@ from __future__ import annotations
 from unittest.mock import AsyncMock
 
 import pytest
+from conftest import LLMWire
 from fastmcp import Client, FastMCP
 
 from supacrawl.mcp.wiring import register_all_tools
@@ -38,8 +39,9 @@ pytestmark = pytest.mark.mcp
 
 
 @pytest.fixture
-def surface(mock_api_client: SupacrawlServices) -> FastMCP:
-    """A registered supacrawl tool surface over the suite's mocked services."""
+def surface(mock_api_client: SupacrawlServices, llm_wire: LLMWire) -> FastMCP:
+    """A registered supacrawl tool surface over the suite's mocked services, with a model answering extract."""
+    llm_wire.replies += ['{"title": "Test Page"}'] * 2
     mcp = FastMCP("supacrawl-test")
     register_all_tools(mcp, mock_api_client)
     return mcp

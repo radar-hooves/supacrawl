@@ -113,30 +113,28 @@ class TestLLMClient:
         assert "JSON" in exc_info.value.message
 
     @pytest.mark.asyncio
-    async def test_summarize_calls_chat(self, ollama_config: LLMConfig) -> None:
-        """Test that summarize calls chat with correct prompt."""
+    async def test_summarize_puts_the_text_and_bound_in_the_prompt(self, ollama_config: LLMConfig) -> None:
+        """summarize sends the text and its word bound, and returns the reply."""
         client = LLMClient(ollama_config)
 
         with patch.object(client, "chat", return_value="Summary text") as mock_chat:
-            result = await client.summarize("Long text to summarize")
+            result = await client.summarize("Long text to summarize", 100, focus="pricing")
 
         assert result == "Summary text"
-        mock_chat.assert_called_once()
-        # Check that the text is in the prompt
-        call_args = mock_chat.call_args[0][0]
-        assert len(call_args) == 1
-        assert "Long text to summarize" in call_args[0]["content"]
+        prompt = mock_chat.call_args[0][0][-1]["content"]
+        assert "Long text to summarize" in prompt
+        assert "100 words" in prompt
+        assert "pricing" in prompt
 
     @pytest.mark.asyncio
-    async def test_summarize_with_max_length(self, ollama_config: LLMConfig) -> None:
-        """Test that summarize includes max_length in prompt."""
+    async def test_summarize_cuts_an_overrun_to_the_bound(self, ollama_config: LLMConfig) -> None:
+        """A reply longer than the bound is cut at its last sentence end inside it."""
         client = LLMClient(ollama_config)
 
-        with patch.object(client, "chat", return_value="Short summary") as mock_chat:
-            await client.summarize("Text to summarize", max_length=100)
+        with patch.object(client, "chat", return_value="One two three. Four five six seven eight."):
+            result = await client.summarize("Text", 5)
 
-        call_args = mock_chat.call_args[0][0]
-        assert "100" in call_args[0]["content"]
+        assert result == "One two three."
 
     def test_extract_json_from_plain_json(self, ollama_config: LLMConfig) -> None:
         """Test extracting plain JSON."""

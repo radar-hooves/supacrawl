@@ -1,8 +1,12 @@
 """Pytest configuration and shared fixtures for supacrawl tests."""
 
+import json
 import os
+from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
+import httpx
 import pytest
 
 # Keep per-domain strategy memory (#130) and field telemetry (#137) off by default
@@ -43,6 +47,56 @@ def clean_search_env(monkeypatch: pytest.MonkeyPatch) -> None:
     compose correctly with this fixture.
     """
     for var in _SEARCH_ENV_VARS:
+        monkeypatch.delenv(var, raising=False)
+
+
+_LLM_ENV_VARS = ("SUPACRAWL_LLM_PROVIDER", "SUPACRAWL_LLM_MODEL", "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "OLLAMA_HOST")
+
+
+@dataclass
+class LLMWire:
+    """A scripted model endpoint at the httpx wire: ``replies`` answer in order, request bodies are kept."""
+
+    replies: list[str] = field(default_factory=list)
+    requests: list[dict[str, Any]] = field(default_factory=list)
+
+
+def wire_llm(monkeypatch: pytest.MonkeyPatch, provider: str = "openai") -> LLMWire:
+    """Configure ``provider`` and answer every HTTP call it makes from an ``LLMWire``."""
+    for var in _LLM_ENV_VARS:
+        monkeypatch.delenv(var, raising=False)
+    monkeypatch.setenv("SUPACRAWL_LLM_PROVIDER", provider)
+    monkeypatch.setenv("SUPACRAWL_LLM_MODEL", "test-model")
+    if provider == "openai":
+        monkeypatch.setenv("OPENAI_API_KEY", "test-placeholder")
+    wire = LLMWire()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        wire.requests.append(json.loads(request.content))
+        content = wire.replies.pop(0)
+        if request.url.path == "/api/chat":
+            return httpx.Response(
+                200, json={"model": "test-model", "message": {"role": "assistant", "content": content}, "done": True}
+            )
+        assert request.url.path == "/v1/chat/completions", request.url
+        return httpx.Response(200, json={"choices": [{"message": {"role": "assistant", "content": content}}]})
+
+    real_client = httpx.AsyncClient
+    transport = httpx.MockTransport(handler)
+    monkeypatch.setattr(httpx, "AsyncClient", lambda *args, **kwargs: real_client(*args, transport=transport, **kwargs))
+    return wire
+
+
+@pytest.fixture
+def llm_wire(monkeypatch: pytest.MonkeyPatch) -> LLMWire:
+    """The OpenAI provider, answered at the wire."""
+    return wire_llm(monkeypatch)
+
+
+@pytest.fixture
+def no_llm(monkeypatch: pytest.MonkeyPatch) -> None:
+    """No LLM configured, whatever the developer's shell carries."""
+    for var in _LLM_ENV_VARS:
         monkeypatch.delenv(var, raising=False)
 
 

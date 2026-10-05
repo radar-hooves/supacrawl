@@ -106,8 +106,7 @@ class TestSummary:
 
         fake_result: dict[str, Any] = {
             "success": True,
-            "data": {"url": "https://example.com", "markdown": "# Hello"},
-            "summary_context": {"instruction": "Summarise the content above."},
+            "data": {"url": "https://example.com", "title": "Hello", "summary": "A greeting."},
         }
         with patch(
             "supacrawl.services.summary.supacrawl_summary",
@@ -123,6 +122,5 @@ class TestSummary:
         assert resp.status_code == 200
         data = resp.json()
         assert data["success"] is True
-        assert "data" in data
-        assert "summary_context" in data
+        assert data["data"]["summary"] == "A greeting."
         mock_sum.assert_awaited_once()

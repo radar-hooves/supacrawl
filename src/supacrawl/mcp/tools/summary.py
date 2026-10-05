@@ -14,7 +14,8 @@ async def supacrawl_summary(
     api_client: SupacrawlServices,
     url: Annotated[str, Field(description="The URL to summarise")],
     max_length: Annotated[
-        int | None, Field(description="Optional hint for summary length (e.g., 100 for ~100 words)")
+        int | None,
+        Field(description="Most words the summary may run to (default 120, capped at 1000)"),
     ] = None,
     focus: Annotated[
         str | None,
@@ -26,8 +27,8 @@ async def supacrawl_summary(
     """
     Generate a summary of a web page.
 
-    This tool scrapes the specified URL and returns content ready for
-    the calling LLM to summarise. No internal LLM is used.
+    This tool scrapes the specified URL and has the server's LLM summarise
+    it in at most `max_length` words. The page body is never returned.
 
     Use this tool when you want the gist of a page rather than its full text:
     - You need a quick overview of a page without reading all content
@@ -55,30 +56,21 @@ async def supacrawl_summary(
     Args:
         api_client: Injected SupacrawlServices instance
         url: The URL to summarise
-        max_length: Optional hint for summary length (e.g., 100 for ~100 words)
+        max_length: Most words the summary may run to (default 120, capped at 1000)
         focus: Optional focus area for the summary (e.g., "technical details",
             "pricing information", "key findings")
 
     Returns:
-        Summary-ready result with scraped content:
         {
             "success": true,
-            "data": {
-                "url": "...",
-                "markdown": "...",
-                "metadata": {"title": "...", "description": "..."}
-            },
-            "summary_context": {
-                "max_length": 100,
-                "focus": "...",
-                "instruction": "Summarise the content..."
-            }
+            "data": {"url": "...", "title": "...", "summary": "..."},
+            "correlation_id": "..."
         }
 
-    Note:
-        This tool returns content for the calling LLM to summarise.
-        No internal LLM is used - you (the MCP client) perform the summarisation
-        using the provided context.
+    Raises:
+        SupacrawlValidationError: `url` or `max_length` failed validation.
+        SupacrawlMCPError: no LLM is configured on the server, the page
+            could not be fetched, or the model call failed.
     """
     correlation_id = generate_correlation_id()
     try:

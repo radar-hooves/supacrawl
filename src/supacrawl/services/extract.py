@@ -9,8 +9,10 @@ import json
 import logging
 from typing import TYPE_CHECKING, Any
 
-from supacrawl.exceptions import generate_correlation_id
+from supacrawl.exceptions import ProviderError, generate_correlation_id
 from supacrawl.llm import LLMClient, load_llm_config
+from supacrawl.llm.client import clip_content
+from supacrawl.llm.schema import schema_validator
 from supacrawl.models import ExtractResult, ExtractResultItem
 from supacrawl.utils import log_with_correlation
 
@@ -85,20 +87,24 @@ class ExtractService:
         Args:
             urls: URLs to extract data from.
             prompt: Custom extraction prompt.
-            schema: JSON schema for structured output.
+            schema: JSON schema each URL's data must conform to.
             allow_external_links: Follow and extract from external links.
 
         Returns:
-            ExtractResult with extracted data for each URL.
+            ExtractResult with extracted data for each URL; a URL whose page
+            could not be fetched, or whose output breaks ``schema``, is failed.
 
         Raises:
+            ValidationError: ``schema`` is not valid JSON Schema for an object.
             LLMNotConfiguredError: If LLM environment variables are not set.
         """
         correlation_id = generate_correlation_id()
         results: list[ExtractResultItem] = []
 
-        # Get client early to fail fast if not configured
-        client = await self._get_llm_client()
+        # Refuse a bad schema or a missing LLM before any page is fetched
+        if schema is not None:
+            schema_validator(schema)
+        await self._get_llm_client()
 
         log_with_correlation(
             LOGGER,
@@ -109,8 +115,8 @@ class ExtractService:
 
         for url in urls:
             try:
-                result = await self._extract_single(url, prompt, schema, correlation_id, client)
-                results.append(result)
+                data = await self.extract_one(url, prompt, schema)
+                results.append(ExtractResultItem(url=url, success=True, data=data))
             except Exception as e:
                 log_with_correlation(
                     LOGGER,
@@ -132,51 +138,44 @@ class ExtractService:
 
         return ExtractResult(success=all_success, data=results)
 
-    async def _extract_single(
+    async def extract_one(
         self,
         url: str,
-        prompt: str | None,
-        schema: dict[str, Any] | None,
-        correlation_id: str,
-        client: LLMClient,
-    ) -> ExtractResultItem:
-        """Extract from a single URL."""
-        # First, scrape the page content
+        prompt: str | None = None,
+        schema: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """
+        Extract from one URL.
+
+        Raises:
+            ValidationError: ``schema`` is not valid JSON Schema for an object.
+            LLMNotConfiguredError: If LLM environment variables are not set.
+            ProviderError: the page could not be fetched or had no content, or
+                the model call failed.
+            ExtractionSchemaError: the model's output breaks ``schema``.
+        """
+        # Both checks come before the fetch: neither can be fixed by fetching
+        if schema is not None:
+            schema_validator(schema)
+        client = await self._get_llm_client()
+
         scrape_result = await self._scrape_service.scrape(
             url=url,
             formats=["markdown"],
             only_main_content=True,
         )
-
         if not scrape_result.success or not scrape_result.data:
-            return ExtractResultItem(
-                url=url,
-                success=False,
-                error=scrape_result.error or "Failed to scrape page",
-            )
+            raise ProviderError(scrape_result.error or "Failed to scrape page", provider="scrape")
 
         content = scrape_result.data.markdown or ""
         if not content.strip():
-            return ExtractResultItem(
-                url=url,
-                success=False,
-                error="No content extracted from page",
-            )
+            raise ProviderError("No content extracted from page", provider="scrape")
 
-        # Build extraction prompt
-        system_prompt = self._build_system_prompt(schema)
-        user_prompt = self._build_user_prompt(content, prompt, schema)
-
-        # Call LLM
-        try:
-            messages = [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ]
-            extracted = await client.chat_json(messages)
-            return ExtractResultItem(url=url, success=True, data=extracted)
-        except Exception as e:
-            return ExtractResultItem(url=url, success=False, error=str(e))
+        messages = [
+            {"role": "system", "content": self._build_system_prompt(schema)},
+            {"role": "user", "content": self._build_user_prompt(content, prompt, schema)},
+        ]
+        return await client.chat_json(messages, schema=schema)
 
     def _build_system_prompt(self, schema: dict[str, Any] | None) -> str:
         """Build system prompt for extraction."""
@@ -206,11 +205,6 @@ class ExtractService:
         if schema:
             parts.append("Extract data according to the provided schema.")
 
-        # Limit content to avoid context overflow
-        max_content = 50000
-        if len(content) > max_content:
-            content = content[:max_content] + "\n\n[Content truncated...]"
-
-        parts.append(f"\n\nWeb page content:\n\n{content}")
+        parts.append(f"\n\nWeb page content:\n\n{clip_content(content)}")
 
         return "\n".join(parts)
