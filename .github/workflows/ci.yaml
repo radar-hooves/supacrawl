@@ -1,5 +1,9 @@
 name: CI
 
+# by-exception (2026-10-06): no failure notifier. The household's one-door rule forbids a
+# direct ntfy curl, and a public repo cannot load master's private ntfy-failure action;
+# the red-CI digest carries failures.
+
 on:
   pull_request:
     branches: [main]
@@ -41,34 +45,6 @@ jobs:
       - name: Format check
         run: uv run ruff format --check src/ tests/
 
-      # ntfy-failure inlined: supacrawl is a public repo; GitHub blocks public
-      # repos from referencing actions in private repos (radar-hooves/master-project).
-      # Logic mirrors radar-hooves/master-project/.github/actions/ntfy-failure@main.
-      - name: Notify failure (ntfy infra)
-        if: failure() && github.event_name != 'pull_request'
-        shell: bash
-        env:
-          NTFY_TITLE: 'supacrawl: lint failed'
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: |
-          TOKEN=""
-          for f in /etc/ntfy/tokens/ci-publisher.token /run/secrets/ntfy/systemd; do
-            [ -n "$TOKEN" ] && break
-            [ -r "$f" ] && TOKEN="$(cat "$f")"
-          done
-          if [ -z "$TOKEN" ]; then
-            echo "::warning::ntfy-failure: no token available — failure notification NOT sent"
-            exit 0
-          fi
-          curl -sS --max-time 10 \
-            -H "Authorization: Bearer $TOKEN" \
-            -H "Title: $NTFY_TITLE" \
-            -H "Priority: 4" \
-            -H "Tags: rotating_light" \
-            -d "Run: $RUN_URL" \
-            "https://ntfy.godswood.au/infra" \
-            || echo "::warning::ntfy-failure: notification POST failed"
-
   typecheck:
     runs-on: [self-hosted, atlas]
     env:
@@ -93,31 +69,6 @@ jobs:
 
       - name: Type check
         run: uv run mypy src/ tests/
-
-      - name: Notify failure (ntfy infra)
-        if: failure() && github.event_name != 'pull_request'
-        shell: bash
-        env:
-          NTFY_TITLE: 'supacrawl: typecheck failed'
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: |
-          TOKEN=""
-          for f in /etc/ntfy/tokens/ci-publisher.token /run/secrets/ntfy/systemd; do
-            [ -n "$TOKEN" ] && break
-            [ -r "$f" ] && TOKEN="$(cat "$f")"
-          done
-          if [ -z "$TOKEN" ]; then
-            echo "::warning::ntfy-failure: no token available — failure notification NOT sent"
-            exit 0
-          fi
-          curl -sS --max-time 10 \
-            -H "Authorization: Bearer $TOKEN" \
-            -H "Title: $NTFY_TITLE" \
-            -H "Priority: 4" \
-            -H "Tags: rotating_light" \
-            -d "Run: $RUN_URL" \
-            "https://ntfy.godswood.au/infra" \
-            || echo "::warning::ntfy-failure: notification POST failed"
 
   test:
     name: test
@@ -186,36 +137,6 @@ jobs:
       - name: Test
         run: uv run pytest -m "not e2e and not mcp and not stealth_smoke" --ignore=tests/test_mcp --ignore=tests/test_health_search_config.py --ignore=tests/test_health_search_probe.py --ignore=tests/test_provider_fallback_visibility.py
 
-      # ntfy-failure inlined (public repo, see lint/typecheck jobs above); this
-      # job runs on ubuntu-latest so the atlas host token files below don't
-      # exist — falls through to secrets.NTFY_TOKEN, provisioned for this repo
-      # (#150) so a red main run pages the infra topic.
-      - name: Notify failure (ntfy infra)
-        if: failure() && github.event_name != 'pull_request'
-        shell: bash
-        env:
-          NTFY_TITLE: 'supacrawl: test failed'
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          NTFY_TOKEN: ${{ secrets.NTFY_TOKEN }}
-        run: |
-          TOKEN="$NTFY_TOKEN"
-          for f in /etc/ntfy/tokens/ci-publisher.token /run/secrets/ntfy/systemd; do
-            [ -n "$TOKEN" ] && break
-            [ -r "$f" ] && TOKEN="$(cat "$f")"
-          done
-          if [ -z "$TOKEN" ]; then
-            echo "::warning::ntfy-failure: no token available — failure notification NOT sent"
-            exit 0
-          fi
-          curl -sS --max-time 10 \
-            -H "Authorization: Bearer $TOKEN" \
-            -H "Title: $NTFY_TITLE" \
-            -H "Priority: 4" \
-            -H "Tags: rotating_light" \
-            -d "Run: $RUN_URL" \
-            "https://ntfy.godswood.au/infra" \
-            || echo "::warning::ntfy-failure: notification POST failed"
-
   stealth-smoke:
     name: stealth-smoke
     # #145: actually launch each stealth engine headless, so a broken stealth
@@ -266,29 +187,3 @@ jobs:
       # contents and keeps it out of the main job.
       - name: Smoke-test each stealth engine launches headless
         run: uv run pytest tests/test_engine_smoke.py -m stealth_smoke -p no:cacheprovider
-
-      - name: Notify failure (ntfy infra)
-        if: failure() && github.event_name != 'pull_request'
-        shell: bash
-        env:
-          NTFY_TITLE: 'supacrawl: stealth-smoke failed'
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          NTFY_TOKEN: ${{ secrets.NTFY_TOKEN }}
-        run: |
-          TOKEN="$NTFY_TOKEN"
-          for f in /etc/ntfy/tokens/ci-publisher.token /run/secrets/ntfy/systemd; do
-            [ -n "$TOKEN" ] && break
-            [ -r "$f" ] && TOKEN="$(cat "$f")"
-          done
-          if [ -z "$TOKEN" ]; then
-            echo "::warning::ntfy-failure: no token available — failure notification NOT sent"
-            exit 0
-          fi
-          curl -sS --max-time 10 \
-            -H "Authorization: Bearer $TOKEN" \
-            -H "Title: $NTFY_TITLE" \
-            -H "Priority: 4" \
-            -H "Tags: rotating_light" \
-            -d "Run: $RUN_URL" \
-            "https://ntfy.godswood.au/infra" \
-            || echo "::warning::ntfy-failure: notification POST failed"
