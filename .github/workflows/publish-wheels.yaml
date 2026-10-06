@@ -20,8 +20,8 @@ name: Publish wheels
 # PRIVATE. GitHub blocks a public repo from resolving a reusable workflow (or a
 # referenced action) in a private one — the call dies at startup validation with
 # zero jobs. The sibling libraries (redactyl, ragify, core-memory — all private)
-# CAN call it; supacrawl cannot. This is the same constraint that keeps ntfy-failure
-# and the security scan inlined here (ci.yaml, security.yaml) and the auto-label
+# CAN call it; supacrawl cannot. This is the same constraint that keeps
+# the security scan inlined here (ci.yaml, security.yaml) and the auto-label
 # caller omitted (.claude/CLAUDE.md §CI deviations). So this file mirrors the
 # reusable's logic: build-time version stamp, wheel-only build, devpi upload reading
 # the password from a runner-host file, 409-treated-as-skip idempotency. The only
@@ -76,8 +76,8 @@ jobs:
     env:
       # Internal devpi upload URL on the atlas Docker network — the same address
       # the sibling repos' publish-wheels callers use. External read ingress is
-      # https://pypi.godswood.au/poodle64/prod/ (used by the verify step below).
-      INDEX_URL: http://172.21.0.2:3141/poodle64/prod/
+      # the household private index (used by the verify step below).
+      INDEX_URL: ${{ vars.DEVPI_UPLOAD_URL }}
       UPLOAD_PASSWORD_FILE: /var/lib/devpi-ci/upload_password
       DEVPI_USER: poodle64
     steps:
@@ -232,7 +232,7 @@ jobs:
           NETRC="$(mktemp)"
           chmod 600 "${NETRC}"
           # Write the credential straight into the file curl consumes; never echo it.
-          { printf 'machine 172.21.0.2 login %s password ' "${DEVPI_USER}"; cat "${UPLOAD_PASSWORD_FILE}"; echo; } > "${NETRC}"
+          { printf 'machine %s login %s password ' "$(printf '%s' "${INDEX_URL}" | sed -E 's|^[a-z]+://([^:/]+).*|\1|')" "${DEVPI_USER}"; cat "${UPLOAD_PASSWORD_FILE}"; echo; } > "${NETRC}"
           ok=0
           for attempt in 1 2 3; do
             resp="$(curl -s --netrc-file "${NETRC}" -H 'Accept: application/json' "${INDEX_URL}supacrawl" || true)"
@@ -251,31 +251,3 @@ jobs:
           fi
           echo "verified: supacrawl served locally from poodle64/prod (shadows the PyPI mirror)"
           printf '%s' "${resp}" | grep -oE 'https?://[^"]*poodle64/prod/\+f/[^"]*\.whl' | sort -u | head
-
-      - name: Notify failure (ntfy infra)
-        # ntfy-failure inlined: supacrawl is a public repo; GitHub blocks public
-        # repos from referencing actions in private repos (radar-hooves/master-project).
-        # Logic mirrors radar-hooves/master-project/.github/actions/ntfy-failure@main.
-        if: failure() && github.event_name != 'pull_request'
-        shell: bash
-        env:
-          NTFY_TITLE: 'supacrawl: wheel publish failed'
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: |
-          TOKEN=""
-          for f in /etc/ntfy/tokens/ci-publisher.token /run/secrets/ntfy/systemd; do
-            [ -n "$TOKEN" ] && break
-            [ -r "$f" ] && TOKEN="$(cat "$f")"
-          done
-          if [ -z "$TOKEN" ]; then
-            echo "::warning::ntfy-failure: no token available — failure notification NOT sent"
-            exit 0
-          fi
-          curl -sS --max-time 10 \
-            -H "Authorization: Bearer $TOKEN" \
-            -H "Title: $NTFY_TITLE" \
-            -H "Priority: 4" \
-            -H "Tags: rotating_light" \
-            -d "Run: $RUN_URL" \
-            "https://ntfy.godswood.au/infra" \
-            || echo "::warning::ntfy-failure: notification POST failed"
