@@ -1,9 +1,5 @@
 name: CI
 
-# by-exception (2026-10-06): no failure notifier. The household's one-door rule forbids a
-# direct ntfy curl, and a public repo cannot load master's private ntfy-failure action;
-# the red-CI digest carries failures.
-
 on:
   pull_request:
     branches: [main]
