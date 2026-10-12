@@ -46,7 +46,7 @@ jobs:
           uv run camoufox fetch
 
       - name: Browser and stealth-engine tests
-        run: uv run pytest -m "browser or stealth_smoke" -p no:cacheprovider
+        run: uv run pytest -m "browser or stealth_smoke" -p no:cacheprovider tests/test_browser.py tests/test_browser_recovery.py tests/test_engine_smoke.py
 
   publish:
     needs: browser-guard
