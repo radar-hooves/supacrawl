@@ -1,0 +1,13 @@
+# The change pipeline's one caller: every repo carries this file byte for byte, as
+# .github/workflows/change.yaml. Design: docs/research/2026-10-11-estate-ci-design.md §2.
+name: change
+on:
+  push: { branches: [main], tags: ['v*'] }
+  pull_request:
+  workflow_dispatch: { inputs: { roll: { default: '' } } }
+concurrency: { group: '${{ github.workflow }}-${{ github.ref }}', cancel-in-progress: '${{ github.event_name == ''pull_request'' }}' }
+permissions: { contents: read, actions: read, id-token: write }
+jobs:
+  change:
+    uses: ./.github/workflows/change-pipeline.yaml
+    with: { roll: '${{ inputs.roll }}' }

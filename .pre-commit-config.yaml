@@ -110,10 +110,12 @@ repos:
       - id: ruff-format
         name: '🐍 python · Format with Ruff'
         files: ^.*\.py$
+        exclude: ^\.github/
       - id: ruff
         name: '🐍 python · Lint with Ruff'
         args: ['--fix', '--exit-non-zero-on-fix']
         files: ^.*\.py$
+        exclude: ^\.github/
 
   # Type checking
   - repo: https://github.com/pre-commit/mirrors-mypy
@@ -123,7 +125,7 @@ repos:
         name: '🐍 python · Type check with mypy'
         additional_dependencies: [types-pytz, types-aiofiles, types-PyYAML, 'pydantic>=2.12.5,<3']
         files: ^.*\.py$
-        exclude: ^(.*/migrations/|.*/__pycache__/|.*/cache/)
+        exclude: ^(\.github/|.*/migrations/|.*/__pycache__/|.*/cache/)
 
   # ---------------------------------------------------------------------------- #
   #                              📦 uv Lockfile                                  #

@@ -1,0 +1,253 @@
+# The change pipeline (docs/research/2026-10-11-estate-ci-design.md §1.2–§2). The plan picks
+# the members a change reaches. Each gets a test leg, or a library leg when other workspace
+# members use it. A wheel or an MCP server ships at the end of its own leg, its own tests the
+# gate, once every library of this run in its workspace closure has passed its own leg. An
+# image builds in the deploy job, after the tests, on the same terms: a member's own image,
+# or a root image holding several members. Each library's sweep (its dependents type-checked
+# and the repo's contract suite) and the repo legs are early warnings: a consumer takes a
+# new library only at its own next change, where its own leg checks it, so nothing ships
+# or waits on them. The aggregate `change` is the one status a branch protection requires.
+# The step logic lives in .github/actions/change/*.sh and runs by hand on a runner host.
+#
+# Every caller is docs/master/templates/github-workflows/change.yaml, granting `actions:
+# read`: the plan reads this workflow's own runs for a push's base, and the legs and the
+# deploy job read this run's jobs and pass markers.
+
+name: change
+
+on:
+  workflow_call:
+    inputs:
+      roll:
+        description: "'all', or a comma list of members to test and deploy as if changed"
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  plan:
+    runs-on: [self-hosted, atlas]
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      plan: ${{ steps.plan.outputs.plan }}
+      head: ${{ steps.plan.outputs.head }}
+      members: ${{ steps.plan.outputs.members }}
+      libraries: ${{ steps.plan.outputs.libraries }}
+      deploys: ${{ steps.plan.outputs.deploys }}
+      repo: ${{ steps.plan.outputs.repo }}
+      changed: ${{ steps.plan.outputs.changed }}
+      ship: ${{ steps.plan.outputs.ship }}
+    steps:
+      # A fork's code is never checked out here; plan.sh says so and plans nothing.
+      - if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - id: plan
+        uses: ./.github/actions/change
+        with:
+          step: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ROLL: ${{ inputs.roll }}
+
+  member:
+    needs: plan
+    if: needs.plan.outputs.members != '[]'
+    name: test ${{ matrix.member.name }}
+    runs-on: [self-hosted, atlas]
+    timeout-minutes: 75
+    permissions:
+      contents: read
+      actions: read
+    strategy:
+      fail-fast: false
+      # With one library leg and the repo leg, the run stays near four runners.
+      max-parallel: 3
+      matrix:
+        member: ${{ fromJSON(needs.plan.outputs.members) }}
+    env:
+      UV_FROZEN: '1'
+      CHANGED_MEMBERS: ${{ needs.plan.outputs.changed }}
+      DEPLOY: ${{ needs.plan.outputs.ship == 'true' && matrix.member.deploy_now && contains(fromJSON('["wheel","mcp"]'), matrix.member.deploy) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: ${{ needs.plan.outputs.ship == 'true' && matrix.member.deploy_now && '0' || '1' }}
+      - uses: ./.github/actions/change
+        with:
+          step: ${{ matrix.member.toolchain }}
+          path: ${{ matrix.member.path || '.' }}
+      - run: touch "$RUNNER_TEMP/passed"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ matrix.member.marker }}
+          path: ${{ runner.temp }}/passed
+          retention-days: 1
+          overwrite: true
+      # It ships none of this run's libraries red: each must pass its own leg first.
+      - if: env.DEPLOY == 'true' && join(matrix.member.waits, '') != ''
+        timeout-minutes: 26
+        uses: ./.github/actions/change
+        with:
+          step: wait
+          args: ${{ join(matrix.member.waits, ' ') }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - if: env.DEPLOY == 'true'
+        timeout-minutes: 20
+        uses: ./.github/actions/change
+        with:
+          step: ${{ matrix.member.deploy }}
+          path: ${{ matrix.member.path || '.' }}
+          args: ${{ matrix.member.name }} ${{ needs.plan.outputs.head }}
+
+  library:
+    needs: plan
+    if: needs.plan.outputs.libraries != '[]'
+    name: library ${{ matrix.member.name }}
+    runs-on: [self-hosted, atlas]
+    timeout-minutes: 75
+    permissions:
+      contents: read
+      actions: read
+    strategy:
+      fail-fast: false
+      # One at a time, dependencies first, so a library waiting on another never blocks it.
+      max-parallel: 1
+      matrix:
+        member: ${{ fromJSON(needs.plan.outputs.libraries) }}
+    env:
+      UV_FROZEN: '1'
+      DEPLOY: ${{ needs.plan.outputs.ship == 'true' && matrix.member.deploy_now && contains(fromJSON('["wheel","mcp"]'), matrix.member.deploy) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: ${{ needs.plan.outputs.ship == 'true' && matrix.member.deploy_now && '0' || '1' }}
+      - uses: ./.github/actions/change
+        with:
+          step: uv
+          path: ${{ matrix.member.path || '.' }}
+      - run: touch "$RUNNER_TEMP/passed"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ matrix.member.marker }}
+          path: ${{ runner.temp }}/passed
+          retention-days: 1
+          overwrite: true
+      - if: env.DEPLOY == 'true' && join(matrix.member.waits, '') != ''
+        timeout-minutes: 26
+        uses: ./.github/actions/change
+        with:
+          step: wait
+          args: ${{ join(matrix.member.waits, ' ') }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - if: env.DEPLOY == 'true'
+        timeout-minutes: 20
+        uses: ./.github/actions/change
+        with:
+          step: ${{ matrix.member.deploy }}
+          path: ${{ matrix.member.path || '.' }}
+          args: ${{ matrix.member.name }} ${{ needs.plan.outputs.head }}
+
+  # The early warning: never ships, and a red sweep is never rolled into the next run.
+  sweep:
+    needs: [plan, library]
+    if: ${{ !cancelled() && needs.plan.result == 'success' && needs.plan.outputs.libraries != '[]' }}
+    name: sweep ${{ matrix.member.name }}
+    runs-on: [self-hosted, atlas]
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        member: ${{ fromJSON(needs.plan.outputs.libraries) }}
+    env:
+      UV_FROZEN: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/change
+        with:
+          step: library
+          path: ${{ matrix.member.path || '.' }}
+          args: ${{ join(matrix.member.dependents, ' ') }}
+
+  repo:
+    needs: plan
+    if: needs.plan.outputs.repo != ''
+    runs-on: [self-hosted, atlas]
+    timeout-minutes: 60
+    env:
+      UV_FROZEN: '1'
+      CHANGED_MEMBERS: ${{ needs.plan.outputs.changed }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/change
+        with:
+          step: repo
+          args: ${{ needs.plan.outputs.repo }}
+
+  deploy:
+    needs: [plan, member, library]
+    if: ${{ !cancelled() && needs.plan.result == 'success' && needs.plan.outputs.ship == 'true' && needs.plan.outputs.deploys != '[]' }}
+    name: deploy ${{ matrix.deploy.name }}
+    runs-on: [self-hosted, atlas]
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      actions: read
+    strategy:
+      fail-fast: false
+      # Image builds land in the Docker daemon's memory, outside every runner's cap.
+      max-parallel: 2
+      matrix:
+        deploy: ${{ fromJSON(needs.plan.outputs.deploys) }}
+    env:
+      UV_FROZEN: '1'
+    steps:
+      - name: Every member it holds, and every library in them, passed its leg
+        timeout-minutes: 26
+        uses: ./.github/actions/change
+        with:
+          step: wait
+          args: ${{ join(matrix.deploy.markers, ' ') }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - id: checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      # supacrawl's 9 GB image takes about 35 minutes to build, smoke and push.
+      - timeout-minutes: 55
+        uses: ./.github/actions/change
+        with:
+          step: ${{ matrix.deploy.kind }}
+          path: ${{ matrix.deploy.path }}
+          args: ${{ matrix.deploy.name }} ${{ needs.plan.outputs.head }}
+      # A cancel or a timeout signals only the step's own shell, so image.sh lives on with
+      # :latest moved and its trap unfired; this finishes the rollback from its state file.
+      - if: (cancelled() || failure()) && matrix.deploy.kind == 'image' && steps.checkout.outcome == 'success'
+        uses: ./.github/actions/change
+        with:
+          step: image
+          path: ${{ matrix.deploy.path }}
+          args: ${{ matrix.deploy.name }} --rollback
+
+  change:
+    if: always()
+    needs: [plan, member, library, sweep, repo, deploy]
+    runs-on: [self-hosted, atlas]
+    timeout-minutes: 5
+    steps:
+      - name: Every leg succeeded or was skipped
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          jq -r 'to_entries[] | "\(.key): \(.value.result)"' <<<"$NEEDS"
+          jq -e 'all(.[]; .result == "success" or .result == "skipped")' <<<"$NEEDS" >/dev/null

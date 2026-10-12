@@ -1,0 +1,186 @@
+# Composite action: set up uv at the household-pinned version, from a tool cache
+# that survives the runner's ephemerality. Referenced from every CI job in the
+# fleet that needs uv, in place of calling astral-sh/setup-uv directly:
+#
+#   - name: Set up uv
+#     uses: radar-hooves/master-project/.github/actions/setup-uv@main
+#     with:
+#       enable-cache: 'true'
+#       cache-dependency-glob: '**/uv.lock'
+#
+# Why this exists rather than each workflow calling setup-uv itself
+# (master-project#173). Two independent network dependencies had to go, and
+# neither fix belongs in a per-repo workflow:
+#
+#   1. VERSION RESOLUTION. setup-uv with no `version` resolves "latest", which
+#      fetches the version manifest from raw.githubusercontent.com on EVERY run
+#      before it will even consult the tool cache. That fetch is a hard job
+#      dependency: when it flaked on the atlas runner (twice on 2026-07-13) it
+#      failed the whole publish before any build step ran, fired a priority-4
+#      ntfy, and needed a manual re-trigger. An exact `version` short-circuits
+#      the resolution (setup-uv's ExactVersionResolver returns without a
+#      manifest call).
+#
+#   2. TOOL CACHE. A pin alone is NOT enough, which is worth knowing before
+#      anyone "simplifies" this file: on a tool-cache MISS setup-uv fetches the
+#      manifest anyway — it needs the download URL and sha256 — so on a runner
+#      whose cache never survives, a pinned version still fetches every run
+#      (measured: api-clients runs 29491195320 / 29491530585, both fetched).
+#
+#      The household's runners are deliberately ephemeral (`ephemeral = true`,
+#      yggdrasil hosts/atlas/nix-config/modules/services/github-runner.nix;
+#      rationale in operators/poodle64/governance/ci/strategy-ci.md), and the
+#      runner puts its tool cache at /run/github-runner/<repo>/_tool — the
+#      systemd RUNTIME directory, wiped when the unit stops, i.e. after every
+#      job. So the cache is empty on arrival, every time.
+#
+#      Overriding RUNNER_TOOL_CACHE via $GITHUB_ENV does NOT work: the runner
+#      re-injects its own value into each step's process env, so the action
+#      still installs under _tool (measured: run 29492121074 — the step env
+#      showed the override, the install ignored it). The fix that does work is
+#      to SEED the runner's own cache from a path that survives: $HOME
+#      (/var/lib/github-runner-home/<key>, StateDirectory-backed), which the
+#      runner already uses to persist npm/cargo and uv's UV_PYTHON_INSTALL_DIR.
+#      Restore before, save after; setup-uv then finds the pinned uv already
+#      cached and touches the network not at all.
+#
+#   Centralising both in one place means advancing uv across the fleet is one
+#   edit in this file, not an edit in every repo — the same argument
+#   as any shared composite. Callers that genuinely need a
+#   different uv pass `version`.
+#
+# Advancing the pin: keep HOUSEHOLD_UV_VERSION aligned with the uv the
+# workstation runs (nix-managed, yggdrasil modules/home/default.nix), so CI
+# resolves dependencies exactly as local runs do; bump both together,
+# deliberately. The first run on a new pin downloads once, then caches.
+#
+# Degrades safely: where $HOME is not persistent (a github-hosted runner), the
+# restore misses and the save is thrown away with the VM — the job simply
+# behaves as it did before, one download per run.
+
+name: 'Set up uv (household pin)'
+description: 'Install uv at the household-pinned version via astral-sh/setup-uv, from a tool cache seeded to survive ephemeral runners'
+
+inputs:
+  version:
+    description: 'uv version to install; leave empty to take the household pin. Override only with a reason.'
+    required: false
+    default: ''
+  python-version:
+    description: 'Python version for uv to install and make default; omit to use the repo .python-version'
+    required: false
+    default: ''
+  enable-cache:
+    description: >-
+      Cache the uv PACKAGE cache between runs ('true'/'false'/'auto'). Defaults
+      to upstream's own 'auto' rather than a literal, so this action never
+      silently overrides setup-uv's default. Note 'auto' means disabled on
+      self-hosted runners, which is the whole fleet.
+    required: false
+    default: 'auto'
+  cache-dependency-glob:
+    description: >-
+      Glob of files whose contents key the uv package cache. Only consulted when
+      enable-cache resolves on; a caller that turns the cache on should pass its
+      own glob, as the empty default is forwarded verbatim.
+    required: false
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    # The pin is resolved in a step, not via the input default: a caller that
+    # forwards an unset `version` input passes an empty string, which satisfies
+    # the input default and would hand setup-uv an empty version (i.e.
+    # "latest") — the exact failure this action exists to remove.
+    - name: Resolve household uv pin and restore tool cache
+      id: pin
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        HOUSEHOLD_UV_VERSION='0.9.30'
+        RESOLVED="${REQUESTED_VERSION:-${HOUSEHOLD_UV_VERSION}}"
+        echo "Resolved uv version: ${RESOLVED}"
+        echo "version=${RESOLVED}" >> "${GITHUB_OUTPUT}"
+
+        PERSIST_ROOT="${HOME:-}/uv-toolcache"
+        echo "persist-root=${PERSIST_ROOT}" >> "${GITHUB_OUTPUT}"
+
+        # Restore the pinned uv into the runner's own (per-job, empty) tool
+        # cache. The layout is @actions/tool-cache's: <root>/uv/<version>/<arch>
+        # plus a sibling <arch>.complete marker that `tc.find` requires — both
+        # live inside the version directory, so copying it whole preserves the
+        # marker and stays arch-agnostic.
+        #
+        # The restored tree is SMOKE-CHECKED before it is trusted. `tc.find`
+        # trusts the .complete marker blindly, so a half-written cache would be
+        # handed to the job as a working uv and fail later, confusingly, in some
+        # unrelated step — a stickier failure than the flaky fetch this action
+        # removes. A cache that does not run is deleted here and downloaded
+        # fresh, so the fleet self-heals with no human rm -rf.
+        if [ -z "${RUNNER_TOOL_CACHE:-}" ]; then
+          echo "RUNNER_TOOL_CACHE unset; leaving setup-uv to install fresh"
+        elif [ -d "${PERSIST_ROOT}/uv/${RESOLVED}" ]; then
+          mkdir -p "${RUNNER_TOOL_CACHE}/uv"
+          cp -a "${PERSIST_ROOT}/uv/${RESOLVED}" "${RUNNER_TOOL_CACHE}/uv/"
+          RESTORED_UV="$(find "${RUNNER_TOOL_CACHE}/uv/${RESOLVED}" -name uv -type f -perm -u+x 2>/dev/null | head -1)"
+          if [ -n "${RESTORED_UV}" ] && "${RESTORED_UV}" --version >/dev/null 2>&1; then
+            echo "Restored uv ${RESOLVED} from ${PERSIST_ROOT} -> ${RUNNER_TOOL_CACHE}"
+          else
+            echo "::warning::setup-uv: persisted uv ${RESOLVED} did not run; discarding it and downloading fresh"
+            rm -rf "${RUNNER_TOOL_CACHE}/uv/${RESOLVED}" "${PERSIST_ROOT}/uv/${RESOLVED}"
+          fi
+        else
+          echo "No persisted uv ${RESOLVED} yet; setup-uv will download it once and it will be saved after"
+        fi
+      env:
+        REQUESTED_VERSION: ${{ inputs.version }}
+
+    - name: Set up uv
+      uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
+      with:
+        version: ${{ steps.pin.outputs.version }}
+        python-version: ${{ inputs.python-version }}
+        enable-cache: ${{ inputs.enable-cache }}
+        cache-dependency-glob: ${{ inputs.cache-dependency-glob }}
+
+    # A composite action cannot register a `post:` step, so the save runs inline
+    # here — right after setup-uv, which is where the tool cache is populated
+    # anyway. Never fails the job: a cache that cannot be saved costs a download
+    # next run, which is not worth a red build.
+    - name: Persist uv tool cache
+      shell: bash
+      run: |
+        set -uo pipefail
+        SRC="${RUNNER_TOOL_CACHE:-}/uv/${RESOLVED_VERSION}"
+        DEST="${PERSIST_ROOT}/uv"
+        if [ -n "${RUNNER_TOOL_CACHE:-}" ] && [ -d "${SRC}" ] && [ ! -d "${DEST}/${RESOLVED_VERSION}" ]; then
+          # Staged copy then atomic rename. A plain `cp -a` straight into place
+          # is not atomic and `cp` walks readdir order, so a job cancelled or a
+          # runner restarted mid-copy could leave the .complete marker sitting
+          # over a truncated binary — which the next run's tc.find() would
+          # trust. rename(2) on the same filesystem is atomic: the destination
+          # either does not exist or is a complete tree, never half of one.
+          # Plain `mv` (not GNU-only `mv -T`, which the darwin runner lacks) is
+          # safe because the branch above established the destination does not
+          # exist, and each runner key has its own HOME and runs jobs serially.
+          STAGE="${DEST}/.staging-${RESOLVED_VERSION}-$$"
+          rm -rf "${STAGE}"
+          if mkdir -p "${DEST}" 2>/dev/null \
+            && cp -a "${SRC}" "${STAGE}" 2>/dev/null \
+            && mv "${STAGE}" "${DEST}/${RESOLVED_VERSION}" 2>/dev/null; then
+            echo "Persisted uv ${RESOLVED_VERSION} -> ${DEST}"
+            # Keep only the current pin: a bumped HOUSEHOLD_UV_VERSION would
+            # otherwise leave every superseded version here forever.
+            find "${DEST}" -mindepth 1 -maxdepth 1 -not -name "${RESOLVED_VERSION}" -exec rm -rf {} + 2>/dev/null
+          else
+            rm -rf "${STAGE}"
+            echo "::warning::setup-uv: could not persist the uv tool cache to ${DEST}; uv will be downloaded again next run"
+          fi
+        else
+          echo "uv ${RESOLVED_VERSION} already persisted (or nothing to save)"
+        fi
+      env:
+        RESOLVED_VERSION: ${{ steps.pin.outputs.version }}
+        PERSIST_ROOT: ${{ steps.pin.outputs.persist-root }}

@@ -1,0 +1,48 @@
+# One step of the change pipeline (.github/workflows/change.yaml): runs <step>.sh beside
+# this file against the job's checkout, after the household uv. Each script also runs by
+# hand against any checkout on a runner host: .github/actions/change/<step>.sh <path> <args>.
+#
+#   - uses: radar-hooves/master-project/.github/actions/change@main
+#     with: { step: uv, path: clients/woolworths }
+
+name: 'Change pipeline step'
+description: 'Run one step script of the change pipeline against the checkout'
+
+inputs:
+  step:
+    description: 'The script to run: plan, a toolchain leg (uv, pnpm, go, cargo, gradle), library, repo, typecheck, wait, or a deploy kind (wheel, image, mcp)'
+    required: true
+  path:
+    description: 'The member, context or repo directory, relative to the checkout'
+    required: false
+    default: '.'
+  args:
+    description: 'Further arguments, space-separated words'
+    required: false
+    default: ''
+
+outputs:
+  plan: { description: 'plan.py output, compact, with a marker per member', value: '${{ steps.run.outputs.plan }}' }
+  head: { description: 'the commit planned', value: '${{ steps.run.outputs.head }}' }
+  members: { description: 'member rows needing a test leg', value: '${{ steps.run.outputs.members }}' }
+  libraries: { description: 'member rows needing a library leg', value: '${{ steps.run.outputs.libraries }}' }
+  deploys: { description: 'root artefacts to build: kind, path, name, markers', value: '${{ steps.run.outputs.deploys }}' }
+  repo: { description: 'repo legs to run: suites, typecheck', value: '${{ steps.run.outputs.repo }}' }
+  changed: { description: 'CHANGED_MEMBERS for repo-wide suites', value: '${{ steps.run.outputs.changed }}' }
+  ship: { description: "'true' when this run deploys", value: '${{ steps.run.outputs.ship }}' }
+
+runs:
+  using: composite
+  steps:
+    - uses: ./.github/actions/setup-uv
+
+    - id: run
+      shell: bash
+      run: |
+        [ -f "$GITHUB_ACTION_PATH/$STEP.sh" ] || { echo "::error::the change pipeline has no '$STEP' step ($STEP.sh)"; exit 1; }
+        read -ra a <<<"$ARGS"
+        "$GITHUB_ACTION_PATH/$STEP.sh" "$TARGET" "${a[@]}"
+      env:
+        STEP: ${{ inputs.step }}
+        TARGET: ${{ inputs.path }}
+        ARGS: ${{ inputs.args }}
