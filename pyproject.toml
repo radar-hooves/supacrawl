@@ -133,7 +133,11 @@ markers = [
     "e2e: End-to-end tests with live network and Playwright",
     "mcp: MCP server tests (requires supacrawl[mcp])",
     "stealth_smoke: Launches each stealth engine headless (#145); dedicated CI job only",
+    "browser: Drives a real Chromium; skipped where Playwright's Chromium is not installed",
 ]
+# The documented quality gate; a later -m on the command line overrides it, so
+# `pytest -m e2e` and `pytest -m stealth_smoke` still select theirs.
+addopts = '-m "not e2e and not stealth_smoke"'
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 filterwarnings = [

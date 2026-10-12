@@ -8,6 +8,8 @@ import pytest
 
 from supacrawl.services.browser import BrowserManager, PageContent, PageMetadata
 
+pytestmark = pytest.mark.browser
+
 
 class TestBrowserManager:
     """Tests for BrowserManager."""

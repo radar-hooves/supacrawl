@@ -389,6 +389,7 @@ def _serve_probe_page() -> tuple[http.server.HTTPServer, int]:
     return server, server.server_address[1]
 
 
+@pytest.mark.browser
 @pytest.mark.asyncio
 async def test_a_killed_engine_serves_pages_again_without_a_restart() -> None:
     """The outage, reproduced and recovered against a real Chromium.
@@ -421,6 +422,7 @@ async def test_a_killed_engine_serves_pages_again_without_a_restart() -> None:
         server.shutdown()
 
 
+@pytest.mark.browser
 @pytest.mark.asyncio
 async def test_a_scrape_through_a_shared_engine_recovers_after_the_engine_dies() -> None:
     """The reported shape: one shared engine behind a service, killed mid-life.

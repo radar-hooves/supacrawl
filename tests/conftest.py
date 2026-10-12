@@ -37,6 +37,11 @@ _SEARCH_ENV_VARS = (
 from supacrawl.benchmark.models import CaseMetrics, CaseResult  # noqa: E402
 
 
+def _chromium_installed() -> bool:
+    root = Path(os.environ.get("PLAYWRIGHT_BROWSERS_PATH") or Path.home() / ".cache" / "ms-playwright")
+    return any(root.glob("chromium*-*"))
+
+
 @pytest.fixture(autouse=True)
 def clean_search_env(monkeypatch: pytest.MonkeyPatch) -> None:
     """Remove search-related env vars that a direnv cascade may inject.
@@ -169,9 +174,13 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
     Apply default markers to tests without explicit markers.
 
     Tests should use explicit markers (@pytest.mark.unit, @pytest.mark.e2e).
-    Unmarked tests default to unit.
+    Unmarked tests default to unit. Browser-marked tests skip where Playwright's
+    Chromium is not installed.
     """
+    skip = None if _chromium_installed() else pytest.mark.skip(reason="Playwright Chromium is not installed")
     for item in items:
+        if skip and "browser" in item.keywords:
+            item.add_marker(skip)
         # Skip if already has a category marker
         markers = list(item.iter_markers())
         marker_names = [m.name for m in markers]
