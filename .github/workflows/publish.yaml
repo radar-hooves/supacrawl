@@ -16,7 +16,40 @@ permissions:
   contents: read
 
 jobs:
+  # The change pipeline's atlas runner has no Chromium and no apt/sudo (#147), so the
+  # tests that drive real browsers run here, on the one path that ships to outside users.
+  browser-guard:
+    runs-on: ubuntu-latest # by-exception: Playwright --with-deps needs apt and sudo the NixOS runner lacks (#147)
+    env:
+      UV_FROZEN: '1'
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Set up uv (and Python 3.14)
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
+        with:
+          python-version: '3.14'
+          enable-cache: true
+
+      # redactyl-core resolves from the household private index; a hosted runner has
+      # no vended netrc, so the credential arrives as a secret (uv per-index auth).
+      - name: Install dependencies
+        env:
+          UV_INDEX_GODSWOOD_USERNAME: ${{ secrets.UV_INDEX_GODSWOOD_USERNAME }}
+          UV_INDEX_GODSWOOD_PASSWORD: ${{ secrets.UV_INDEX_GODSWOOD_PASSWORD }}
+        run: uv sync --no-group mcp-dev
+
+      - name: Install engine browsers (Chromium + Camoufox)
+        run: |
+          uv run playwright install --with-deps chromium
+          uv run patchright install --with-deps chromium
+          uv run camoufox fetch
+
+      - name: Browser and stealth-engine tests
+        run: uv run pytest -m "browser or stealth_smoke" -p no:cacheprovider
+
   publish:
+    needs: browser-guard
     runs-on: [self-hosted, atlas]
     environment: pypi
     permissions:
