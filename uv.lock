@@ -1275,8 +1275,8 @@ wheels = [
 
 [[package]]
 name = "mcp-common"
-version = "2026.6.6"
-source = { editable = "../mcp-servers/mcp-common" }
+version = "2026.10.12021841"
+source = { registry = "https://pypi.godswood.au/poodle64/prod/+simple/" }
 dependencies = [
     { name = "api-common", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "cryptography", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
@@ -1292,25 +1292,9 @@ dependencies = [
     { name = "redactyl-core", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "uvicorn", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
 ]
-
-[package.metadata]
-requires-dist = [
-    { name = "api-common", index = "https://pypi.godswood.au/poodle64/prod/+simple/" },
-    { name = "asyncssh", marker = "extra == 'docker'", specifier = ">=2.21.0" },
-    { name = "cryptography", specifier = ">=42.0.0" },
-    { name = "fastmcp", specifier = "==4.0.1" },
-    { name = "httpx", specifier = ">=0.28.0" },
-    { name = "httpx2", specifier = ">=2.12.0" },
-    { name = "portcullis-client", specifier = ">=2026.10.383", index = "https://pypi.godswood.au/poodle64/prod/+simple/" },
-    { name = "pydantic", specifier = ">=2.12.0" },
-    { name = "pydantic-settings", specifier = ">=2.12.0" },
-    { name = "pyrage", specifier = ">=1.3.0" },
-    { name = "python-dotenv", specifier = ">=1.2.0" },
-    { name = "pyyaml", specifier = ">=6.0.2" },
-    { name = "redactyl-core", index = "https://pypi.godswood.au/poodle64/prod/+simple/" },
-    { name = "uvicorn", specifier = ">=0.34.0" },
+wheels = [
+    { url = "https://pypi.godswood.au/poodle64/prod/+f/07f/5e06e0dd23226/mcp_common-2026.10.12021841-py3-none-any.whl", hash = "sha256:07f5e06e0dd23226040f843b9f688f71f3dcd040dc1f3cd18435fcaac7051c40" },
 ]
-provides-extras = ["docker"]
 
 [[package]]
 name = "mcp-types"
@@ -2570,6 +2554,7 @@ mcp = [
     { name = "anyio", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "fastmcp", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "mcp-common", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
+    { name = "portcullis-client", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "pydantic-settings", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "python-dotenv", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "starlette", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
@@ -2601,11 +2586,7 @@ dev = [
     { name = "types-aiofiles", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "types-pyyaml", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
 ]
-mcp-common-dev = [
-    { name = "mcp-common", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
-]
 mcp-dev = [
-    { name = "mcp-common", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "supacrawl", extra = ["mcp"], marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
 ]
 
@@ -2623,13 +2604,14 @@ requires-dist = [
     { name = "httpx", extras = ["brotli"], specifier = ">=0.28.1" },
     { name = "jsonschema", specifier = ">=4.26.0" },
     { name = "markdownify", specifier = ">=1.2.2" },
-    { name = "mcp-common", marker = "extra == 'mcp'" },
+    { name = "mcp-common", marker = "extra == 'mcp'", specifier = ">=2026.10", index = "https://pypi.godswood.au/poodle64/prod/+simple/" },
     { name = "ollama", specifier = ">=0.6.1" },
     { name = "patchright", marker = "extra == 'stealth'", specifier = ">=1.40.0" },
     { name = "pdf2image", marker = "extra == 'pdf-ocr'", specifier = ">=1.17.0" },
     { name = "pdfplumber", specifier = ">=0.11.9" },
     { name = "playwright", specifier = ">=1.40.0,<2.0.0" },
     { name = "playwright", marker = "extra == 'camoufox'", specifier = "<1.61" },
+    { name = "portcullis-client", marker = "extra == 'mcp'", specifier = ">=2026.10.383", index = "https://pypi.godswood.au/poodle64/prod/+simple/" },
     { name = "pydantic", specifier = ">=2.12.5" },
     { name = "pydantic-settings", marker = "extra == 'mcp'", specifier = ">=2.13.1" },
     { name = "pytesseract", marker = "extra == 'pdf-ocr'", specifier = ">=0.3.13" },
@@ -2657,11 +2639,7 @@ dev = [
     { name = "types-aiofiles", specifier = ">=25.1.0.20251011" },
     { name = "types-pyyaml", specifier = ">=6.0.12.20250915" },
 ]
-mcp-common-dev = [{ name = "mcp-common", editable = "../mcp-servers/mcp-common" }]
-mcp-dev = [
-    { name = "mcp-common" },
-    { name = "supacrawl", extras = ["mcp"] },
-]
+mcp-dev = [{ name = "supacrawl", extras = ["mcp"] }]
 
 [[package]]
 name = "tomli-w"

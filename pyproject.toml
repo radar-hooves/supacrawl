@@ -51,22 +51,10 @@ Homepage = "https://github.com/radar-hooves/supacrawl"
 Repository = "https://github.com/radar-hooves/supacrawl"
 
 [dependency-groups]
-# Local-path override for mcp-common, kept as its own group so its
-# uv.sources entry below can be group-scoped (PEP 735). A group-scoped source
-# is local-only config that a consumer resolving `supacrawl[mcp]` as a path
-# dependency never sees, avoiding uv "conflicting URLs" resolution errors in
-# consuming workspaces (see ragify#179 for the failure this prevents).
-# api-common and redactyl-core are base dependencies now (see
-# [tool.uv.sources] below for each one's source), so neither needs a group
-# entry of its own.
-mcp-common-dev = [
-  "mcp-common",
-]
 # MCP surface deps, separated from dev so CI (no sibling checkouts) can
 # exclude exactly this slice and still lint/type/test everything else.
 mcp-dev = [
   "supacrawl[mcp]",
-  {include-group = "mcp-common-dev"},
 ]
 dev = [
   "supacrawl[stealth,camoufox,captcha,pdf-ocr,api,readability]",
@@ -124,7 +112,9 @@ mcp = [
   # fork silently drifts from the shared package; see the de-vendoring in this
   # repo's history). mcp-common transitively pulls api-common (correlation),
   # fastmcp, pydantic, and pydantic-settings.
-  "mcp-common",
+  "mcp-common>=2026.10",
+  # Transitive via mcp-common, declared so its index pin applies (as redactyl-core).
+  "portcullis-client>=2026.10.383",
   "anyio>=4.12.1",
   "fastmcp>=3.1.0",
   "pydantic-settings>=2.13.1",
@@ -255,7 +245,7 @@ environments = ["sys_platform == 'darwin'", "sys_platform == 'linux'"]
 
 # dev only: `uv run` performs an implicit default-groups sync wherever it
 # executes, including CI runners and consumer checkouts where the editable
-# mcp-dev/mcp-common-dev siblings do not exist on disk. Local dev installs
+# mcp-dev sibling does not exist on disk. Local dev installs
 # every group via .envrc (`uv sync --all-groups`); uv run never prunes the
 # extra groups it finds already installed.
 default-groups = ["dev"]
@@ -270,20 +260,16 @@ name = "godswood"
 url = "https://pypi.godswood.au/poodle64/prod/+simple/"
 explicit = true
 
-# mcp-common lives INSIDE the mcp-servers repo and is not published to an
-# index, so the MCP extra resolves it from the sibling checkout (the
-# household no-vendoring pattern — same as ragify/redactyl/milton); its
-# source stays scoped to the mcp-common-dev group (see the group comment
-# above). redactyl-core is a base dependency now too (the telemetry
-# contract's configure() call is needed at every entry point, not only the
-# mcp extra), pinned to the index so its floor here is reachable — a
-# group-scoped path override is silently inert once a package is also an
-# ungrouped dependency (measured on radar-hooves/cadmus).
+# mcp-common is published to the household index (mcp-servers' publish-wheels
+# leg), so the mcp extra resolves it there like api-common and redactyl-core:
+# a runner or consumer checkout with no sibling mcp-servers installs the
+# whole extra set.
 #
 # api-common (the telemetry extra) resolves from the index too: mcp-servers'
 # own root pins it there for every consumer, so nothing here inherits a path.
 [tool.uv.sources]
-mcp-common = { path = "../mcp-servers/mcp-common", editable = true, group = "mcp-common-dev" }
+mcp-common = { index = "godswood" }
+portcullis-client = { index = "godswood" }
 api-common = { index = "godswood" }
 redactyl-core = { index = "godswood" }
 
