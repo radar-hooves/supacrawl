@@ -12,6 +12,7 @@ from supacrawl.services.converter import (
     _preprocess_mkdocs_material,
     _preprocess_wordpress,
     apply_site_preprocessors,
+    expand_markup_attributes,
 )
 
 
@@ -1219,3 +1220,40 @@ class TestWordPressPreprocessor:
 
         # Main content should remain
         assert "Main content" in soup.get_text()
+
+
+class TestExpandMarkupAttributes:
+    """Operative bodies carried in a custom element's attribute reach the markdown."""
+
+    PACMAN_LIKE = (
+        "<html><body><main><h2>7.2.5 Rent Allowance</h2>"
+        '<def-content content="&lt;p&gt;A member is entitled to &lt;strong&gt;rent allowance&lt;/strong&gt;'
+        ' if the provisions apply.&lt;/p&gt;&lt;ul&gt;&lt;li&gt;Condition one&lt;/li&gt;&lt;/ul&gt;"></def-content>'
+        "<p>Guidance text.</p></main></body></html>"
+    )
+
+    def test_custom_element_body_is_expanded(self):
+        md = MarkdownConverter().convert(self.PACMAN_LIKE)
+        assert "## 7.2.5 Rent Allowance" in md
+        assert "**rent allowance**" in md
+        assert "- Condition one" in md
+        assert "Guidance text." in md
+
+    def test_ordinary_attributes_are_not_injected(self):
+        html = (
+            "<html><body><main><h1>Page</h1><p>Body text here.</p>"
+            '<div data-blob="<p>hidden blob</p>">kept</div>'
+            '<my-card title="Plain title" data-x="{&quot;a&quot;:1}">Card</my-card>'
+            '<my-empty content="plain text, no markup"></my-empty>'
+            "</main></body></html>"
+        )
+        md = MarkdownConverter().convert(html)
+        assert "hidden blob" not in md
+        assert "Plain title" not in md
+        assert "plain text, no markup" not in md
+        assert "Body text here." in md and "Card" in md
+
+    def test_element_with_own_text_is_left_alone(self):
+        soup = BeautifulSoup('<x-box content="<p>dup</p>">already rendered</x-box>', "html.parser")
+        assert expand_markup_attributes(soup) == 0
+        assert "dup" not in soup.get_text()

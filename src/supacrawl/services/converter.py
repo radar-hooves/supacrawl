@@ -22,6 +22,7 @@ See SITE_PREPROCESSORS below for the current registry.
 """
 
 import logging
+import re
 from collections.abc import Callable
 from dataclasses import dataclass
 from urllib.parse import urljoin, urlparse
@@ -526,6 +527,41 @@ def apply_site_preprocessors(soup: BeautifulSoup) -> list[str]:
     return applied
 
 
+_MARKUP_ATTR = re.compile(r"\s*<[a-zA-Z][^>]*>")
+_MAX_EXPANSION_PASSES = 4
+
+
+def expand_markup_attributes(soup: BeautifulSoup) -> int:
+    """Move HTML carried in a custom element's attribute into its children.
+
+    Component frameworks (PACMAN's ``<def-content content="<p>…</p>">``) ship the
+    body as an attribute value, so a DOM-to-markdown pass sees only the headings
+    around it. Only a hyphenated (custom) element with no text of its own, and
+    only an attribute whose value opens with a tag, qualifies; titles, data blobs
+    and plain-text attributes are never injected. Returns the elements expanded.
+    """
+    expanded = 0
+    for _ in range(_MAX_EXPANSION_PASSES):
+        changed = False
+        for el in soup.find_all(lambda t: "-" in t.name):
+            if el.get_text(strip=True):
+                continue
+            for value in el.attrs.values():
+                if not isinstance(value, str) or not _MARKUP_ATTR.match(value):
+                    continue
+                fragment = BeautifulSoup(value, "html.parser")
+                if not fragment.get_text(strip=True) and not fragment.find(["img", "table"]):
+                    continue
+                for child in list(fragment.contents):
+                    el.append(child.extract())
+                expanded += 1
+                changed = True
+                break
+        if not changed:
+            break
+    return expanded
+
+
 class AbsoluteUrlConverter(BaseMarkdownConverter):
     """Markdownify converter that resolves relative URLs to absolute.
 
@@ -798,6 +834,9 @@ class MarkdownConverter:
         """
         try:
             soup = BeautifulSoup(html, "html.parser")
+
+            if expand_markup_attributes(soup):
+                html = str(soup)
 
             if remove_boilerplate:
                 self._remove_boilerplate(soup)
