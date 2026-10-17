@@ -79,6 +79,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Changed
 
 - **The `mcp` extra now installs `readability-lxml` and `rank-bm25`**: an MCP caller cannot install extras, and without them `query` was silently ignored on the household server.
+- **The `mcp` extra declares `mcp-common` bare, not `>=2026.10`**: the mcp-servers workspace carries mcp-common at a frozen source version below that floor, so every wheel since the floor appeared was unlockable there and the household server stayed on 2026.10.56. The index pin still resolves it.
 
 ## [2026.7.0] - 2026-07-14
 

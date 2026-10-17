@@ -112,7 +112,7 @@ mcp = [
   # fork silently drifts from the shared package; see the de-vendoring in this
   # repo's history). mcp-common transitively pulls api-common (correlation),
   # fastmcp, pydantic, and pydantic-settings.
-  "mcp-common>=2026.10",
+  "mcp-common",
   # Transitive via mcp-common, declared so its index pin applies (as redactyl-core).
   "portcullis-client>=2026.10.383",
   "anyio>=4.12.1",

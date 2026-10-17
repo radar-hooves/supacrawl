@@ -2606,7 +2606,7 @@ requires-dist = [
     { name = "httpx", extras = ["brotli"], specifier = ">=0.28.1" },
     { name = "jsonschema", specifier = ">=4.26.0" },
     { name = "markdownify", specifier = ">=1.2.2" },
-    { name = "mcp-common", marker = "extra == 'mcp'", specifier = ">=2026.10", index = "https://pypi.godswood.au/poodle64/prod/+simple/" },
+    { name = "mcp-common", marker = "extra == 'mcp'", index = "https://pypi.godswood.au/poodle64/prod/+simple/" },
     { name = "ollama", specifier = ">=0.6.1" },
     { name = "patchright", marker = "extra == 'stealth'", specifier = ">=1.40.0" },
     { name = "pdf2image", marker = "extra == 'pdf-ocr'", specifier = ">=1.17.0" },
