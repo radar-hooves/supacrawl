@@ -120,6 +120,10 @@ mcp = [
   "pydantic-settings>=2.13.1",
   "python-dotenv>=1.2.2",
   "starlette>=0.52.1",
+  # An MCP caller cannot install extras, so the server carries the ones that change
+  # what a request does: without these a scrape `query` is silently not applied.
+  "readability-lxml>=0.8",
+  "rank-bm25>=0.2",
 ]
 
 [project.scripts]

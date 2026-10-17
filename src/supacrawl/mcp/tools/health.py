@@ -8,6 +8,7 @@ from pydantic import Field
 
 from supacrawl.mcp.config import SERVICE_VERSION, settings
 from supacrawl.mcp.tools import mask_secrets
+from supacrawl.services.content_filter import available_extras
 from supacrawl.services.registry import SupacrawlServices
 
 # Query used for the live search probe (#156, #161). It is deliberately a
@@ -349,6 +350,8 @@ async def supacrawl_health(
           next scrape and drives the top-level status to "degraded" until it does.
         - components.llm: configured provider and model (for json/summary formats)
         - components.cache: path, entry count, size
+        - components.extraction: whether readability_lxml and rank_bm25 are installed;
+          `query_filter: false` means a scrape `query` is not applied on this server
         - version: supacrawl library and MCP server versions
     """
     try:
@@ -426,6 +429,7 @@ async def supacrawl_health(
                     "search": search_config,
                     "llm": _get_llm_config(),
                     "cache": _get_cache_info(),
+                    "extraction": available_extras(),
                 },
                 "features": {
                     "captcha_solving": settings.solve_captcha,

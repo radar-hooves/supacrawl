@@ -30,6 +30,9 @@ from urllib.parse import urljoin, urlparse
 from bs4 import BeautifulSoup, Tag
 from markdownify import MarkdownConverter as BaseMarkdownConverter
 
+from supacrawl.models import QueryFilter
+from supacrawl.services.content_filter import QUERY_OUTCOME
+
 LOGGER = logging.getLogger(__name__)
 
 
@@ -853,6 +856,8 @@ class MarkdownConverter:
             # include_tags takes precedence over only_main_content and the cascade.
             if include_tags:
                 content_element = self._apply_include_tags(soup, include_tags)
+                if query:
+                    QUERY_OUTCOME.set(QueryFilter(applied=False, reason="include_tags_set"))
             elif only_main_content:
                 from supacrawl.services.content_filter import extract as cf_extract
 
@@ -863,6 +868,9 @@ class MarkdownConverter:
                     content_mode=content_mode,
                     query=query,
                 )
+
+            if query and not include_tags and not only_main_content:
+                QUERY_OUTCOME.set(QueryFilter(applied=False, reason="only_main_content_false"))
 
             if content_element:
                 html_to_convert = str(content_element)

@@ -2557,6 +2557,8 @@ mcp = [
     { name = "portcullis-client", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "pydantic-settings", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "python-dotenv", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
+    { name = "rank-bm25", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
+    { name = "readability-lxml", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "starlette", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
 ]
 pdf-ocr = [
@@ -2617,7 +2619,9 @@ requires-dist = [
     { name = "pytesseract", marker = "extra == 'pdf-ocr'", specifier = ">=0.3.13" },
     { name = "python-dotenv", marker = "extra == 'mcp'", specifier = ">=1.2.2" },
     { name = "pyyaml", specifier = ">=6.0.3" },
+    { name = "rank-bm25", marker = "extra == 'mcp'", specifier = ">=0.2" },
     { name = "rank-bm25", marker = "extra == 'readability'", specifier = ">=0.2" },
+    { name = "readability-lxml", marker = "extra == 'mcp'", specifier = ">=0.8" },
     { name = "readability-lxml", marker = "extra == 'readability'", specifier = ">=0.8" },
     { name = "redactyl-core", specifier = ">=2026.7.0", index = "https://pypi.godswood.au/poodle64/prod/+simple/" },
     { name = "rich", specifier = ">=14.3.3" },

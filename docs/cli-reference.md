@@ -68,7 +68,7 @@ supacrawl scrape URL [OPTIONS]
 - `--http-first/--no-http-first` - Try a cheap HTTP GET before launching a browser, escalating only when the page actually needs one: JavaScript rendering, a bot challenge, iframes to expand, or content hidden behind collapsed disclosures. Use `--no-http-first` to always render in the browser (default: on)
 - `--expect TEXT` - Require asserted content to be present before returning. A bare integer is a minimum word count; any other value is matched first as a CSS selector then as a text substring. When unmet, the scrape waits and retries with escalation rather than returning a pre-hydration page. Examples: `--expect '.price'`, `--expect 'In stock'`, `--expect 200`
 - `--content-mode FLOAT` - Content extraction precision/recall dial (0.0–1.0, default: 0.5). Low values keep more content (recall-biased); high values prune aggressively (precision-biased). Requires `supacrawl[readability]` for the full cascade; without it, only the CSS-selector heuristic is active
-- `--query TEXT` - Filter extracted sections by relevance to this query (BM25). Flat pages with no headings are never filtered. Requires `supacrawl[readability]`
+- `--query TEXT` - Filter extracted sections by relevance to this query (BM25). Flat pages with no headings are never filtered. Requires `rank-bm25` (`supacrawl[readability]`); the result's `query_filter` says whether it was applied and why not
 - `-H, --header 'Key: Value'` - Custom HTTP request header. Repeatable. Example: `--header 'Authorization: Bearer token'`
 
 **Example:**

@@ -95,7 +95,7 @@ Scrape a single URL synchronously. Returns scraped content in the requested form
 | `httpFirst` | boolean | `true` | Try a cheap HTTP GET before launching a browser; escalates automatically when JavaScript or a bot challenge is detected. Set to `false` to always render in the browser |
 | `expect` | string | `null` | Require asserted content before returning. A bare integer is a minimum word count; any other value is matched first as a CSS selector then as a text substring |
 | `contentMode` | number | `0.5` | Content extraction precision/recall dial (0.0–1.0). Low values keep more content; high values prune aggressively. Requires `supacrawl[readability]` for the full cascade |
-| `query` | string | `null` | Filter extracted sections by relevance to this query (BM25). Flat pages with no headings are never filtered. Requires `supacrawl[readability]` |
+| `query` | string | `null` | Filter extracted sections by relevance to this query (BM25). Flat pages with no headings are never filtered. Requires `rank-bm25` (`supacrawl[readability]`); the result's `query_filter` says whether it was applied and why not |
 
 Fields not listed here (e.g. `skipTlsVerification`, `blockAds`, `removeBase64Images`) are accepted silently and ignored.
 

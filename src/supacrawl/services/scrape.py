@@ -20,6 +20,7 @@ CAPTCHA Solving (optional, requires third-party service):
 """
 
 import base64
+import hashlib
 import logging
 import os
 import re
@@ -41,6 +42,7 @@ from supacrawl.models import (
     ActionsOutput,
     QualityAssessment,
     QualityVerdict,
+    QueryFilter,
     ScrapeActionResult,
     ScrapeData,
     ScrapeMetadata,
@@ -56,6 +58,7 @@ from supacrawl.services.browser import (
     StealthNotAvailableError,
     engine_availability,
 )
+from supacrawl.services.content_filter import QUERY_OUTCOME
 from supacrawl.services.converter import MarkdownConverter
 from supacrawl.services.detection import (
     detect_bot_protection,
@@ -929,6 +932,7 @@ class ScrapeService:
             schema_validator(json_schema)
 
         wants_change_tracking = "changeTracking" in formats
+        QUERY_OUTCOME.set(None)
 
         # Field telemetry (#137): time the whole top-level scrape. None on escalated
         # sub-calls (level > 0) and when no sink is configured, so a single event is
@@ -952,6 +956,9 @@ class ScrapeService:
         # stored — raw header values are never persisted.
         if headers:
             variant_parts.append(f"headers={_compute_headers_hash(headers)}")
+        # A filtered page must not be served to an unfiltered request, or the reverse.
+        if query:
+            variant_parts.append(f"query={hashlib.sha256(query.encode()).hexdigest()[:12]}")
         cache_variant: str | None = "|".join(variant_parts) if variant_parts else None
 
         # Get previous cached entry for change tracking comparison (ignores expiry)
@@ -969,7 +976,7 @@ class ScrapeService:
                 # Mark as cache hit
                 if result.data and result.data.metadata:
                     result.data.metadata.cache_hit = True
-                return self._record_telemetry(result, url, telemetry_started)
+                return self._finish(result, url, telemetry_started, query)
 
         # PDF detection: if parse_pdf is enabled, check if URL points to a PDF
         # and route to the PDF extraction pipeline instead of the browser.
@@ -1011,7 +1018,7 @@ class ScrapeService:
                     previous_entry=previous_entry,
                     change_tracking_modes=change_tracking_modes,
                 )
-                return self._record_telemetry(pdf_result, url, telemetry_started)
+                return self._finish(pdf_result, url, telemetry_started, query)
 
         # Determine effective engine and proxy for this request
         effective_engine = engine or self._engine
@@ -1102,7 +1109,7 @@ class ScrapeService:
                             only_main_content=only_main_content,
                             result=fast_result,
                         )
-                    return self._record_telemetry(fast_result, url, telemetry_started)
+                    return self._finish(fast_result, url, telemetry_started, query)
 
         # Closure that re-runs this scrape one rung deeper in the escalation
         # ladder with a stronger strategy (engine / stealth / longer wait),
@@ -1394,7 +1401,13 @@ class ScrapeService:
             record_wait_for=wait_for,
             record_only_main=only_main_content,
         )
-        return self._record_telemetry(final_result, url, telemetry_started)
+        return self._finish(final_result, url, telemetry_started, query)
+
+    def _finish(self, result: ScrapeResult, url: str, started: float | None, query: str | None) -> ScrapeResult:
+        """Attach the query-filter outcome, then record telemetry."""
+        if query:
+            result.query_filter = QUERY_OUTCOME.get() or QueryFilter(applied=False, reason="no_html_extraction")
+        return self._record_telemetry(result, url, started)
 
     def _record_telemetry(self, result: ScrapeResult, url: str, started: float | None) -> ScrapeResult:
         """Emit a field telemetry event for a top-level scrape, returning the

@@ -510,6 +510,21 @@ class ScrapeData(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
 
+class QueryFilter(BaseModel):
+    """What happened to the ``query`` a caller passed to a scrape.
+
+    ``applied`` is True only when sections were scored against the query. When
+    False, ``reason`` says why the page came back unfiltered. ``sections_kept``
+    equal to ``sections_total`` means every section scored above the threshold
+    and nothing was dropped.
+    """
+
+    applied: bool
+    reason: str | None = None
+    sections_total: int | None = None
+    sections_kept: int | None = None
+
+
 class ScrapeResult(BaseModel):
     """Result of a scrape operation.
 
@@ -529,6 +544,7 @@ class ScrapeResult(BaseModel):
     error: str | None = None
     warnings: list[str] | None = None
     quality: QualityAssessment | None = None
+    query_filter: QueryFilter | None = None  # Present only when a query was passed
 
 
 class CrawlEvent(BaseModel):

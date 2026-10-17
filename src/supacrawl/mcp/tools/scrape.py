@@ -9,10 +9,49 @@ from typing import Annotated, Any, Literal
 from api_common.correlation import generate_correlation_id
 from pydantic import Field
 
+from supacrawl.excerpt import bound_markdown
 from supacrawl.mcp.exceptions import SupacrawlValidationError, log_tool_exception, map_exception
 from supacrawl.mcp.validators import validate_timeout, validate_url
 from supacrawl.services.browser import ENGINE_CHOICES
 from supacrawl.services.registry import SupacrawlServices
+
+# A page this long overflows most agent tool-result budgets (~25k tokens).
+LARGE_RESPONSE_CHARS = 100_000
+_BOUNDED_FIELDS = ("markdown", "html", "raw_html")
+
+
+def _bound_response(response: dict, max_chars: int | None, query: str | None) -> None:
+    """Cap the text fields of a scrape response in place and say what was cut.
+
+    With ``max_chars`` set, markdown is bounded by ``bound_markdown`` (best
+    passages for ``query`` when given, else the head) and html/raw_html are cut
+    at the head; ``truncation`` reports every cut field's full length. Without
+    it, an oversized markdown field earns a warning.
+    """
+    data = response.get("data")
+    if not data:
+        return
+    if max_chars is None:
+        total = len(data.get("markdown") or "")
+        if total > LARGE_RESPONSE_CHARS:
+            response["warnings"] = [
+                *(response["warnings"] or []),
+                f"markdown is {total} chars and may overflow your tool-result budget; "
+                "pass max_chars to bound it, with query to keep the best-matching passages.",
+            ]
+        return
+    fields: dict[str, dict[str, int | str]] = {}
+    for name in _BOUNDED_FIELDS:
+        text = data.get(name)
+        if not text or len(text) <= max_chars:
+            continue
+        if name == "markdown":
+            cut, strategy = bound_markdown(text, max_chars, query)
+        else:
+            cut, strategy = text[:max_chars], "head"
+        data[name] = cut
+        fields[name] = {"total_chars": len(text), "returned_chars": len(cut), "strategy": strategy}
+    response["truncation"] = {"max_chars": max_chars, "truncated": bool(fields), "fields": fields}
 
 
 async def supacrawl_scrape(
@@ -139,7 +178,14 @@ async def supacrawl_scrape(
     query: Annotated[
         str | None,
         Field(
-            description="Optional free-text query. When set, extracted sections are filtered by BM25 relevance to retain only query-relevant content. Flat pages (no headings) are never filtered so no content is lost. Without supacrawl[readability] this parameter is accepted but ignored."
+            description="Optional free-text query. When set, extracted sections are filtered by BM25 relevance to retain only query-relevant content. Flat pages (no headings) are never filtered so no content is lost. The result's `query_filter` says whether it was applied (`applied`, and `reason` when not) and how many sections were kept of the total; supacrawl_health reports whether this server can filter."
+        ),
+    ] = None,
+    max_chars: Annotated[
+        int | None,
+        Field(
+            ge=1,
+            description="Cap markdown/html/rawHtml at this many characters so a large page cannot overflow your tool-result budget. The response then carries `truncation` with the full length of every field it cut. With `query` set, markdown keeps the passages that best match it (strategy: query_ranked), otherwise the head. Default: no cap (a warning is added when markdown exceeds 100,000 characters).",
         ),
     ] = None,
     http_first: Annotated[
@@ -293,8 +339,15 @@ async def supacrawl_scrape(
             are silently skipped.
         query: Optional free-text query. When set, extracted sections are filtered
             by BM25 relevance to retain only query-relevant content. Flat pages
-            (no headings) are never filtered so no content is lost. Without
-            supacrawl[readability] this parameter is accepted but ignored.
+            (no headings) are never filtered so no content is lost. The result's
+            `query_filter` says whether it was applied (`applied`, and `reason`
+            when not) and how many sections were kept of the total;
+            supacrawl_health reports whether this server can filter.
+        max_chars: Cap markdown/html/rawHtml at this many characters so a large
+            page cannot overflow your tool-result budget. The response then carries
+            `truncation` with the full length of every field it cut. With `query`
+            set, markdown keeps the passages that best match it (strategy
+            "query_ranked"), otherwise the head. Default: no cap (a warning is added when markdown exceeds 100,000 characters).
         http_first: Try a cheap HTTP GET before launching a browser (default True).
             Static pages return faster; pages needing JavaScript or showing a bot
             challenge transparently escalate to the full browser render. Set False
@@ -325,6 +378,8 @@ async def supacrawl_scrape(
                 "links": [...],
                 "images": [...]
             },
+            "query_filter": {...},   // Only when query was passed: applied, reason, sections_kept/total
+            "truncation": {...},     // Only when max_chars was passed: per-field total_chars/returned_chars
             "quality": {
                 "verdict": "ok",   // ok/thin/js_shell/paywall/bot_challenge/captcha/
                                    // error_status/garbled_pdf/empty
@@ -414,6 +469,7 @@ async def supacrawl_scrape(
 
         response = result.model_dump()
         response["correlation_id"] = correlation_id
+        _bound_response(response, max_chars, query)
         return response
 
     except SupacrawlValidationError:

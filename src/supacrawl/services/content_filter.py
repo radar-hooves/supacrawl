@@ -25,8 +25,11 @@ The public interface is ``extract()``.
 from __future__ import annotations
 
 import logging
+from contextvars import ContextVar
 
 from bs4 import BeautifulSoup, Tag
+
+from supacrawl.models import QueryFilter
 
 LOGGER = logging.getLogger(__name__)
 
@@ -89,6 +92,22 @@ def _is_rank_bm25_available() -> bool:
         return True
     except ImportError:
         return False
+
+
+def available_extras() -> dict[str, bool]:
+    """Report which optional extraction dependencies are importable here.
+
+    ``query_filter`` is what a caller's ``query`` needs: only ``rank_bm25``
+    scores sections; ``readability_lxml`` powers cascade Strategy 2.
+    """
+    bm25 = _is_rank_bm25_available()
+    return {"readability_lxml": _is_readability_available(), "rank_bm25": bm25, "query_filter": bm25}
+
+
+# The outcome of the most recent query filter in this context. ``scrape()``
+# clears it on entry and reads it on exit; a task-local ContextVar keeps
+# concurrent scrapes from reading each other's outcome.
+QUERY_OUTCOME: ContextVar[QueryFilter | None] = ContextVar("query_outcome", default=None)
 
 
 # ---------------------------------------------------------------------------
@@ -433,7 +452,8 @@ def _apply_query_filter(root: Tag, content_mode: float, query: str) -> Tag:
 
     Called after the cascade selects a content root when ``query`` is
     provided. Flat pages (single section) are returned unchanged — returning
-    everything beats filtering out everything.
+    everything beats filtering out everything. Records what happened in
+    ``QUERY_OUTCOME``.
 
     Args:
         root: The selected content root.
@@ -444,14 +464,17 @@ def _apply_query_filter(root: Tag, content_mode: float, query: str) -> Tag:
         Filtered Tag (or the original root for flat pages / unavailable BM25).
     """
     if not _is_rank_bm25_available():
+        QUERY_OUTCOME.set(QueryFilter(applied=False, reason="rank_bm25_not_installed"))
         return root
 
     sections = _split_into_sections(root)
     if len(sections) <= 1:
         LOGGER.debug("Query filter: single section, skipping")
+        QUERY_OUTCOME.set(QueryFilter(applied=False, reason="flat_page", sections_total=1, sections_kept=1))
         return root
 
     kept = _bm25_prune_sections(sections, content_mode, query=query)
+    QUERY_OUTCOME.set(QueryFilter(applied=True, sections_total=len(sections), sections_kept=len(kept)))
 
     if len(kept) == len(sections):
         return root
