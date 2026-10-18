@@ -68,3 +68,16 @@ async def test_health_reports_whether_query_filtering_is_live():
         out = await supacrawl_health(_Services(), verify_search=False)  # type: ignore[arg-type]
 
     assert out["components"]["extraction"]["query_filter"] is False
+
+
+async def test_max_chars_sent_as_a_string_is_accepted():
+    out = await supacrawl_scrape(_client("x" * 600), url="https://example.com", max_chars="500")  # type: ignore[arg-type]
+
+    assert out["truncation"]["max_chars"] == 500
+
+
+async def test_a_non_positive_max_chars_is_refused():
+    from supacrawl.mcp.exceptions import SupacrawlValidationError
+
+    with pytest.raises(SupacrawlValidationError):
+        await supacrawl_scrape(_client("x"), url="https://example.com", max_chars=0)

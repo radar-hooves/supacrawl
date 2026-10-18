@@ -168,3 +168,19 @@ async def test_batch_still_accepts_urls_as_a_native_array(batch_surface: FastMCP
     payload = result.data
     assert payload["success"] is True
     assert payload["succeeded"] == 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("sent", [500, "500"])
+async def test_scrape_max_chars_works_over_the_wire_as_int_or_string(mock_api_client, sent: object) -> None:
+    """Some MCP clients stringify integers; max_chars must still bound the page."""
+    big = ScrapeResult(success=True, data=ScrapeData(markdown="word " * 1000, metadata=ScrapeMetadata()))
+    mock_api_client.scrape_service.scrape = AsyncMock(return_value=big)
+    mcp = FastMCP("supacrawl-test")
+    register_all_tools(mcp, mock_api_client)
+
+    async with Client(mcp) as client:
+        result = await client.call_tool("supacrawl_scrape", {"url": "https://example.com", "max_chars": sent})
+
+    assert result.data["truncation"]["max_chars"] == 500
+    assert len(result.data["data"]["markdown"]) <= 500

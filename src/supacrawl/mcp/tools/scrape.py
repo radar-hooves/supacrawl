@@ -184,7 +184,6 @@ async def supacrawl_scrape(
     max_chars: Annotated[
         int | None,
         Field(
-            ge=1,
             description="Cap markdown/html/rawHtml at this many characters so a large page cannot overflow your tool-result budget. The response then carries `truncation` with the full length of every field it cut. With `query` set, markdown keeps the passages that best match it (strategy: query_ranked), otherwise the head. Default: no cap (a warning is added when markdown exceeds 100,000 characters).",
         ),
     ] = None,
@@ -406,6 +405,13 @@ async def supacrawl_scrape(
         validated_url = validate_url(url)
         assert validated_url is not None  # validate_url raises on None
         validated_timeout = validate_timeout(timeout, "timeout") or 30000
+        # Some clients send integers as strings, and a schema `ge` bound fails on those before this runs.
+        try:
+            limit = int(max_chars) if max_chars is not None else None
+        except TypeError, ValueError:
+            limit = 0
+        if limit is not None and limit < 1:
+            raise SupacrawlValidationError(f"max_chars must be a positive integer, got {max_chars!r}")
 
         if engine is not None and engine not in ENGINE_CHOICES:
             raise SupacrawlValidationError(f"Invalid engine '{engine}'. Choose from: {', '.join(ENGINE_CHOICES)}")
@@ -469,7 +475,7 @@ async def supacrawl_scrape(
 
         response = result.model_dump()
         response["correlation_id"] = correlation_id
-        _bound_response(response, max_chars, query)
+        _bound_response(response, limit, query)
         return response
 
     except SupacrawlValidationError:
