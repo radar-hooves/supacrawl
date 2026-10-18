@@ -635,3 +635,17 @@ class TestThinMainNoRegression:
         text = result.get_text().lower()
         assert "product page" in text
         assert "related products" not in text
+
+
+class TestNestedHeadings:
+    @pytest.mark.unit
+    def test_headings_inside_wrapper_divs_still_split_into_sections(self):
+        from supacrawl.services.content_filter import _split_into_sections
+
+        html = (
+            "<body><div><div>"
+            + "".join(f"<div class='h'><h2>S{i}</h2></div><p>text {i}</p>" for i in range(4))
+            + "</div></div></body>"
+        )
+        sections = _split_into_sections(_soup(html).find("body"))
+        assert len(sections) == 4

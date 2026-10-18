@@ -170,6 +170,35 @@ def _is_dense_enough(element: Tag, content_mode: float) -> bool:
 # ---------------------------------------------------------------------------
 
 
+_HEADING_TAGS = frozenset({"h2", "h3"})
+
+
+def _opens_section(tag: Tag) -> bool:
+    """A section tag, or a wrapper whose first element is a heading (e.g. ``div.mw-heading``)."""
+    if tag.name in _SECTION_SPLIT_TAGS:
+        return True
+    first = next((c for c in tag.children if isinstance(c, Tag)), None)
+    return first is not None and first.name in _HEADING_TAGS
+
+
+def _descend_wrappers(root: Tag) -> Tag:
+    """Step into the dominant child until a level has two or more sections.
+
+    Pages wrap their content (``div > div > section > section...``), so the
+    root's own children are rarely the sections. Stops where the sections are,
+    or where no single child holds most of the text.
+    """
+    while True:
+        children = [c for c in root.children if isinstance(c, Tag)]
+        if sum(_opens_section(c) for c in children) >= 2:
+            return root
+        total = len(root.get_text())
+        biggest = max(children, key=lambda c: len(c.get_text()), default=None)
+        if biggest is None or len(biggest.get_text()) < 0.8 * total:
+            return root
+        root = biggest
+
+
 def _split_into_sections(root: Tag) -> list[Tag]:
     """Split a content root into sections at heading/sectioning boundaries.
 
@@ -180,6 +209,7 @@ def _split_into_sections(root: Tag) -> list[Tag]:
     When the root contains no recognised split tags the whole root is
     returned as a single section so callers never receive an empty list.
     """
+    root = _descend_wrappers(root)
     sections: list[Tag] = []
     current_parts: list[Tag] = []
 
@@ -197,7 +227,7 @@ def _split_into_sections(root: Tag) -> list[Tag]:
     for child in root.children:
         if not isinstance(child, Tag):
             continue
-        if child.name in _SECTION_SPLIT_TAGS:
+        if _opens_section(child):
             flush()
         current_parts.append(child)
 
