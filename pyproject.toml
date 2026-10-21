@@ -291,5 +291,8 @@ exclude = [
   "/tests",
 ]
 
+[tool.change]
+publish = "wheels"
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/supacrawl"]

@@ -1,11 +1,8 @@
 name: Publish to PyPI
 
 # supacrawl is a PUBLIC tool (`pip install supacrawl`), so this publishes its
-# tagged release to public PyPI via OIDC trusted publishing (no API token). The
-# household PRIVATE index (poodle64/prod on atlas) is a SEPARATE channel handled
-# by publish-wheels.yaml — that one carries always-current stamped wheels for
-# cross-repo household consumers and shadows the index's PyPI mirror. This file
-# stays the public-release channel; do not fold devpi into it.
+# tagged release to public PyPI via OIDC trusted publishing (no API token). Wheels
+# for household consumers ship from the change pipeline's own leg, never from here.
 
 on:
   release:
@@ -16,10 +13,10 @@ permissions:
   contents: read
 
 jobs:
-  # The change pipeline's atlas runner has no Chromium and no apt/sudo (#147), so the
+  # The change pipeline's runner has no Chromium and no apt/sudo (#147), so the
   # tests that drive real browsers run here, on the one path that ships to outside users.
   browser-guard:
-    runs-on: ubuntu-latest # by-exception: Playwright --with-deps needs apt and sudo the NixOS runner lacks (#147)
+    runs-on: ubuntu-latest # by-exception (2026-10-21): Playwright --with-deps needs apt and sudo the NixOS runner lacks (#147)
     env:
       UV_FROZEN: '1'
     steps:

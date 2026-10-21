@@ -5,6 +5,9 @@
 # back at the digest it replaced, asks Watchtower again and watches that too. Its state
 # waits in $RUNNER_TEMP until then, so `--rollback`, the deploy job's step after a cancel or
 # a failure, finishes what a killed run could not.
+# A container labelled household.run-from-source=true is its host's to move onto a new image:
+# none is counted or watched, here or in a rollback, and Watchtower is not asked when they are
+# all this host runs of it.
 # The build context is the member, or the repo-relative `[tool.change] context` its
 # pyproject.toml declares; the Dockerfile is always the member's own.
 # Usage: image.sh <member-dir> <image-name> <sha>
@@ -50,6 +53,13 @@ login() {
     docker login "$CHANGE_REGISTRY" -u "$(cut -d: -f1 "$CHANGE_REGISTRY_CREDENTIAL_FILE")" --password-stdin >/dev/null
 }
 
+# running()'s rows on stdin that Watchtower takes live: not a source-run one, whose host
+# adopts a new image itself, holding off while a job runs inside.
+by_watchtower() { awk -F'\t' '$6 != "true"'; }
+
+# Every container of :latest here runs from source, so Watchtower is not asked at all.
+host_adopts() { [ "$before" -eq 0 ] && [ "$held" -gt 0 ]; }
+
 # A targeted update: a refused call, or any container Watchtower failed to update, fails it.
 watchtower() {
   local out
@@ -81,28 +91,29 @@ nudge() {  # <image id>
   for i in 1 2 3; do
     watchtower || return
     jq -e '.summary.updated > 0' <<<"$wt" >/dev/null && return 0
-    running "$ref" | awk -F'\t' -v w="$1" '$5 != w {stale = 1} END {exit !stale}' || return 0
+    running "$ref" | by_watchtower | awk -F'\t' -v w="$1" '$5 != w {stale = 1} END {exit !stale}' || return 0
     [ "$i" -eq 3 ] || { note "Watchtower updated nothing while this host runs another image; asking again"; sleep 15; }
   done
 }
 
-# As many containers of :latest here as before, each on image $1 (on any image but X when
-# $1 is !X) and healthy or running; when one has no healthcheck, all unchanged 30 s on.
+# As many containers of :latest here as before that Watchtower takes, each on image $1 (on any
+# image but X when $1 is !X) and healthy or running; when one has no healthcheck, all
+# unchanged 30 s on.
 up() {  # <image id, or !id>
   local a b
-  a=$(running "$ref" | sort) || return
+  a=$(running "$ref" | by_watchtower | sort) || return
   awk -F'\t' -v n="$before" -v w="$1" '(w ~ /^!/ ? $5 == substr(w, 2) : $5 != w) || $2 !~ /^(healthy|running)$/ {bad = 1}
     END {exit bad || NR < n}' <<<"$a" || return
   grep -q $'\trunning\t' <<<"$a" || return 0
   sleep 30
-  b=$(running "$ref" | sort) && [ "$a" = "$b" ]
+  b=$(running "$ref" | by_watchtower | sort) && [ "$a" = "$b" ]
 }
 
 watch() {  # <image id, or !id>: up within 5 minutes
   local end=$((SECONDS + 300))
   until up "$1"; do
     [ "$SECONDS" -lt "$end" ] || {
-      echo "after 5 minutes, $ref:latest here is (revision, health, container, restarts, image):" >&2
+      echo "after 5 minutes, $ref:latest here is (revision, health, container, restarts, image, run-from-source):" >&2
       running "$ref" >&2
       return 1
     }
@@ -127,10 +138,11 @@ rollback() {
   fi
   # The state stays until this host is back, so a later --rollback asks and watches again.
   serves "$prev" || true
-  watchtower || { echo "$was; :latest is back at $prev, but Watchtower's update failed, so this host may still run $sha" >&2; return 1; }
+  host_adopts || watchtower || { echo "$was; :latest is back at $prev, but Watchtower's update failed, so this host may still run $sha" >&2; return 1; }
+  [ "$held" -eq 0 ] || note "$was; :latest is back at $prev, for this host to adopt in its $held source-run container(s) of it"
   if [ "$before" -eq 0 ]; then
     rm -f "$state"
-    note "$was; :latest is back at $prev. Nothing runs it on this host, so the restore is unverified here"
+    [ "$held" -gt 0 ] || note "$was; :latest is back at $prev. Nothing runs it on this host, so the restore is unverified here"
     return 0
   fi
   watch "${oldimg:-!$img}" || { echo "$was; :latest is back at $prev, but this host did not come back healthy on its previous image" >&2; return 1; }
@@ -190,30 +202,28 @@ else
   prev=
 fi
 rows=$(running "$ref")
-before=$(grep -c . <<<"$rows" || true)
-old=$(sole 1 <<<"$rows") oldimg=$(sole 5 <<<"$rows")
-# A re-run of an older run must never roll production back.
-if [ -n "$old" ] && [ "$old" != "$sha" ]; then
-  git -C "$dir" cat-file -e "$old^{commit}" 2>/dev/null ||
-    die "this host runs $name $old, which this checkout lacks, so $sha cannot be shown newer; nothing pushed"
-  ! git -C "$dir" merge-base --is-ancestor "$sha" "$old" ||
-    die "this host runs $name $old, which is newer than $sha; refusing to roll it back, nothing pushed"
-fi
+towered=$(by_watchtower <<<"$rows")
+before=$(grep -c . <<<"$towered" || true)
+held=$(($(grep -c . <<<"$rows" || true) - before))
+live=$(sole 1 <<<"$rows") old=$(sole 1 <<<"$towered") oldimg=$(sole 5 <<<"$towered")
+# A re-run of an older run must never roll production back, a source-run container's included.
+[ -z "$live" ] || [ "$live" = "$sha" ] || no_rollback "$dir" "$name" "$live" "$sha" || exit 1
 
 docker push -q "$ref:$sha"
 pid=$$
-declare -p ref name sha img prev old oldimg before pid >"$state"
+declare -p ref name sha img prev old oldimg before held pid >"$state"
 trap 'rollback || :; exit 1' EXIT
 # Moved in the registry, not by a local tag: the live stacks share this daemon's :latest.
 docker buildx imagetools create --prefer-index=false -t "$ref:latest" "$ref:$sha"
 serves "$(docker buildx imagetools inspect --format '{{json .Manifest}}' "$ref:$sha" | jq -r .digest)" ||
   die "$ref:latest did not move to $sha"
-nudge "$img" || die "Watchtower's update of $ref failed"
-if [ "$before" -eq 0 ]; then
-  note "nothing runs $ref:latest on this host, so nothing here verifies it: :latest is $sha, unverified on this host"
-else
+host_adopts || nudge "$img" || die "Watchtower's update of $ref failed"
+[ "$held" -eq 0 ] || note "$ref:latest is $sha, for this host to adopt in its $held source-run container(s) of it"
+if [ "$before" -gt 0 ]; then
   watch "$img" || die "$name $sha did not come up healthy on this host"
   note "$ref:latest is $sha, healthy on this host"
+elif [ "$held" -eq 0 ]; then
+  note "nothing runs $ref:latest on this host, so nothing here verifies it: :latest is $sha, unverified on this host"
 fi
 rm -f "$state"
 trap - EXIT

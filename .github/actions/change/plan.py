@@ -26,10 +26,11 @@ from dataclasses import dataclass
 # A member's own .md can be a runtime file (a prompt), so only these are ignored.
 IGNORED = re.compile(
     r"(docs|\.github|\.vscode)/.*|\.claude/(?!hooks/).*|[^/]*\.md|(.*/)?docs/.*\.md"
-    r"|(.*/)?(README\.md|CHANGELOG\.md|CLAUDE\.md|AGENTS\.md|\.gitignore|\.gitattributes"
+    r"|(.*/)?(README\.md|CHANGELOG\.md|\.gitignore|\.gitattributes"
     r"|LICENSE.*|renovate\.json.*|\.pre-commit-config\.yaml|\.editorconfig|\.mcp\.json)"
 )
 SMOKE = ".github/image-smoke.sh"
+SYSTEM = "system-packages.txt"  # the factory image's apt list
 PINS = {".python-version": "uv", ".node-version": "pnpm", ".nvmrc": "pnpm"}
 PINS |= {"rust-toolchain": "cargo", "rust-toolchain.toml": "cargo"}
 PINS |= {"Cargo.lock": "cargo", ".go-version": "go", "go.work": "go"}
@@ -500,7 +501,13 @@ def discover(
     return members, change
 
 
-def plan(repo: str, head: str, bases: list[str], roll: str = "") -> dict:
+def plan(
+    repo: str,
+    head: str,
+    bases: list[str],
+    roll: str = "",
+    sources: tuple[str, ...] = (),
+) -> dict:
     repo = os.path.abspath(repo)
     if not (head := resolve(repo, head)):
         raise SystemExit(f"plan: head is not a commit in {repo}")
@@ -511,9 +518,13 @@ def plan(repo: str, head: str, bases: list[str], roll: str = "") -> dict:
     members, change = discover(
         repo, head, tuple(b for b in {default, *own.values()} if b)
     )
+    # A root image production runs from source: its live revision dates its environment, the
+    # base of its build alone, never of a member's tests (its code is live at every push).
+    live = {i: own.pop(i) for i in sources if i in own}
     names = {m.name for m in members}
     rolled = {r.strip() for r in roll.split(",") if r.strip()}
-    rolled = names if rolled == {"all"} else rolled
+    every = rolled == {"all"}
+    rolled = names if every else rolled
     if rolled - names:
         raise SystemExit(f"plan: --roll names no member: {sorted(rolled - names)}")
     by_depth = sorted(members, key=lambda m: -len(m.path))
@@ -595,6 +606,65 @@ def plan(repo: str, head: str, bases: list[str], roll: str = "") -> dict:
         cmd = ["git", "-C", repo, "merge-base", "--is-ancestor", head, base]
         return subprocess.run(cmd, capture_output=True).returncode == 0
 
+    def lines(text: str | None) -> frozenset[str]:
+        return frozenset((text or "").splitlines())
+
+    @functools.cache
+    def graph(lock: str, sha: str) -> dict[str, dict]:
+        """uv.lock's packages by name, a forked resolution's entries merged."""
+        out: dict[str, dict] = {}
+        for p in tomllib.loads(manifests(repo, sha)[join(lock, "uv.lock")].decode()).get("package", []):
+            e = out.setdefault(norm(p["name"]), {"dependencies": [], "optional-dependencies": {}})
+            e["dependencies"] += p.get("dependencies", [])
+            for k, v in p.get("optional-dependencies", {}).items():
+                e["optional-dependencies"].setdefault(k, []).extend(v)
+        return out
+
+    @functools.cache
+    def declared(m: Member, sha: str) -> frozenset[str]:
+        """The pins a member declares: its own third-party requirements and what each names,
+        read from the lock's graph (a deeper chain, an api-client's shared base, is that
+        package's to answer for). A moved pin is then the declarer's to test, and
+        its users ship on it without a test leg: the fleet runs what the lock says."""
+        mine = lines(export(repo, sha, m.lock, m.name, m.group))
+        raw = manifests(repo, sha).get(join(m.lock, "uv.lock"))
+        if m.group or raw is None:
+            return mine
+        pkgs = graph(m.lock, sha)
+        own = {norm(o.name) for o in members if o.lock == m.lock}
+        seen = {r for r in m.runtime if r not in own}
+        for n in [*seen]:
+            deps = pkgs.get(n, {})
+            for d in [*deps.get("dependencies", []), *sum(deps.get("optional-dependencies", {}).values(), [])]:
+                seen.add(norm(d["name"]))
+        return frozenset(l for l in mine if norm(l) in seen)
+
+    @functools.cache
+    def orphaned(lock: str, base: str) -> bool:
+        """The lock moved a set yet no member declares any of it (a pin deeper than their
+        requirements name): nobody's test answers for it, so every member it reaches tests."""
+        ms = [o for o in members if o.lock == lock and o.toolchain == "uv"]
+        return any(lock_moved(o, base) for o in ms) and all(
+            declared(o, base) == declared(o, head) for o in ms
+        )
+
+    @functools.cache
+    def toolchain_moved(lock: str, base: str) -> bool:
+        """The root dev group moved in a pin no member's runtime set carries: pytest, ruff,
+        not a library a member declares, which that member's own leg answers for."""
+
+        def runtime(sha: str) -> frozenset[str]:
+            return frozenset().union(
+                *(
+                    lines(export(repo, sha, o.lock, o.name, None))
+                    for o in members
+                    if o.lock == lock and o.toolchain == "uv" and not o.group
+                )
+            )
+
+        old, new = (lines(export(repo, s, lock, None, None)) for s in (base, head))
+        return bool((old ^ new) - runtime(base) - runtime(head))
+
     @functools.cache
     def changed_in(base: str) -> frozenset[Member]:
         """The members a diff changes for their users: an owned path outside its tests, or an
@@ -608,6 +678,32 @@ def plan(repo: str, head: str, bases: list[str], roll: str = "") -> dict:
         return frozenset(
             owned | {o for o in members if any(glob(p, o.reads) for p in paths)}
         )
+
+    def lock_moved(m: Member, base: str) -> str | None:
+        """Why m's third-party set at head is not base's, as uv exports it; None if it is."""
+        old, new = (export(repo, s, m.lock, m.name, m.group) for s in (base, head))
+        if old is None or new is None:
+            return f"lock: export failed at {'base' if old is None else 'head'}"
+        if old != new:
+            return f"lock: {f'group {m.group}' if m.group else 'runtime set'} moved"
+        return None
+
+    def environment(base: str, ms: list[Member]) -> list[str]:
+        """What a source-run image holds besides the app's code, moved since base: its
+        Dockerfile, .dockerignore or smoke, a system-package list anywhere, or a member's
+        runtime set."""
+        paths = diff(repo, base, head)
+        hits = [
+            p
+            for p in paths
+            if p in (SMOKE, "Dockerfile", ".dockerignore") or name_of(p) == SYSTEM
+        ]
+        hits += [
+            f"{m.name} {why}"
+            for m in ms
+            if lock_touched(m, paths) and (why := lock_moved(m, base))
+        ]
+        return cap(hits)
 
     @functools.cache
     def evaluate(m: Member, base: str | None) -> tuple[bool, bool, tuple[str, ...]]:
@@ -625,6 +721,7 @@ def plan(repo: str, head: str, bases: list[str], roll: str = "") -> dict:
             p for p in paths if PINS.get(name_of(p)) == m.toolchain and p not in mine
         ]
         why = [f"pin {p}" for p in pins if within(m.path, dir_of(p))]
+        carried = False  # its set moved only in pins a workspace dependency declares
         tests = [f"reads {p}" for p in cap([p for p in paths if glob(p, m.reads)])]
         if m.toolchain == "pnpm":
             # pnpm has no lock-aware selector, so a workspace lock marks every package.
@@ -642,27 +739,32 @@ def plan(repo: str, head: str, bases: list[str], roll: str = "") -> dict:
             # Both legs run inside the repo root's flake shell.
             tests += [f"flake {p}" for p in paths if p in ("flake.nix", "flake.lock")]
         if lock_touched(m, paths):
-            old, new = (export(repo, s, m.lock, m.name, m.group) for s in (base, head))
-            if old is None or new is None:
-                why.append(
-                    f"lock: export failed at {'base' if old is None else 'head'}"
-                )
-            elif old != new:
-                why.append(
-                    f"lock: {f'group {m.group}' if m.group else 'runtime set'} moved"
-                )
+            if moved := lock_moved(m, base):
+                if (
+                    moved.startswith("lock: export failed")
+                    or declared(m, base) != declared(m, head)
+                    or orphaned(m.lock, base)
+                ):
+                    why.append(moved)
+                else:
+                    carried = True
             # A workspace setting (pytest, mypy, tool.change) tests it, ships nothing.
             conf = join(m.lock, "pyproject.toml")
             if conf in paths and conf not in mine and settings_moved(m.lock, base):
                 tests.append(f"{conf} settings moved")
             # The dev toolchain is tested with every member but deployed with none.
-            if not m.group and export(repo, base, m.lock, None, None) != export(
-                repo, head, m.lock, None, None
-            ):
+            if not m.group and toolchain_moved(m.lock, base):
                 tests.append("lock: dev group moved")
-        test, ship = bool(mine or why or tests), (ship or bool(why)) and not newer(base)
-        held = ("base descends from head: not shipped",) if test and newer(base) else ()
-        return test, ship, (*cap(mine), *why, *tests, *held)
+        test = bool(mine or why or tests)
+        # What the lock says is what runs: a carried pin ships the member, tests it not.
+        ship = (ship or bool(why) or carried) and not newer(base)
+        held = (
+            ("base descends from head: not shipped",)
+            if (test or carried) and newer(base)
+            else ()
+        )
+        note = ("lock: carried pin moved, ship only",) if carried and not test else ()
+        return test, ship, (*cap(mine), *why, *tests, *note, *held)
 
     artefacts = []
     if "Dockerfile" in tree(repo, head):
@@ -676,6 +778,8 @@ def plan(repo: str, head: str, bases: list[str], roll: str = "") -> dict:
             and any(s == "." or within(s, m.path) or within(m.path, s) for s in srcs)
         ]
         artefacts.append((image, held))
+    if stray := set(sources) - {i for i, _ in artefacts}:
+        raise SystemExit(f"plan: --source names no root image: {sorted(stray)}")
     base_for = {m: own.get(m.name, default) for m in members}
     for image, ms in artefacts:
         base_for |= {m: own[image] for m in ms if image in own and m.name not in own}
@@ -688,6 +792,13 @@ def plan(repo: str, head: str, bases: list[str], roll: str = "") -> dict:
         if b and lock_touched(m, diff(repo, b, head))
     }
     jobs |= {(b, lock, None, None) for b, lock, _, group in jobs if not group}
+    jobs |= {
+        (live[image], m.lock, m.name, m.group)
+        for image, ms in artefacts
+        if image in live
+        for m in ms
+        if lock_touched(m, diff(repo, live[image], head))
+    }
     jobs |= {(head, *rest) for _, *rest in jobs}
     for sha in {j[0] for j in jobs}:
         workdir(repo, sha)
@@ -730,9 +841,14 @@ def plan(repo: str, head: str, bases: list[str], roll: str = "") -> dict:
 
     out_artefacts = []
     for image, ms in artefacts:
-        base = own.get(image, default)
-        why = [m.name for m in ms if m.name in rolled]
-        if base is not None:
+        source = image in sources
+        base = live.get(image) if source else own.get(image, default)
+        # A source-run image ships no member, so only a roll of everything rebuilds it;
+        # one running an unknown revision builds, since its environment is unknown too.
+        why = [m.name for m in ms if m.name in rolled and (every or not source)]
+        if source:
+            why = (environment(base, ms) if base else ["no live revision"]) + why
+        elif base is not None:
             paths = diff(repo, base, head)
             hits = [
                 p
@@ -748,8 +864,15 @@ def plan(repo: str, head: str, bases: list[str], roll: str = "") -> dict:
             reasons[f"image:{image}"] = (
                 why if build else [*why, "base descends from head: not built"]
             )
+        elif source:
+            reasons[f"image:{image}"] = ["runs from source; no image input moved"]
         out_artefacts.append(
-            {"image": image, "members": [m.name for m in ms], "build": build}
+            {
+                "image": image,
+                "members": [m.name for m in ms],
+                "build": build,
+                "source": source,
+            }
         )
 
     paths = diff(repo, default, head) if default else ()
@@ -786,8 +909,16 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--head", required=True)
     ap.add_argument("--base", action="append", default=[], help="SHA, or member=SHA")
     ap.add_argument("--roll", default="", help="'all' or a comma list of member names")
+    ap.add_argument(
+        "--source",
+        action="append",
+        default=[],
+        help="a root image production runs from source: built only for its environment",
+    )
     args = ap.parse_args(argv)
-    print(json.dumps(plan(args.repo, args.head, args.base, args.roll)))
+    print(
+        json.dumps(plan(args.repo, args.head, args.base, args.roll, tuple(args.source)))
+    )
 
 
 if __name__ == "__main__":

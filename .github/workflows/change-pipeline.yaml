@@ -3,7 +3,9 @@
 # members use it. A wheel or an MCP server ships at the end of its own leg, its own tests the
 # gate, once every library of this run in its workspace closure has passed its own leg. An
 # image builds in the deploy job, after the tests, on the same terms: a member's own image,
-# or a root image holding several members. Each library's sweep (its dependents type-checked
+# or a root image holding several members; one whose live containers carry the label
+# household.run-from-source=true has its code put live by its host, so it builds only when its
+# environment moved and waits on no test. Each library's sweep (its dependents type-checked
 # and the repo's contract suite) and the repo legs are early warnings: a consumer takes a
 # new library only at its own next change, where its own leg checks it, so nothing ships
 # or waits on them. The aggregate `change` is the one status a branch protection requires.
@@ -79,17 +81,14 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: ${{ needs.plan.outputs.ship == 'true' && matrix.member.deploy_now && '0' || '1' }}
-      - uses: ./.github/actions/change
+      - if: matrix.member.test
+        uses: ./.github/actions/change
         with:
           step: ${{ matrix.member.toolchain }}
           path: ${{ matrix.member.path || '.' }}
-      - run: touch "$RUNNER_TEMP/passed"
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: ${{ matrix.member.marker }}
-          path: ${{ runner.temp }}/passed
-          retention-days: 1
-          overwrite: true
+      # The pass marker wait.sh reads from this run's jobs: no artifact, so no vendor storage.
+      - name: passed
+        run: 'true'
       # It ships none of this run's libraries red: each must pass its own leg first.
       - if: env.DEPLOY == 'true' && join(matrix.member.waits, '') != ''
         timeout-minutes: 26
@@ -129,17 +128,13 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: ${{ needs.plan.outputs.ship == 'true' && matrix.member.deploy_now && '0' || '1' }}
-      - uses: ./.github/actions/change
+      - if: matrix.member.test
+        uses: ./.github/actions/change
         with:
           step: uv
           path: ${{ matrix.member.path || '.' }}
-      - run: touch "$RUNNER_TEMP/passed"
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: ${{ matrix.member.marker }}
-          path: ${{ runner.temp }}/passed
-          retention-days: 1
-          overwrite: true
+      - name: passed
+        run: 'true'
       - if: env.DEPLOY == 'true' && join(matrix.member.waits, '') != ''
         timeout-minutes: 26
         uses: ./.github/actions/change
@@ -172,7 +167,8 @@ jobs:
       UV_FROZEN: '1'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: ./.github/actions/change
+      - if: matrix.member.test
+        uses: ./.github/actions/change
         with:
           step: library
           path: ${{ matrix.member.path || '.' }}

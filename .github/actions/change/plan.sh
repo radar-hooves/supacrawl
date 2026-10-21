@@ -3,8 +3,10 @@
 # A pull request diffs from its merge-base. A push or dispatch diffs from the newest run of
 # this workflow on main whose plan passed and whose head is an ancestor of this one, and
 # rolls every leg that failed there, since it never shipped; an image diffs from the
-# revision running live. A fork's pull request plans nothing: its code never runs here. A tag
-# plans nothing either: it releases through the repo's own release workflow.
+# revision running live. A root image whose containers carry household.run-from-source=true
+# serves code its host fast-forwards from a checkout, so it builds only when its environment
+# moved, and waits on no test. A fork's pull request plans nothing: its code never runs here.
+# A tag plans nothing either: it releases through the repo's own release workflow.
 # Usage: plan.sh <repo-dir> [head [base]]   (outputs on stdout, summary on stderr by hand)
 . "$(dirname "$0")/lib.sh"
 repo=$(cd "${1:-.}" && pwd) head=${2:-} base=${3:-}
@@ -63,18 +65,24 @@ else
         | if IN($m[]) then . else ($a[.] // [])[] end] | unique | join(",")' --args "${carried[@]}" <<<"$known")
       [ "$roll" = all ] || roll=$(tr -s , <<<"$roll,$more" | sed 's/^,//; s/,$//')
     fi
+    roots=$(jq -r '.artefacts[].image' <<<"$known")
     mapfile -t images < <(jq -r '.artefacts[].image, (.members[] | select(.deploy == "image") | .name)' <<<"$known")
     for img in "${images[@]}"; do
-      rev=$("$here/live.sh" "$img")
+      live=$("$here/live.sh" "$img")
+      rev=${live%%$'\t'*}
       if [ -n "$rev" ] && git -C "$repo" rev-parse -q --verify "$rev^{commit}" >/dev/null; then
         bases+=(--base "$img=$rev")
+      fi
+      if [ "${live#*$'\t'}" != true ]; then :
+      elif grep -qxF "$img" <<<"$roots"; then bases+=(--source "$img")
+      else note "$img runs from source, but only a root image builds as one: it builds as before"
       fi
     done
   fi
   plan=$(python3 "$here/plan.py" --repo "$repo" --head "$head" ${base:+--base "$base"} "${bases[@]}" --roll "$roll")
 fi
 
-# A marker per member: the artifact its own leg uploads when it passes. A member's `waits`
+# A marker per member: its own leg's `passed` step, which wait.sh reads. A member's `waits`
 # are the markers of this run's libraries it ships with, transitively (`carried_by`): it ships
 # none of them red. Libraries run dependencies first, since each runs alone and may wait on another.
 plan=$(jq -c 'def marker: "passed-" + gsub("[^A-Za-z0-9._-]"; "_");
@@ -89,14 +97,14 @@ ship=false
 {
   echo "plan=$plan"
   echo "head=$head"
-  echo "members=$(jq -c '.libraries as $l | [.members[] | select(.test and (.name | IN($l[]) | not))]' <<<"$plan")"
+  echo "members=$(jq -c --argjson s "$ship" '.libraries as $l | [.members[] | select((.test or (.deploy_now and $s)) and (.name | IN($l[]) | not))]' <<<"$plan")"
   echo "libraries=$(jq -c '[.libraries[] as $n | .members[] | select(.name == $n)]' <<<"$plan")"
   # Images build after the tests, off the test legs: BuildKit's memory is outside every runner's cap.
-  echo "deploys=$(jq -c '(.members | map({key: .name, value: .}) | from_entries) as $by
+  echo "deploys=$(jq -c --argjson s "$ship" '(.members | map({key: .name, value: .}) | from_entries) as $by
     | [.members[] | select(.deploy_now and .deploy == "image")
        | {kind: "image", path: (.path | if . == "" then "." end), name, markers: ([.marker] + .waits)}]
     + [.artefacts[] | select(.build) | {kind: "image", path: ".", name: .image,
-       markers: ([.members[] | $by[.] | (select(.test) | .marker), .waits[]] | unique)}]' <<<"$plan")"
+       markers: (if .source then [] else [.members[] | $by[.] | (select(.test or (.deploy_now and $s)) | .marker), .waits[]] | unique end)}]' <<<"$plan")"
   echo "repo=$(if [ -n "$force" ]; then echo suites typecheck; else
     jq -r '[(.repo_suites | select(.) | "suites"), (.typecheck_all | select(.) | "typecheck")] | join(" ")' <<<"$plan"; fi)"
   echo "changed=$(jq -r .changed_members <<<"$plan" | tr -cd 'A-Za-z0-9._,-')"

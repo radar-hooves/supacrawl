@@ -26,4 +26,4 @@ Zero-infrastructure CLI web scraper with LLM extraction, for developers working 
 ## CI deviations from the household standard
 
 - **No `auto-label-issues` caller.** supacrawl is public and `radar-hooves/master-project` is private, so the reusable is unresolvable here; labels are applied at creation time by the `/git-issue` skill instead.
-- **`publish-wheels.yaml` inlines the `publish-wheels` reusable instead of calling it**, for the same public→private constraint; its header records what to keep aligned with the reusable.
+- **Carries a checked copy of the change pipeline** (`change-pipeline.yaml`, `.github/actions/change/`, `actions/setup-uv/`), because a public repo cannot call master's private workflow; master's weekly `security.yaml` copies check keeps it equal. Re-copy from master on a red; never hand-edit. Wheels ship from that pipeline's leg (`[tool.change] publish`); `publish.yaml` is the one public PyPI release.

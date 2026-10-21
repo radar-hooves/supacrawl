@@ -28,8 +28,8 @@
 #      (measured: api-clients runs 29491195320 / 29491530585, both fetched).
 #
 #      The household's runners are deliberately ephemeral (`ephemeral = true`,
-#      yggdrasil hosts/atlas/nix-config/modules/services/github-runner.nix;
-#      rationale in operators/poodle64/governance/ci/strategy-ci.md), and the
+#      yggdrasil modules/nixos/services/github-runner.nix; host facts in
+#      operators/poodle64/governance/ci/implementation-atlas.md), and the
 #      runner puts its tool cache at /run/github-runner/<repo>/_tool — the
 #      systemd RUNTIME directory, wiped when the unit stops, i.e. after every
 #      job. So the cache is empty on arrival, every time.
