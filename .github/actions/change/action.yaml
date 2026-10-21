@@ -2,7 +2,7 @@
 # this file against the job's checkout, after the household uv. Each script also runs by
 # hand against any checkout on a runner host: .github/actions/change/<step>.sh <path> <args>.
 #
-#   - uses: radar-hooves/master-project/.github/actions/change@main
+#   - uses: ./.github/actions/change
 #     with: { step: uv, path: clients/woolworths }
 
 name: 'Change pipeline step'
