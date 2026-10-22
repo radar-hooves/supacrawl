@@ -61,6 +61,8 @@ jobs:
 
   publish:
     needs: browser-guard
+    # A dispatch from a branch proves the guard and publishes nothing.
+    if: github.event_name == 'release' || github.ref == 'refs/heads/main'
     runs-on: [self-hosted, atlas]
     environment: pypi
     permissions:
