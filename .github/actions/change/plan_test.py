@@ -204,6 +204,8 @@ def test_discovery(mono, app):
             "members": ["godswood", "frontend"],
             "build": False,
             "source": False,
+            "build_on": ["self-hosted", "household"],
+            "deploy_on": ["self-hosted", "household"],
         }
     ]
 
@@ -211,6 +213,33 @@ def test_discovery(mono, app):
 def test_image_name_from_github_repository(app, monkeypatch):
     monkeypatch.setenv("GITHUB_REPOSITORY", "radar-hooves/godswood-app")
     assert plan(app[0], app[1], app[1])["artefacts"][0]["image"] == "godswood-app"
+
+
+def test_image_name_is_lowercase(app, monkeypatch):
+    monkeypatch.setenv("GITHUB_REPOSITORY", "DiegoSeagull/Godswood")
+    assert plan(app[0], app[1], app[1])["artefacts"][0]["image"] == "godswood"
+
+
+def test_root_image_declares_its_name_and_runners(app):
+    repo, head = app
+    head = change(
+        repo,
+        {
+            "pyproject.toml": '[tool.change]\nimage = "Godswood-Backend"\n'
+            'build_on = ["self-hosted", "builder"]\n'
+        },
+    )
+    art = plan(repo, head, head)["artefacts"][0]
+    assert art["image"] == "godswood-backend"
+    assert art["build_on"] == ["self-hosted", "builder"]
+    assert art["deploy_on"] == ["self-hosted", "household"]
+
+
+def test_runner_labels_must_be_a_list(app):
+    repo, _ = app
+    head = change(repo, {"pyproject.toml": '[tool.change]\ndeploy_on = "mimir"\n'})
+    with pytest.raises(SystemExit, match="deploy_on must be a list"):
+        plan(repo, head, head)
 
 
 def test_pnpm_workspace_without_packages_keeps_the_root(tmp_path):
@@ -465,6 +494,8 @@ def test_a_source_run_image_builds_for_no_code_and_waits_on_no_test(served):
         "members": None,
         "build": False,
         "source": True,
+        "build_on": ["self-hosted", "household"],
+        "deploy_on": ["self-hosted", "household"],
     }
     assert p["reasons"]["image:godswood"] == ["runs from source; no image input moved"]
     # The same push, its image not source-run, builds.

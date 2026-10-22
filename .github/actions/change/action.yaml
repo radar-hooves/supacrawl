@@ -2,7 +2,7 @@
 # this file against the job's checkout, after the household uv. Each script also runs by
 # hand against any checkout on a runner host: .github/actions/change/<step>.sh <path> <args>.
 #
-#   - uses: ./.github/actions/change
+#   - uses: radar-hooves/master-project/.github/actions/change@main
 #     with: { step: uv, path: clients/woolworths }
 
 name: 'Change pipeline step'
@@ -26,7 +26,8 @@ outputs:
   head: { description: 'the commit planned', value: '${{ steps.run.outputs.head }}' }
   members: { description: 'member rows needing a test leg', value: '${{ steps.run.outputs.members }}' }
   libraries: { description: 'member rows needing a library leg', value: '${{ steps.run.outputs.libraries }}' }
-  deploys: { description: 'root artefacts to build: kind, path, name, markers', value: '${{ steps.run.outputs.deploys }}' }
+  deploys: { description: 'root artefacts to build: kind, path, name, markers, runner labels', value: '${{ steps.run.outputs.deploys }}' }
+  builds: { description: 'the deploys whose build runs on another runner than their deploy', value: '${{ steps.run.outputs.builds }}' }
   repo: { description: 'repo legs to run: suites, typecheck', value: '${{ steps.run.outputs.repo }}' }
   changed: { description: 'CHANGED_MEMBERS for repo-wide suites', value: '${{ steps.run.outputs.changed }}' }
   ship: { description: "'true' when this run deploys", value: '${{ steps.run.outputs.ship }}' }
@@ -34,7 +35,7 @@ outputs:
 runs:
   using: composite
   steps:
-    - uses: ./.github/actions/setup-uv
+    - uses: radar-hooves/master-project/.github/actions/setup-uv@main
 
     - id: run
       shell: bash

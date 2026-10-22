@@ -9,17 +9,48 @@
 # none is counted or watched, here or in a rollback, and Watchtower is not asked when they are
 # all this host runs of it.
 # The build context is the member, or the repo-relative `[tool.change] context` its
-# pyproject.toml declares; the Dockerfile is always the member's own.
-# Usage: image.sh <member-dir> <image-name> <sha>
+# pyproject.toml declares; the Dockerfile is always the member's own. Its `secrets` table
+# maps a BuildKit secret id to the runner environment variable naming the file that holds it
+# (`secrets = { npmrc = "NPM_CONFIG_USERCONFIG" }`); `netrc` is $NETRC unless declared.
+# The image ref is <registry>/<owner>/<name>, lowercased.
+# A phase splits the work across two runners: `build` builds, smokes and pushes :<sha>;
+# `release` (on the host that runs it) points :latest at that :<sha> and goes live. Without
+# one, a single runner does both.
+# Usage: image.sh <member-dir> <image-name> <sha> [build|release]
 #        image.sh <member-dir> <image-name> --rollback
 . "$(dirname "$0")/lib.sh"
 . "$(dirname "$0")/live.sh"
-need CHANGE_REGISTRY CHANGE_REGISTRY_CREDENTIAL_FILE CHANGE_WATCHTOWER_URL CHANGE_WATCHTOWER_TOKEN_FILE NETRC
-for f in CHANGE_REGISTRY_CREDENTIAL_FILE CHANGE_WATCHTOWER_TOKEN_FILE NETRC; do
+dir=$(cd "$1" && pwd) name=${2,,} sha=$3 phase=${4:-all}
+case $phase in all | build | release) ;; *) die "unknown phase '$phase'" ;; esac
+[ "$sha" != --rollback ] || phase=release
+need CHANGE_REGISTRY CHANGE_REGISTRY_CREDENTIAL_FILE
+files=(CHANGE_REGISTRY_CREDENTIAL_FILE)
+if [ "$phase" != release ]; then
+  cfg='{}'
+  [ ! -f "$dir/pyproject.toml" ] || cfg=$(python3 -c 'import json, sys, tomllib; print(json.dumps(tomllib.load(open(sys.argv[1], "rb")).get("tool", {}).get("change", {})))' "$dir/pyproject.toml")
+  declare -A secret_env=([netrc]=NETRC)
+  rows=$(jq -r '(.secrets // {}) | to_entries[] | [.key, (.value | tostring)] | @tsv' <<<"$cfg") ||
+    die "[tool.change] secrets must be a table of secret id to environment variable name"
+  while IFS=$'\t' read -r id var; do
+    [ -n "$id" ] || continue
+    [[ $id =~ ^[A-Za-z0-9_.-]+$ && $var =~ ^[A-Z_][A-Z0-9_]*$ ]] || die "[tool.change] secrets: '$id' = '$var' needs an id and an UPPER_CASE environment variable name"
+    secret_env[$id]=$var
+  done <<<"$rows"
+  secrets=()
+  for id in "${!secret_env[@]}"; do
+    need "${secret_env[$id]}"
+    files+=("${secret_env[$id]}")
+    secrets+=(--secret "id=$id,src=${!secret_env[$id]}")
+  done
+fi
+if [ "$phase" != build ]; then
+  need CHANGE_WATCHTOWER_URL CHANGE_WATCHTOWER_TOKEN_FILE
+  files+=(CHANGE_WATCHTOWER_TOKEN_FILE)
+fi
+for f in "${files[@]}"; do
   [ -r "${!f}" ] || die "$f (${!f}) is not readable by $(id -un)"
 done
-dir=$(cd "$1" && pwd) name=$2 sha=$3
-ref=$CHANGE_REGISTRY/${GITHUB_REPOSITORY_OWNER:-radar-hooves}/$name
+ref=$CHANGE_REGISTRY/$(printf %s "${GITHUB_REPOSITORY_OWNER:-radar-hooves}" | tr A-Z a-z)/$name
 state=${RUNNER_TEMP:-${TMPDIR:-/tmp}}/change-image-$name.rollback
 # A signal exits through the EXIT trap, so whatever is armed there runs.
 trap 'exit 130' INT
@@ -170,31 +201,41 @@ if [ "$sha" = --rollback ]; then
   exit 1
 fi
 
-ctx=$dir
-if [ -f "$dir/pyproject.toml" ]; then
-  c=$(python3 -c 'import sys, tomllib; print(tomllib.load(open(sys.argv[1], "rb")).get("tool", {}).get("change", {}).get("context", ""))' "$dir/pyproject.toml")
+if [ "$phase" != release ]; then
+  ctx=$dir
+  c=$(jq -r '.context // ""' <<<"$cfg")
   [ -z "$c" ] || ctx=$(cd "$(git -C "$dir" rev-parse --show-toplevel)/$c" && pwd)
-fi
-# Two first deploys may race to create it: the loser takes the winner's.
-docker buildx inspect household >/dev/null 2>&1 ||
-  docker buildx create --name household --driver docker-container --driver-opt network=host >/dev/null ||
+  # Two first deploys may race to create it: the loser takes the winner's.
   docker buildx inspect household >/dev/null 2>&1 ||
-  die "cannot create the household builder"
-docker buildx build --builder household --load --pull --build-arg "GIT_SHA=$sha" \
-  --secret "id=netrc,src=$NETRC" -f "$dir/Dockerfile" -t "$ref:$sha" "$ctx"
-img=$(docker image inspect --format '{{.ID}}' "$ref:$sha")
-[ "$(docker image inspect --format "$revision" "$ref:$sha")" = "$sha" ] ||
-  die "$ref:$sha does not carry REVISION=$sha (its Dockerfile needs ARG GIT_SHA and ENV REVISION=\${GIT_SHA}), so no watch could see it go live; nothing pushed"
+    docker buildx create --name household --driver docker-container --driver-opt network=host >/dev/null ||
+    docker buildx inspect household >/dev/null 2>&1 ||
+    die "cannot create the household builder"
+  docker buildx build --builder household --load --pull --build-arg "GIT_SHA=$sha" \
+    "${secrets[@]}" -f "$dir/Dockerfile" -t "$ref:$sha" "$ctx"
+  img=$(docker image inspect --format '{{.ID}}' "$ref:$sha")
+  [ "$(docker image inspect --format "$revision" "$ref:$sha")" = "$sha" ] ||
+    die "$ref:$sha does not carry REVISION=$sha (its Dockerfile needs ARG GIT_SHA and ENV REVISION=\${GIT_SHA}), so no watch could see it go live; nothing pushed"
 
-probe=$dir/.github/image-smoke.sh
-[ -f "$probe" ] || probe=$dir/image-smoke.sh
-if [ -f "$probe" ]; then
-  IMAGE=$ref:$sha bash "$probe" || die "smoke: ${probe#"$dir"/} failed on $ref:$sha; nothing pushed"
+  probe=$dir/.github/image-smoke.sh
+  [ -f "$probe" ] || probe=$dir/image-smoke.sh
+  if [ -f "$probe" ]; then
+    IMAGE=$ref:$sha bash "$probe" || die "smoke: ${probe#"$dir"/} failed on $ref:$sha; nothing pushed"
+  else
+    boot "$ref:$sha" || die "smoke: $ref:$sha did not come up; nothing pushed"
+  fi
 else
-  boot "$ref:$sha" || die "smoke: $ref:$sha did not come up; nothing pushed"
+  # Built elsewhere: the image id a container here runs is the config digest of the :<sha> manifest.
+  login
+  manifest=$(docker buildx imagetools inspect --raw "$ref:$sha") || die "cannot read $ref:$sha; the build job pushes it first"
+  img=$(jq -r '.config.digest // empty' <<<"$manifest")
+  [ -n "$img" ] || die "$ref:$sha is not a single-platform manifest, so no watch could tell its image"
 fi
 
-login
+[ "$phase" = release ] || login
+if [ "$phase" = build ]; then
+  docker push -q "$ref:$sha"
+  exit 0
+fi
 if out=$(docker buildx imagetools inspect --format '{{json .Manifest}}' "$ref:latest" 2>&1); then
   prev=$(jq -r .digest <<<"$out")
 else
@@ -209,7 +250,7 @@ live=$(sole 1 <<<"$rows") old=$(sole 1 <<<"$towered") oldimg=$(sole 5 <<<"$tower
 # A re-run of an older run must never roll production back, a source-run container's included.
 [ -z "$live" ] || [ "$live" = "$sha" ] || no_rollback "$dir" "$name" "$live" "$sha" || exit 1
 
-docker push -q "$ref:$sha"
+[ "$phase" = release ] || docker push -q "$ref:$sha"
 pid=$$
 declare -p ref name sha img prev old oldimg before held pid >"$state"
 trap 'rollback || :; exit 1' EXIT

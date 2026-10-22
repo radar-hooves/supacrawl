@@ -95,6 +95,22 @@ def cap(xs: list[str], n: int = 8) -> list[str]:
     return xs[:n] + [f"+{len(xs) - n} more"] * (len(xs) > n)
 
 
+RUNNERS = ["self-hosted", "household"]
+
+
+def runners(change: dict, key: str) -> list[str]:
+    """The runner labels a `[tool.change]` table names for a job (`build_on`, `deploy_on`),
+    else the household's."""
+    labels = change.get(key, RUNNERS)
+    if (
+        not isinstance(labels, list)
+        or not labels
+        or not all(isinstance(x, str) and x for x in labels)
+    ):
+        raise SystemExit(f"plan: [tool.change] {key} must be a list of runner labels")
+    return labels
+
+
 def repo_name(repo: str) -> str:
     return os.environ.get("GITHUB_REPOSITORY", "").rpartition("/")[2] or name_of(repo)
 
@@ -255,6 +271,7 @@ class Member:
     group: str | None = None  # a lockless excluded member's root dependency group
     library: bool = False
     deploy: str = "none"
+    change: dict | None = None  # its [tool.change] table
 
 
 def discover(
@@ -303,7 +320,15 @@ def discover(
         group = change.get("group") if excluded else None
         lock = lock if group or not excluded else None
         return Member(
-            name, d, "uv", lock, reads, frozenset(map(norm, reqs)), runtime, group
+            name,
+            d,
+            "uv",
+            lock,
+            reads,
+            frozenset(map(norm, reqs)),
+            runtime,
+            group,
+            change=change,
         )
 
     # Deepest lock first, so a nested project with its own lock owns its directory.
@@ -770,7 +795,7 @@ def plan(
     if "Dockerfile" in tree(repo, head):
         # The root image holds the members its Dockerfile copies from the context.
         srcs = copied(manifests(repo, head)["Dockerfile"])
-        image = change.get("image") or repo_name(repo)
+        image = str(change.get("image") or repo_name(repo)).lower()
         held = [
             m
             for m in members
@@ -823,6 +848,8 @@ def plan(
             | {
                 "test": test,
                 "deploy_now": ship and m.deploy != "none",
+                "build_on": runners(m.change or {}, "build_on"),
+                "deploy_on": runners(m.change or {}, "deploy_on"),
                 "base": base_for[m],
                 "dependents": [
                     o.name
@@ -872,6 +899,8 @@ def plan(
                 "members": [m.name for m in ms],
                 "build": build,
                 "source": source,
+                "build_on": runners(change, "build_on"),
+                "deploy_on": runners(change, "deploy_on"),
             }
         )
 

@@ -94,17 +94,22 @@ plan=$(jq -c 'def marker: "passed-" + gsub("[^A-Za-z0-9._-]"; "_");
   | .libraries |= sort_by(. as $l | [$under[] | select(any(.[]; . == $l))] | length)' <<<"$plan")
 ship=false
 [ "${GITHUB_REF:-}" = refs/heads/main ] && [[ $ev =~ ^(push|workflow_dispatch)$ ]] && ship=true
+# Images build after the tests, off the test legs: BuildKit's memory is outside every runner's cap.
+# One whose build runner differs from its deploy runner is `split`: it builds in its own job.
+deploys=$(jq -c --argjson s "$ship" '(.members | map({key: .name, value: .}) | from_entries) as $by
+  | [.members[] | select(.deploy_now and .deploy == "image")
+     | {kind: "image", path: (.path | if . == "" then "." end), name, markers: ([.marker] + .waits), build_on, deploy_on}]
+  + [.artefacts[] | select(.build) | {kind: "image", path: ".", name: .image,
+     markers: (if .source then [] else [.members[] | $by[.] | (select(.test or (.deploy_now and $s)) | .marker), .waits[]] | unique end),
+     build_on, deploy_on}]
+  | map(. + {split: ((.build_on | sort) != (.deploy_on | sort))} | . + {phase: (if .split then "release" else "" end)})' <<<"$plan")
 {
   echo "plan=$plan"
   echo "head=$head"
   echo "members=$(jq -c --argjson s "$ship" '.libraries as $l | [.members[] | select((.test or (.deploy_now and $s)) and (.name | IN($l[]) | not))]' <<<"$plan")"
   echo "libraries=$(jq -c '[.libraries[] as $n | .members[] | select(.name == $n)]' <<<"$plan")"
-  # Images build after the tests, off the test legs: BuildKit's memory is outside every runner's cap.
-  echo "deploys=$(jq -c --argjson s "$ship" '(.members | map({key: .name, value: .}) | from_entries) as $by
-    | [.members[] | select(.deploy_now and .deploy == "image")
-       | {kind: "image", path: (.path | if . == "" then "." end), name, markers: ([.marker] + .waits)}]
-    + [.artefacts[] | select(.build) | {kind: "image", path: ".", name: .image,
-       markers: (if .source then [] else [.members[] | $by[.] | (select(.test or (.deploy_now and $s)) | .marker), .waits[]] | unique end)}]' <<<"$plan")"
+  echo "deploys=$deploys"
+  echo "builds=$(jq -c '[.[] | select(.split) | .phase = "build"]' <<<"$deploys")"
   echo "repo=$(if [ -n "$force" ]; then echo suites typecheck; else
     jq -r '[(.repo_suites | select(.) | "suites"), (.typecheck_all | select(.) | "typecheck")] | join(" ")' <<<"$plan"; fi)"
   echo "changed=$(jq -r .changed_members <<<"$plan" | tr -cd 'A-Za-z0-9._,-')"

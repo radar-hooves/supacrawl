@@ -5,7 +5,9 @@
 # image builds in the deploy job, after the tests, on the same terms: a member's own image,
 # or a root image holding several members; one whose live containers carry the label
 # household.run-from-source=true has its code put live by its host, so it builds only when its
-# environment moved and waits on no test. Each library's sweep (its dependents type-checked
+# environment moved and waits on no test. A root image's `[tool.change]` table (or a member's
+# own) declares its `image` name, BuildKit `secrets`, and the runner labels `build_on` and
+# `deploy_on`; they differ, the build runs in its own job on the first. Each library's sweep (its dependents type-checked
 # and the repo's contract suite) and the repo legs are early warnings: a consumer takes a
 # new library only at its own next change, where its own leg checks it, so nothing ships
 # or waits on them. The aggregate `change` is the one status a branch protection requires.
@@ -41,6 +43,7 @@ jobs:
       members: ${{ steps.plan.outputs.members }}
       libraries: ${{ steps.plan.outputs.libraries }}
       deploys: ${{ steps.plan.outputs.deploys }}
+      builds: ${{ steps.plan.outputs.builds }}
       repo: ${{ steps.plan.outputs.repo }}
       changed: ${{ steps.plan.outputs.changed }}
       ship: ${{ steps.plan.outputs.ship }}
@@ -189,11 +192,49 @@ jobs:
           step: repo
           args: ${{ needs.plan.outputs.repo }}
 
-  deploy:
+  # An image that declares another runner to build on (`[tool.change] build_on`) builds and
+  # pushes its :<sha> here, once its tests passed; its deploy job then goes live on `deploy_on`.
+  build:
     needs: [plan, member, library]
-    if: ${{ !cancelled() && needs.plan.result == 'success' && needs.plan.outputs.ship == 'true' && needs.plan.outputs.deploys != '[]' }}
+    if: ${{ !cancelled() && needs.plan.result == 'success' && needs.plan.outputs.ship == 'true' && needs.plan.outputs.builds != '[]' }}
+    name: build ${{ matrix.deploy.name }}
+    runs-on: ${{ matrix.deploy.build_on }}
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      actions: read
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        deploy: ${{ fromJSON(needs.plan.outputs.builds) }}
+    env:
+      UV_FROZEN: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Every member it holds, and every library in them, passed its leg
+        timeout-minutes: 26
+        uses: ./.github/actions/change
+        with:
+          step: wait
+          args: ${{ join(matrix.deploy.markers, ' ') }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - timeout-minutes: 55
+        uses: ./.github/actions/change
+        with:
+          step: image
+          path: ${{ matrix.deploy.path }}
+          args: ${{ matrix.deploy.name }} ${{ needs.plan.outputs.head }} build
+
+  deploy:
+    needs: [plan, member, library, build]
+    # A build that failed holds every deploy of the run: none goes live on a half-built run.
+    if: ${{ !cancelled() && needs.plan.result == 'success' && needs.build.result != 'failure' && needs.plan.outputs.ship == 'true' && needs.plan.outputs.deploys != '[]' }}
     name: deploy ${{ matrix.deploy.name }}
-    runs-on: [self-hosted, household]
+    runs-on: ${{ matrix.deploy.deploy_on }}
     timeout-minutes: 90
     permissions:
       contents: read
@@ -226,7 +267,7 @@ jobs:
         with:
           step: ${{ matrix.deploy.kind }}
           path: ${{ matrix.deploy.path }}
-          args: ${{ matrix.deploy.name }} ${{ needs.plan.outputs.head }}
+          args: ${{ matrix.deploy.name }} ${{ needs.plan.outputs.head }} ${{ matrix.deploy.phase }}
       # A cancel or a timeout signals only the step's own shell, so image.sh lives on with
       # :latest moved and its trap unfired; this finishes the rollback from its state file.
       - if: (cancelled() || failure()) && matrix.deploy.kind == 'image' && steps.checkout.outcome == 'success'
@@ -238,7 +279,7 @@ jobs:
 
   change:
     if: always()
-    needs: [plan, member, library, sweep, repo, deploy]
+    needs: [plan, member, library, sweep, repo, build, deploy]
     runs-on: [self-hosted, household]
     timeout-minutes: 5
     steps:

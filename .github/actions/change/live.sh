@@ -44,5 +44,6 @@ no_rollback() {  # <dir> <name> <live> <sha>
 
 . "$(dirname "$0")/lib.sh"
 need CHANGE_REGISTRY
-rows=$(running "$CHANGE_REGISTRY/${GITHUB_REPOSITORY_OWNER:-radar-hooves}/$1")
+owner=${GITHUB_REPOSITORY_OWNER:-radar-hooves}
+rows=$(running "$CHANGE_REGISTRY/${owner,,}/${1,,}")
 printf '%s\t%s\n' "$(sole 1 <<<"$rows")" "$(sole 6 <<<"$rows")"
