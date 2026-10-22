@@ -58,15 +58,18 @@ jobs:
 
       - name: DIAG
         run: |
-          DEBUG=pw:browser uv run python -c "
-          import asyncio
+          cat > $RUNNER_TEMP/d.py <<'PY'
+          import asyncio, sys
           from playwright.async_api import async_playwright
-          async def m():
+          async def m(args):
               async with async_playwright() as p:
-                  b=await p.chromium.launch(headless=True)
-                  pg=await b.new_page(); await pg.goto('about:blank'); print('OK'); await b.close()
-          asyncio.run(m())" 2>&1 | tail -40 || true
-          id; ulimit -a | head -20; ls -ld /dev/shm; cat /proc/sys/kernel/unprivileged_userns_clone 2>&1; cat /proc/sys/user/max_user_namespaces
+                  b=await p.chromium.launch(headless=True, args=args)
+                  pg=await b.new_page(); await pg.goto('about:blank'); print('OK', args); await b.close()
+          try: asyncio.run(m(sys.argv[1:]))
+          except Exception as e: print('FAIL', sys.argv[1:], str(e)[:80])
+          PY
+          DEBUG=pw:browser uv run python $RUNNER_TEMP/d.py 2>&1 | grep -E "err\]|OK|FAIL" | head -12 | cut -c1-260
+          for a in --disable-gpu --disable-gpu-sandbox "--disable-gpu --in-process-gpu" --single-process; do uv run python $RUNNER_TEMP/d.py $a 2>&1 | tail -1; done || true
 
       # Nix's libraries on LD_LIBRARY_PATH crash the Chromium engines, so only Camoufox gets them.
       - name: Chromium engine tests
