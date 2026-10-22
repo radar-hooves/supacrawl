@@ -56,6 +56,18 @@ jobs:
           done
           echo "CAMOUFOX_LIBS=${libs#:}" >> "$GITHUB_ENV"
 
+      - name: DIAG
+        run: |
+          DEBUG=pw:browser uv run python -c "
+          import asyncio
+          from playwright.async_api import async_playwright
+          async def m():
+              async with async_playwright() as p:
+                  b=await p.chromium.launch(headless=True)
+                  pg=await b.new_page(); await pg.goto('about:blank'); print('OK'); await b.close()
+          asyncio.run(m())" 2>&1 | tail -40 || true
+          id; ulimit -a | head -20; ls -ld /dev/shm; cat /proc/sys/kernel/unprivileged_userns_clone 2>&1; cat /proc/sys/user/max_user_namespaces
+
       # Nix's libraries on LD_LIBRARY_PATH crash the Chromium engines, so only Camoufox gets them.
       - name: Chromium engine tests
         run: uv run pytest -m "browser or stealth_smoke" -p no:cacheprovider -k "not camoufox" tests/test_browser.py tests/test_browser_recovery.py tests/test_engine_smoke.py
