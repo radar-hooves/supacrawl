@@ -54,10 +54,14 @@ jobs:
           for p in gtk3 glib stdenv.cc.cc.lib dbus-glib libx11 libxcb libxt libxtst libxrender libxext libxcomposite libxdamage libxfixes libxrandr libxi libxcursor alsa-lib pango cairo gdk-pixbuf atk fontconfig freetype libGL nspr nss; do
             out=$(nix eval --raw "nixpkgs#$p.out.outPath") && libs="$libs:$out/lib"
           done
-          echo "LD_LIBRARY_PATH=${libs#:}" >> "$GITHUB_ENV"
+          echo "CAMOUFOX_LIBS=${libs#:}" >> "$GITHUB_ENV"
 
-      - name: Browser and stealth-engine tests
-        run: uv run pytest -m "browser or stealth_smoke" -p no:cacheprovider tests/test_browser.py tests/test_browser_recovery.py tests/test_engine_smoke.py
+      # Nix's libraries on LD_LIBRARY_PATH crash the Chromium engines, so only Camoufox gets them.
+      - name: Chromium engine tests
+        run: uv run pytest -m "browser or stealth_smoke" -p no:cacheprovider -k "not camoufox" tests/test_browser.py tests/test_browser_recovery.py tests/test_engine_smoke.py
+
+      - name: Camoufox engine test
+        run: LD_LIBRARY_PATH=$CAMOUFOX_LIBS uv run pytest -m stealth_smoke -p no:cacheprovider -k camoufox tests/test_engine_smoke.py
 
   publish:
     needs: browser-guard
