@@ -36,7 +36,7 @@ jobs:
 
       - name: Present the Nix Chromium under Playwright's expected revision
         run: |
-          nix_browsers=$PLAYWRIGHT_BROWSERS_PATH
+          nix_browsers=$(nix build --no-link --print-out-paths nixpkgs#playwright-driver.browsers)
           rev=$(uv run python -c "import json,playwright,pathlib;j=json.loads((pathlib.Path(playwright.__file__).parent/'driver/package/browsers.json').read_text());print(next(b['revision'] for b in j['browsers'] if b['name']=='chromium'))")
           scratch=$RUNNER_TEMP/browsers
           shell=$scratch/chromium_headless_shell-$rev/chrome-headless-shell-linux64
