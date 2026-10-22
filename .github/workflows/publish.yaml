@@ -69,7 +69,7 @@ jobs:
         run: uv run pytest -m "browser or stealth_smoke" -p no:cacheprovider -k "not camoufox" tests/test_browser.py tests/test_browser_recovery.py tests/test_engine_smoke.py
 
       - name: Camoufox engine test
-        run: LD_LIBRARY_PATH=$CAMOUFOX_LIBS uv run pytest -m stealth_smoke -p no:cacheprovider -k camoufox tests/test_engine_smoke.py
+        run: MOZ_DISABLE_CONTENT_SANDBOX=1 MOZ_DISABLE_SOCKET_PROCESS_SANDBOX=1 MOZ_DISABLE_RDD_SANDBOX=1 MOZ_DISABLE_GMP_SANDBOX=1 LD_LIBRARY_PATH=$CAMOUFOX_LIBS uv run pytest -m stealth_smoke -p no:cacheprovider -k camoufox tests/test_engine_smoke.py
 
   publish:
     needs: browser-guard
