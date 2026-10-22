@@ -43,8 +43,15 @@ jobs:
           full=$scratch/chromium-$rev/chrome-linux64
           mkdir -p "$shell" "$full"
           cp -rs "$nix_browsers"/chromium_headless_shell-*/chrome-linux/. "$shell/"
-          ln -s headless_shell "$shell/chrome-headless-shell"
           cp -rs "$nix_browsers"/chromium-*/chrome-linux/. "$full/"
+          # The runner's seccomp filter denies the syscalls Chromium's zygote makes.
+          for bin in "$shell/chrome-headless-shell:headless_shell" "$full/chrome:chrome"; do
+            wrapper=${bin%%:*}
+            real=$(readlink -f "$(dirname "$wrapper")/${bin##*:}")
+            rm -f "$wrapper"
+            printf '#!/bin/sh\nexec %s $CHROME_EXTRA_FLAGS "$@"\n' "$real" > "$wrapper"
+            chmod +x "$wrapper"
+          done
           echo "PLAYWRIGHT_BROWSERS_PATH=$scratch" >> "$GITHUB_ENV"
 
       - name: Fetch Camoufox and find its libraries in Nix
@@ -61,15 +68,16 @@ jobs:
           cat > $RUNNER_TEMP/d.py <<'PY'
           import asyncio, sys
           from playwright.async_api import async_playwright
-          async def m(args):
+          async def m():
               async with async_playwright() as p:
-                  b=await p.chromium.launch(headless=True, args=args)
-                  pg=await b.new_page(); await pg.goto('about:blank'); print('OK', args); await b.close()
-          try: asyncio.run(m(sys.argv[1:]))
-          except Exception as e: print('FAIL', sys.argv[1:], str(e)[:80])
+                  b=await p.chromium.launch(headless=True, timeout=30000)
+                  pg=await b.new_page(); await pg.goto('about:blank'); print('OK'); await b.close()
+          try: asyncio.run(m())
+          except Exception as e: print('FAIL', str(e)[:60])
           PY
-          DEBUG=pw:browser uv run python $RUNNER_TEMP/d.py 2>&1 | grep -E "err\]|OK|FAIL" | head -12 | cut -c1-260
-          for a in --disable-gpu --disable-gpu-sandbox "--disable-gpu --in-process-gpu" --single-process; do uv run python $RUNNER_TEMP/d.py $a 2>&1 | tail -1; done || true
+          for f in "--no-zygote" "--no-zygote --disable-gpu" "--single-process" "--no-zygote --in-process-gpu"; do
+            echo "FLAGS $f"; CHROME_EXTRA_FLAGS="$f" timeout 90 uv run python $RUNNER_TEMP/d.py 2>&1 | tail -1
+          done
 
       # Nix's libraries on LD_LIBRARY_PATH crash the Chromium engines, so only Camoufox gets them.
       - name: Chromium engine tests
