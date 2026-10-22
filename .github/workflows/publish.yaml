@@ -19,7 +19,7 @@ jobs:
   # Camoufox's own Firefox build fetches normally and gets its GTK libraries from Nix.
   # The private index authenticates ambiently through the runner's vended netrc.
   browser-guard:
-    runs-on: [self-hosted, atlas]
+    runs-on: [self-hosted, household]
     timeout-minutes: 30
     env:
       UV_FROZEN: '1'
@@ -75,7 +75,7 @@ jobs:
     needs: browser-guard
     # A dispatch from a branch proves the guard and publishes nothing.
     if: github.event_name == 'release' || github.ref == 'refs/heads/main'
-    runs-on: [self-hosted, atlas]
+    runs-on: [self-hosted, household]
     environment: pypi
     permissions:
       id-token: write # OIDC trusted publishing to PyPI

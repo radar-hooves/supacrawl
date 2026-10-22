@@ -30,7 +30,7 @@ permissions:
 
 jobs:
   plan:
-    runs-on: [self-hosted, atlas]
+    runs-on: [self-hosted, household]
     timeout-minutes: 10
     permissions:
       contents: read
@@ -62,7 +62,7 @@ jobs:
     needs: plan
     if: needs.plan.outputs.members != '[]'
     name: test ${{ matrix.member.name }}
-    runs-on: [self-hosted, atlas]
+    runs-on: [self-hosted, household]
     timeout-minutes: 75
     permissions:
       contents: read
@@ -110,7 +110,7 @@ jobs:
     needs: plan
     if: needs.plan.outputs.libraries != '[]'
     name: library ${{ matrix.member.name }}
-    runs-on: [self-hosted, atlas]
+    runs-on: [self-hosted, household]
     timeout-minutes: 75
     permissions:
       contents: read
@@ -156,7 +156,7 @@ jobs:
     needs: [plan, library]
     if: ${{ !cancelled() && needs.plan.result == 'success' && needs.plan.outputs.libraries != '[]' }}
     name: sweep ${{ matrix.member.name }}
-    runs-on: [self-hosted, atlas]
+    runs-on: [self-hosted, household]
     timeout-minutes: 60
     strategy:
       fail-fast: false
@@ -177,7 +177,7 @@ jobs:
   repo:
     needs: plan
     if: needs.plan.outputs.repo != ''
-    runs-on: [self-hosted, atlas]
+    runs-on: [self-hosted, household]
     timeout-minutes: 60
     env:
       UV_FROZEN: '1'
@@ -193,7 +193,7 @@ jobs:
     needs: [plan, member, library]
     if: ${{ !cancelled() && needs.plan.result == 'success' && needs.plan.outputs.ship == 'true' && needs.plan.outputs.deploys != '[]' }}
     name: deploy ${{ matrix.deploy.name }}
-    runs-on: [self-hosted, atlas]
+    runs-on: [self-hosted, household]
     timeout-minutes: 90
     permissions:
       contents: read
@@ -207,6 +207,11 @@ jobs:
     env:
       UV_FROZEN: '1'
     steps:
+      # Checkout first: a copy's local action is read from the checkout.
+      - id: checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
       - name: Every member it holds, and every library in them, passed its leg
         timeout-minutes: 26
         uses: ./.github/actions/change
@@ -215,10 +220,6 @@ jobs:
           args: ${{ join(matrix.deploy.markers, ' ') }}
         env:
           GH_TOKEN: ${{ github.token }}
-      - id: checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
       # supacrawl's 9 GB image takes about 35 minutes to build, smoke and push.
       - timeout-minutes: 55
         uses: ./.github/actions/change
@@ -238,7 +239,7 @@ jobs:
   change:
     if: always()
     needs: [plan, member, library, sweep, repo, deploy]
-    runs-on: [self-hosted, atlas]
+    runs-on: [self-hosted, household]
     timeout-minutes: 5
     steps:
       - name: Every leg succeeded or was skipped
