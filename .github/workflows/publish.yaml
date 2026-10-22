@@ -13,10 +13,14 @@ permissions:
   contents: read
 
 jobs:
-  # The change pipeline's runner has no Chromium and no apt/sudo (#147), so the
-  # tests that drive real browsers run here, on the one path that ships to outside users.
+  # The tests that drive real browsers run here, on the one path that ships to outside
+  # users. The runner's Nix-provided Chromium is older than the Playwright pinned in the
+  # lock, so a scratch browsers dir presents it under the revision Playwright expects;
+  # Camoufox's own Firefox build fetches normally and gets its GTK libraries from Nix.
+  # The private index authenticates ambiently through the runner's vended netrc.
   browser-guard:
-    runs-on: ubuntu-latest # by-exception (2026-10-21): Playwright --with-deps needs apt and sudo the NixOS runner lacks (#147)
+    runs-on: [self-hosted, atlas]
+    timeout-minutes: 30
     env:
       UV_FROZEN: '1'
     steps:
@@ -26,21 +30,31 @@ jobs:
         uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
         with:
           python-version: '3.14'
-          enable-cache: true
 
-      # redactyl-core resolves from the household private index; a hosted runner has
-      # no vended netrc, so the credential arrives as a secret (uv per-index auth).
       - name: Install dependencies
-        env:
-          UV_INDEX_GODSWOOD_USERNAME: ${{ secrets.UV_INDEX_GODSWOOD_USERNAME }}
-          UV_INDEX_GODSWOOD_PASSWORD: ${{ secrets.UV_INDEX_GODSWOOD_PASSWORD }}
         run: uv sync --no-group mcp-dev
 
-      - name: Install engine browsers (Chromium + Camoufox)
+      - name: Present the Nix Chromium under Playwright's expected revision
         run: |
-          uv run playwright install --with-deps chromium
-          uv run patchright install --with-deps chromium
+          nix_browsers=$PLAYWRIGHT_BROWSERS_PATH
+          rev=$(uv run python -c "import json,playwright,pathlib;j=json.loads((pathlib.Path(playwright.__file__).parent/'driver/package/browsers.json').read_text());print(next(b['revision'] for b in j['browsers'] if b['name']=='chromium'))")
+          scratch=$RUNNER_TEMP/browsers
+          shell=$scratch/chromium_headless_shell-$rev/chrome-headless-shell-linux64
+          full=$scratch/chromium-$rev/chrome-linux64
+          mkdir -p "$shell" "$full"
+          cp -rs "$nix_browsers"/chromium_headless_shell-*/chrome-linux/. "$shell/"
+          ln -s headless_shell "$shell/chrome-headless-shell"
+          cp -rs "$nix_browsers"/chromium-*/chrome-linux/. "$full/"
+          echo "PLAYWRIGHT_BROWSERS_PATH=$scratch" >> "$GITHUB_ENV"
+
+      - name: Fetch Camoufox and find its libraries in Nix
+        run: |
           uv run camoufox fetch
+          libs=""
+          for p in gtk3 glib stdenv.cc.cc.lib dbus-glib libx11 libxcb libxt libxtst libxrender libxext libxcomposite libxdamage libxfixes libxrandr libxi libxcursor alsa-lib pango cairo gdk-pixbuf atk fontconfig freetype libGL nspr nss; do
+            out=$(nix eval --raw "nixpkgs#$p.out.outPath") && libs="$libs:$out/lib"
+          done
+          echo "LD_LIBRARY_PATH=${libs#:}" >> "$GITHUB_ENV"
 
       - name: Browser and stealth-engine tests
         run: uv run pytest -m "browser or stealth_smoke" -p no:cacheprovider tests/test_browser.py tests/test_browser_recovery.py tests/test_engine_smoke.py
