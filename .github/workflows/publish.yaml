@@ -36,15 +36,23 @@ jobs:
 
       - name: Present the Nix Chromium under Playwright's expected revision
         run: |
-          nix_browsers=$PLAYWRIGHT_BROWSERS_PATH
+          nix_browsers=$(nix build --no-link --print-out-paths nixpkgs#playwright-driver.browsers)
           rev=$(uv run python -c "import json,playwright,pathlib;j=json.loads((pathlib.Path(playwright.__file__).parent/'driver/package/browsers.json').read_text());print(next(b['revision'] for b in j['browsers'] if b['name']=='chromium'))")
           scratch=$RUNNER_TEMP/browsers
           shell=$scratch/chromium_headless_shell-$rev/chrome-headless-shell-linux64
           full=$scratch/chromium-$rev/chrome-linux64
           mkdir -p "$shell" "$full"
           cp -rs "$nix_browsers"/chromium_headless_shell-*/chrome-linux/. "$shell/"
-          ln -s headless_shell "$shell/chrome-headless-shell"
           cp -rs "$nix_browsers"/chromium-*/chrome-linux/. "$full/"
+          # Chromium's zygote cannot fork under the runner service (measured: every launch
+          # dies on it), so the binaries start with --no-zygote.
+          for bin in "$shell/chrome-headless-shell:headless_shell" "$full/chrome:chrome"; do
+            wrapper=${bin%%:*}
+            real=$(readlink -f "$(dirname "$wrapper")/${bin##*:}")
+            rm -f "$wrapper"
+            printf '#!/bin/sh\nexec %s --no-zygote "$@"\n' "$real" > "$wrapper"
+            chmod +x "$wrapper"
+          done
           echo "PLAYWRIGHT_BROWSERS_PATH=$scratch" >> "$GITHUB_ENV"
 
       - name: Fetch Camoufox and find its libraries in Nix
@@ -54,13 +62,19 @@ jobs:
           for p in gtk3 glib stdenv.cc.cc.lib dbus-glib libx11 libxcb libxt libxtst libxrender libxext libxcomposite libxdamage libxfixes libxrandr libxi libxcursor alsa-lib pango cairo gdk-pixbuf atk fontconfig freetype libGL nspr nss; do
             out=$(nix eval --raw "nixpkgs#$p.out.outPath") && libs="$libs:$out/lib"
           done
-          echo "LD_LIBRARY_PATH=${libs#:}" >> "$GITHUB_ENV"
+          echo "CAMOUFOX_LIBS=${libs#:}" >> "$GITHUB_ENV"
 
-      - name: Browser and stealth-engine tests
-        run: uv run pytest -m "browser or stealth_smoke" -p no:cacheprovider tests/test_browser.py tests/test_browser_recovery.py tests/test_engine_smoke.py
+      # Nix's libraries on LD_LIBRARY_PATH crash the Chromium engines, so only Camoufox gets them.
+      - name: Chromium engine tests
+        run: uv run pytest -m "browser or stealth_smoke" -p no:cacheprovider -k "not camoufox" tests/test_browser.py tests/test_browser_recovery.py tests/test_engine_smoke.py
+
+      - name: Camoufox engine test
+        run: MOZ_DISABLE_CONTENT_SANDBOX=1 MOZ_DISABLE_SOCKET_PROCESS_SANDBOX=1 MOZ_DISABLE_RDD_SANDBOX=1 MOZ_DISABLE_GMP_SANDBOX=1 LD_LIBRARY_PATH=$CAMOUFOX_LIBS uv run pytest -m stealth_smoke -p no:cacheprovider -k camoufox tests/test_engine_smoke.py
 
   publish:
     needs: browser-guard
+    # A dispatch from a branch proves the guard and publishes nothing.
+    if: github.event_name == 'release' || github.ref == 'refs/heads/main'
     runs-on: [self-hosted, atlas]
     environment: pypi
     permissions:
