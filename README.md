@@ -104,6 +104,10 @@ playwright install chromium
 
 `supacrawl-mcp --transport http` exposes the tool surface over the network instead of stdio. It requires `SUPACRAWL_MCP_AUTH_TOKEN` (a shared bearer token every caller must present in an `Authorization: Bearer <token>` header) whenever `--host` is not loopback (`127.0.0.1`/`localhost`/`::1`) — the server refuses to start on a non-loopback host with no token configured, unless `--insecure` is passed explicitly. Loopback binds (the default `--host`) work unauthenticated.
 
+### Serving an untrusted caller
+
+The mode is per process, never per request, so a caller cannot widen it. Run a second `supacrawl-mcp` with `SUPACRAWL_BLOCK_PRIVATE_NETWORKS=1` and `SUPACRAWL_BLOCK_PAGE_SCRIPTS=1` and give that endpoint to the untrusted caller. It refuses loopback, RFC 1918, CGNAT/tailnet, link-local, ULA and metadata addresses (IPv6 spellings of them included); the browser never resolves or connects itself (every request is fetched at a pinned, validated address and handed to the page, so DNS rebinding has no window); and pages run without JavaScript. Camoufox is unavailable in this mode. Search and LLM backends are the instance's own configuration, not caller-supplied URLs.
+
 ### Fetching the SearXNG credential from a secrets broker
 
 The MCP server can take its SearXNG HTTP Basic credential from a [Portcullis](https://github.com/radar-hooves/portcullis) secrets broker instead of the environment. Set `SEARXNG_PORTCULLIS_CREDENTIAL` to the catalogue name of a credential carrying `username` and `password` fields, and the pair is fetched in-process at startup — so it never has to exist as an environment variable, a rendered config value, or a file on the host. The broker address and machine identity come from the usual `PORTCULLIS_URL` / `SIGNET_*` variables.

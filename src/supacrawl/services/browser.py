@@ -50,15 +50,48 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, cast
 from urllib.parse import urlparse
 
+import httpx
 from bs4 import BeautifulSoup
 
 from supacrawl.exceptions import ValidationError
-from supacrawl.services.url_guard import resolve_and_pin
+from supacrawl.services.url_guard import block_page_scripts, guarded_hop, resolve_and_pin, strict_mode
 
 if TYPE_CHECKING:
     from playwright.async_api import Browser, BrowserContext, Page
 
 LOGGER = logging.getLogger(__name__)
+
+
+_DROP_REQUEST_HEADERS = frozenset({"host", "content-length", "connection", "accept-encoding"})
+_DROP_RESPONSE_HEADERS = frozenset({"content-encoding", "content-length", "transfer-encoding", "connection"})
+
+
+async def _fulfil_pinned(route: Any, request: Any) -> None:
+    """Serve a request from a pinned httpx hop so the browser never connects itself.
+
+    Strict mode only: DNS cannot rebind between check and connect when the
+    connect is ours. Redirects go back to the browser as 3xx and are routed
+    (and pinned) again.
+    """
+    headers = {k: v for k, v in request.headers.items() if k.lower() not in _DROP_REQUEST_HEADERS}
+    try:
+        async with httpx.AsyncClient(timeout=30.0, follow_redirects=False) as client:
+            response = await guarded_hop(
+                client, request.method, request.url, headers=headers, content=request.post_data_buffer
+            )
+    except ValidationError as exc:
+        LOGGER.warning("Blocked browser request to %s: %s", request.url, exc)
+        await route.abort("blockedbyclient")
+        return
+    except httpx.HTTPError as exc:
+        LOGGER.warning("Strict fetch failed for %s: %s", request.url, exc)
+        await route.abort("failed")
+        return
+    await route.fulfill(
+        status=response.status_code,
+        headers={k: v for k, v in response.headers.items() if k.lower() not in _DROP_RESPONSE_HEADERS},
+        body=response.content,
+    )
 
 
 async def _install_navigation_guard(page: Any) -> None:
@@ -76,6 +109,9 @@ async def _install_navigation_guard(page: Any) -> None:
     """
 
     async def _route(route: Any, request: Any) -> None:
+        if strict_mode():
+            await _fulfil_pinned(route, request)
+            return
         try:
             # Off the event loop: resolve_and_pin does a blocking getaddrinfo,
             # and this handler fires once per request/redirect/subresource —
@@ -887,6 +923,9 @@ class BrowserManager:
         """
         options: dict[str, Any] = {}
 
+        if block_page_scripts():
+            options["java_script_enabled"] = False
+
         # Apply device emulation first (provides base viewport, UA, etc.)
         if device:
             device_config = self._resolve_device_config(device)
@@ -1359,6 +1398,8 @@ class BrowserManager:
         """Create the context and page, cleaning up a half-built context on failure."""
         if not owns_context:
             # Camoufox: the browser IS the context, so just create a page.
+            if block_page_scripts():
+                raise RuntimeError("Camoufox cannot run with page scripts blocked (SUPACRAWL_BLOCK_PAGE_SCRIPTS)")
             return None, await cast("BrowserContext", self._browser).new_page()
 
         context_options = self._build_context_options(device=device, extra_headers=extra_headers)

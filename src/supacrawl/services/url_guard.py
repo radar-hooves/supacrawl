@@ -122,6 +122,7 @@ _IPV6_SPECIAL = frozenset({ipaddress.IPv6Address("::"), ipaddress.IPv6Address(":
 _ALLOWED_SCHEMES = {"http", "https"}
 
 _STRICT_ENV = "SUPACRAWL_BLOCK_PRIVATE_NETWORKS"
+_SCRIPTS_ENV = "SUPACRAWL_BLOCK_PAGE_SCRIPTS"
 
 # Redirect hops followed by guarded_request/guarded_stream before giving up.
 MAX_REDIRECTS = 10
@@ -137,6 +138,21 @@ def _strict_mode() -> bool:
         True when ``SUPACRAWL_BLOCK_PRIVATE_NETWORKS`` is set to a truthy value.
     """
     return os.environ.get(_STRICT_ENV, "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def strict_mode() -> bool:
+    """Public name for :func:`_strict_mode`, for callers outside this module."""
+    return _strict_mode()
+
+
+def block_page_scripts() -> bool:
+    """Whether browser pages run without JavaScript (``SUPACRAWL_BLOCK_PAGE_SCRIPTS``).
+
+    The untrusted-caller posture: with scripts off, a fetched page cannot
+    originate requests of its own, so it cannot use DNS rebinding to read an
+    internal origin it was served from.
+    """
+    return os.environ.get(_SCRIPTS_ENV, "").strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _blocked_networks() -> tuple[IPNetwork, ...]:
@@ -531,3 +547,42 @@ async def guarded_request(
     async with guarded_stream(client, method, url, max_redirects=max_redirects) as response:
         await response.aread()
         return response
+
+
+async def guarded_hop(
+    client: httpx.AsyncClient,
+    method: str,
+    url: str,
+    *,
+    headers: dict[str, str] | None = None,
+    content: bytes | None = None,
+) -> httpx.Response:
+    """Fetch exactly one hop of *url* at a validated, pinned address; never follow a redirect.
+
+    The browser's route handler uses this in strict mode so Chromium never
+    resolves or connects itself: the bytes come from the pinned connection and
+    are handed to the page, which closes the browser path's rebinding window.
+
+    Args:
+        client: The client to issue the request on (must not follow redirects).
+        method: HTTP method.
+        url: The URL to fetch.
+        headers: Request headers to forward; ``Host`` is set from *url*.
+        content: Request body, if any.
+
+    Returns:
+        The response, fully read, redirects unfollowed.
+
+    Raises:
+        ValidationError: When the URL or its resolved address is blocked.
+    """
+    address, host = await asyncio.to_thread(resolve_and_pin, url)
+    request = client.build_request(
+        method,
+        pinned_url(url, address),
+        headers={**(headers or {}), "Host": _authority(host, urlparse(url).port)},
+        content=content,
+        extensions={"sni_hostname": host},
+    )
+    response = await client.send(request, follow_redirects=False)
+    return response
