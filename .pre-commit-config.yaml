@@ -43,10 +43,10 @@ repos:
         types: [text]
 
       - id: check-handoff-tracks-work
-        name: '📋 governance · Handoff outstanding work is tracked'
+        name: 'governance - Handoff open items are tracked'
         entry: household-precommit-handoff-tracking
         language: system
-        files: '^docs/development/handoffs/.*\.md$'
+        files: '^HANDOFF\.md$'
         pass_filenames: true
 
       - id: check-handoff-closed-trailer
