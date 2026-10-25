@@ -2,5 +2,5 @@
   "enabledPlugins": {
     "playwright@claude-plugins-official": true
   },
-  "allowedMcpServers": [{ "serverName": "browser-driver" }, { "serverName": "firecrawl" }, { "serverName": "foreman" }, { "serverName": "github" }, { "serverName": "supacrawl" }]
+  "allowedMcpServers": [{ "serverName": "firecrawl" }, { "serverName": "foreman" }, { "serverName": "github" }, { "serverName": "supacrawl" }]
 }
