@@ -34,11 +34,15 @@ dependencies = [
   "beautifulsoup4>=4.14.3",
   "click>=8.3.1",
   "httpx[brotli]>=0.28.1",
+  # CVE-2026-111497 (Brotli decoder) is fixed in 1.2.1; every scraped page can reach it.
+  "brotli>=1.2.1",
   # Validates LLM extraction output against the caller's JSON schema.
   "jsonschema>=4.26.0",
   "markdownify>=1.2.2",
   "ollama>=0.6.1",
   "pdfplumber>=0.11.9",
+  # Transitive via pdfplumber; < 13.0.0 has a crafted-image code-execution flaw.
+  "pillow>=13.0.0",
   "playwright>=1.40.0,<2.0.0",  # Keep >=1.40.0 for NixOS — see #79, #104
   "pydantic>=2.12.5",
   "pyyaml>=6.0.3",
