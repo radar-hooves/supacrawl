@@ -204,8 +204,8 @@ def test_discovery(mono, app):
             "members": ["godswood", "frontend"],
             "build": False,
             "source": False,
-            "build_on": ["self-hosted", "household"],
-            "deploy_on": ["self-hosted", "household"],
+            "build_on": ["self-hosted", "household", "linux"],
+            "deploy_on": ["self-hosted", "household", "linux"],
         }
     ]
 
@@ -232,7 +232,7 @@ def test_root_image_declares_its_name_and_runners(app):
     art = plan(repo, head, head)["artefacts"][0]
     assert art["image"] == "godswood-backend"
     assert art["build_on"] == ["self-hosted", "builder"]
-    assert art["deploy_on"] == ["self-hosted", "household"]
+    assert art["deploy_on"] == ["self-hosted", "household", "linux"]
 
 
 def test_runner_labels_must_be_a_list(app):
@@ -283,6 +283,7 @@ def test_a_members_markdown_is_runtime_but_docs_are_not(mono):
                 "CLAUDE.md": "c\n",
                 ".claude/rules/x.md": "c\n",
                 "packages/b/README.md": "r\n",
+                "HANDOFF.html": "<li>h</li>\n",
             },
         ),
         mid,
@@ -380,6 +381,119 @@ def test_a_pin_nobody_declares_tests_the_members_that_carry_it(mono, tmp_path):
     p = plan(repo, bump(repo, dist, "deep"), base)
     assert set(p["legs"]) == {"lib", "a", "b"}
     assert p["reasons"]["lib"] == ["lock: runtime set moved"]
+
+
+def shared_base(repo: Path, dist: Path, top_reaches_base: bool = True, below: str = "") -> str:
+    """Servers a and b require clients that share `base`; lib requires `top` directly."""
+    wheel(dist, "1.0", "base", below)
+    wheel(dist, "1.0", "ca", "Requires-Dist: base\n")
+    wheel(dist, "1.0", "cb", "Requires-Dist: base\n")
+    wheel(dist, "1.0", "top", "Requires-Dist: base\n" * top_reaches_base)
+    write(
+        repo,
+        {
+            "packages/lib/pyproject.toml": project("lib", "top"),
+            "packages/a/pyproject.toml": project("a", "lib", "ca"),
+            "packages/b/pyproject.toml": project("b", "lib", "cb"),
+        },
+    )
+    lock(repo, dist)
+    return commit(repo)
+
+
+def test_a_shared_base_moving_beside_a_requirement_tests_only_the_requirers(mono, tmp_path):
+    # mcp-servers 02feb27b0: api-common moved in every client, commbank and nab with it, and
+    # all 69 servers tested; only the one requiring the moved clients had cause.
+    repo, _ = mono
+    dist = tmp_path / "dist"
+    base = shared_base(repo, dist)
+    wheel(dist, "2.0", "base")
+    wheel(dist, "2.0", "top", "Requires-Dist: base\n")
+    lock(repo, dist, "--upgrade-package", "base", "--upgrade-package", "top")
+    p = plan(repo, commit(repo), base)
+    assert p["legs"] == ["lib"]
+    assert p["reasons"]["a"] == p["reasons"]["b"] == ["lock: carried pin moved, ship only"]
+
+
+def test_a_shared_base_no_moved_requirement_reaches_is_tested_by_its_users(mono, tmp_path):
+    repo, _ = mono
+    dist = tmp_path / "dist"
+    base = shared_base(repo, dist, top_reaches_base=False)
+    wheel(dist, "2.0", "base")
+    wheel(dist, "2.0", "top")
+    lock(repo, dist, "--upgrade-package", "base", "--upgrade-package", "top")
+    assert plan(repo, commit(repo), base)["legs"] == ["a", "b", "lib"]
+
+
+def test_a_pin_two_hops_below_no_moved_leg_is_tested_by_its_users(mono, tmp_path):
+    repo, _ = mono
+    dist = tmp_path / "dist"
+    wheel(dist, "1.0", "leaf")
+    base = shared_base(repo, dist, False, below="Requires-Dist: leaf\n")
+    wheel(dist, "2.0", "leaf")
+    wheel(dist, "2.0", "top")
+    lock(repo, dist, "--upgrade-package", "leaf", "--upgrade-package", "top")
+    assert plan(repo, commit(repo), base)["legs"] == ["a", "b", "lib"]
+
+
+def test_a_shared_base_covered_by_a_sibling_leg_it_does_not_wait_on_is_tested(mono, tmp_path):
+    # No library: a deploy waits on no sibling leg, so c's red test must not excuse a and b.
+    repo, _ = mono
+    dist = tmp_path / "dist"
+    wheel(dist, "1.0", "base")
+    for n in "abc":
+        wheel(dist, "1.0", f"c{n}", "Requires-Dist: base\n")
+    write(
+        repo,
+        {
+            "packages/lib/pyproject.toml": project("lib"),
+            "packages/a/pyproject.toml": project("a", "ca"),
+            "packages/b/pyproject.toml": project("b", "cb"),
+            "packages/c/pyproject.toml": project("c", "cc"),
+        },
+    )
+    lock(repo, dist)
+    base = commit(repo)
+    wheel(dist, "2.0", "base")
+    wheel(dist, "2.0", "cc", "Requires-Dist: base\n")
+    lock(repo, dist, "--upgrade-package", "base", "--upgrade-package", "cc")
+    assert plan(repo, commit(repo), base)["legs"] == ["a", "b", "c"]
+
+
+def test_a_line_a_library_dropped_does_not_cover_a_member_that_gained_it(mono, tmp_path):
+    # lib's all-extras set loses xx at head; a gains xx through core[http], a path no library leg covers.
+    repo, _ = mono
+    dist = tmp_path / "dist"
+    for n in ("xx", "top"):
+        wheel(dist, "1.0", n)
+    wheel(dist, "1.0", "core", "Provides-Extra: http\n")
+    wheel(dist, "1.0", "ca", "Requires-Dist: core[http]\n")
+    extra = '[project.optional-dependencies]\nhttp = ["xx"]\n'
+    write(
+        repo,
+        {
+            "packages/lib/pyproject.toml": project("lib", "top", "core", extra=extra),
+            "packages/a/pyproject.toml": project("a", "lib", "ca"),
+            "packages/b/pyproject.toml": project("b", "lib"),
+        },
+    )
+    lock(repo, dist)
+    base = commit(repo)
+    wheel(dist, "2.0", "top")
+    wheel(dist, "2.0", "core", "Provides-Extra: http\nRequires-Dist: xx; extra == 'http'\n")
+    write(repo, {"packages/lib/pyproject.toml": project("lib", "top", "core")})
+    lock(repo, dist, "--upgrade-package", "top", "--upgrade-package", "core")
+    p = plan(repo, commit(repo), base)
+    assert p["legs"] == ["a", "lib"]
+    assert p["reasons"]["b"] == ["lock: carried pin moved, ship only"]
+
+
+def test_a_shared_base_moving_alone_tests_every_member_reaching_it(mono, tmp_path):
+    repo, _ = mono
+    dist = tmp_path / "dist"
+    base = shared_base(repo, dist)
+    p = plan(repo, bump(repo, dist, "base"), base)
+    assert p["legs"] == ["a", "b", "lib"]
 
 
 def test_an_extra_bump_marks_its_member(mono, tmp_path):
@@ -494,8 +608,8 @@ def test_a_source_run_image_builds_for_no_code_and_waits_on_no_test(served):
         "members": None,
         "build": False,
         "source": True,
-        "build_on": ["self-hosted", "household"],
-        "deploy_on": ["self-hosted", "household"],
+        "build_on": ["self-hosted", "household", "linux"],
+        "deploy_on": ["self-hosted", "household", "linux"],
     }
     assert p["reasons"]["image:godswood"] == ["runs from source; no image input moved"]
     # The same push, its image not source-run, builds.
@@ -567,23 +681,24 @@ def test_a_source_naming_no_root_image_is_fatal(mono):
 
 
 # docker and curl as image.sh calls them: a registry whose :latest is $STUB/latest, this host's
-# containers of it in $STUB/boxes (id, revision, run-from-source label), and a label-enabled
-# Watchtower, which moves each unlabelled one onto :latest and none whose label its host dropped.
+# containers of it in $STUB/boxes (id, revision, run-from-source label, compose one-off label), and
+# a label-enabled Watchtower, which moves each unlabelled one onto :latest and none whose label
+# its host dropped, nor a one-off `docker compose run` container.
 STUB = r"""#!/usr/bin/env bash
 s=$STUB last=${*: -1}
 echo "${0##*/} $*" >>"$s/calls"
 case "${0##*/} $1 $2 $3" in
   curl*)
     cat >/dev/null
-    awk -F'\t' -v r="$(sed 's/^d-//' "$s/latest")" 'BEGIN {OFS = FS} $3 != "true" {$2 = r} 1' \
+    awk -F'\t' -v r="$(sed 's/^d-//' "$s/latest")" 'BEGIN {OFS = FS} $3 != "true" && $4 != "True" {$2 = r} 1' \
       "$s/boxes" >"$s/b"
     n=$(diff "$s/boxes" "$s/b" | grep -c '^>')
     mv "$s/b" "$s/boxes"
     echo "{\"summary\": {\"failed\": 0, \"updated\": $n}}" ;;
   "docker ps"*) cut -f1 "$s/boxes" ;;
   "docker inspect"*)
-    awk -F'\t' -v i="$STUB_REF:latest" 'BEGIN {OFS = FS} {print i, $2, "healthy", $1, 0, "img-" $2, $3}' "$s/boxes" ;;
-  "docker image inspect"*) case $4 in *REVISION*) echo "${last##*:}" ;; *) echo "img-${last##*:}" ;; esac ;;
+    awk -F'\t' -v i="$STUB_REF:latest" 'BEGIN {OFS = FS} {print i, $2, "healthy", $1, 0, "img-" $2, $3, "/box-" $1, $4}' "$s/boxes" ;;
+  "docker image inspect"*) case $4 in *RepoDigests*) cat "$s/digests" 2>/dev/null || echo 1 ;; *REVISION*) echo "${last##*:}" ;; *) echo "img-${last##*:}" ;; esac ;;
   "docker login"*) cat >/dev/null ;;
   "docker buildx imagetools inspect")
     case $last in
@@ -609,6 +724,8 @@ def host(tmp_path: Path):
     bin_.mkdir()
     s.mkdir()
     cred.write_text("u:p\n")
+    (bin_ / "stack-up").write_text('#!/usr/bin/env bash\necho "stack-up $*" >>"$STUB/calls"\n[ ! -e "$STUB/up-fails" ]\n')
+    (bin_ / "stack-up").chmod(0o755)
     for tool in ("docker", "curl"):
         (bin_ / tool).write_text(STUB)
         (bin_ / tool).chmod(0o755)
@@ -623,12 +740,13 @@ def host(tmp_path: Path):
         "CHANGE_WATCHTOWER_URL": "http://watchtower.test",
         "CHANGE_WATCHTOWER_TOKEN_FILE": str(cred),
         "NETRC": str(cred),
+        "CHANGE_STACK_UP": str(bin_ / "stack-up"),
         "RUNNER_TEMP": str(tmp_path),
     }
 
-    def image(boxes: list[tuple[str, str]], latest: str, *args: str):
-        """Its run, then :latest, each box's (revision, label) and every call made."""
-        rows = (f"c{i}\t{rev}\t{lab}\n" for i, (rev, lab) in enumerate(boxes))
+    def image(boxes: list[tuple[str, ...]], latest: str, *args: str):
+        """Its run, then :latest, each box's (revision, label[, one-off label]) and every call made."""
+        rows = (f"c{i}\t" + "\t".join(box) + "\n" for i, box in enumerate(boxes))
         (s / "boxes").write_text("".join(rows))
         (s / "latest").write_text(f"d-{latest}\n")
         (s / "calls").write_text("")
@@ -658,6 +776,38 @@ def test_image_publishes_and_leaves_a_source_run_container_to_its_host(host, lab
     assert after == [(old if lab else new, lab) for lab in labels]
     assert ("for this host to adopt in its 1" in r.stdout) == ("true" in labels)
     assert ("healthy on this host" in r.stdout) == ("" in labels)
+
+
+def test_the_host_applies_its_compose_config_to_what_watchtower_took(host):
+    old, new, image = host
+    r, _, _, calls = image([(old, ""), (old, "true")], old, new)
+    assert r.returncode == 0, r.stdout + r.stderr
+    # Only the Watchtower-taken container, after Watchtower.
+    assert calls.count("stack-up box-c0") == 1 and not any("box-c1" in c for c in calls)
+    assert calls.index("stack-up box-c0") > next(i for i, c in enumerate(calls) if c.startswith("curl "))
+
+
+def test_the_host_applies_its_compose_config_to_every_container_of_the_image_in_one_call(host):
+    old, new, image = host
+    r, _, _, calls = image([(old, ""), (old, ""), (old, "true")], old, new)
+    assert r.returncode == 0, r.stdout + r.stderr
+    # Every Watchtower-taken container, once, by name; the source-run one is left out.
+    assert [c for c in calls if c.startswith("stack-up")] == ["stack-up box-c0 box-c1"]
+
+
+def test_a_failed_compose_apply_rolls_the_release_back(host, tmp_path):
+    old, new, image = host
+    (tmp_path / "stub").mkdir(exist_ok=True)
+    (tmp_path / "stub" / "up-fails").write_text("")
+    r, latest, _, _ = image([(old, "")], old, new)
+    assert r.returncode != 0 and "did not apply its compose config" in r.stderr
+    assert latest == f"d-{old}"
+
+
+def test_a_source_run_host_applies_no_compose_config(host):
+    old, new, image = host
+    _, _, _, calls = image([(old, "true")], old, new)
+    assert not any(c.startswith("stack-up") for c in calls)
 
 
 @LABELS
@@ -691,6 +841,34 @@ def test_a_stale_source_run_container_never_asks_watchtower_again(host):
     assert r.returncode == 0, r.stdout + r.stderr
     assert sum(c.startswith("curl ") for c in calls) == 1
     assert after == [(new, ""), (old, "true")]
+
+
+@pytest.mark.parametrize("service", ["", "False"], ids=["unlabelled", "compose-service"])
+def test_a_one_off_run_container_of_the_image_is_not_the_stacks_to_watch(host, service):
+    old, new, image = host
+    # `docker compose run` (com.docker.compose.oneoff=True) keeps the old image while its job runs.
+    r, latest, after, calls = image([(old, "", service), (old, "", "True")], old, new)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert latest == f"d-{new}"
+    assert after == [(new, "", service), (old, "", "True")]
+    assert "healthy on this host" in r.stdout
+
+
+def test_a_host_running_only_a_one_off_container_of_the_image_has_nothing_to_watch(host):
+    old, new, image = host
+    r, latest, _, calls = image([(old, "", "True")], old, new)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert latest == f"d-{new}" and "nothing runs" in r.stdout
+
+
+def test_a_container_on_a_hand_tagged_image_is_refused_at_once(host, tmp_path):
+    old, new, image = host
+    (tmp_path / "stub").joinpath("digests").write_text("0\n")
+    r, latest, _, calls = image([(old, "")], old, new)
+    assert r.returncode != 0
+    assert "container box-c0" in r.stderr and "pull" in r.stderr and "recreate" in r.stderr
+    assert latest == f"d-{old}" and not asked(calls)
+    assert not any(c.startswith("docker push") for c in calls)
 
 
 def test_copied_reads_the_context_paths_a_dockerfile_takes():

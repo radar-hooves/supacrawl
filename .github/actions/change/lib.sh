@@ -48,10 +48,12 @@ typecheck() {  # <root> <dir> <name>
 }
 
 # pytest on <path> from <cwd> in the workspace env at <root>, four workers when xdist is there.
+# The path goes absolute: a conftest that changes directory at import would otherwise start
+# xdist's workers where the relative path names nothing.
 tests() {  # <root> <cwd> <path> [NAME=value...]
   local args=(-p no:cacheprovider)
   (cd "$1" && uv run --no-sync python -c 'import xdist' 2>/dev/null) && args+=(-n 4)
-  (cd "$2" && env "${@:4}" uv run --no-sync --project "$1" python -m pytest "$3" "${args[@]}")
+  (cd "$2" && env "${@:4}" uv run --no-sync --project "$1" python -m pytest "$(realpath "$3")" "${args[@]}")
 }
 
 # Every tracked tests/ in the repo at <top> outside the members at the given paths (the root

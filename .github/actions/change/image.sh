@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # An image member's deploy: build once on the household builder, smoke it, push :<sha>,
-# point :latest at it, ask Watchtower to update, then watch this host's containers of
+# point :latest at it, ask Watchtower to update, have the host apply its declared compose config
+# to those containers (Watchtower keeps the old container's config), then watch this host's containers of
 # :latest come up healthy on that very image. A failed or interrupted go-live points :latest
 # back at the digest it replaced, asks Watchtower again and watches that too. Its state
 # waits in $RUNNER_TEMP until then, so `--rollback`, the deploy job's step after a cancel or
@@ -45,6 +46,7 @@ if [ "$phase" != release ]; then
 fi
 if [ "$phase" != build ]; then
   need CHANGE_WATCHTOWER_URL CHANGE_WATCHTOWER_TOKEN_FILE
+  [ "$sha" = --rollback ] || need CHANGE_STACK_UP
   files+=(CHANGE_WATCHTOWER_TOKEN_FILE)
 fi
 for f in "${files[@]}"; do
@@ -88,6 +90,17 @@ login() {
 # adopts a new image itself, holding off while a job runs inside.
 by_watchtower() { awk -F'\t' '$6 != "true"'; }
 
+# Refuses a container Watchtower takes whose image has no registry digest: hand-tagged, so
+# Watchtower treats it as local and never pulls, and the watch would only time out.
+unpulled() {  # <running()'s rows for Watchtower>
+  local img name
+  while IFS=$'\t' read -r img name; do
+    [ -n "$img" ] || continue
+    [ "$(docker image inspect --format '{{len .RepoDigests}}' "$img")" -gt 0 ] ||
+      die "container ${name#/} runs $img, which has no registry digest, so Watchtower treats it as local and never pulls; pull $ref:latest and recreate ${name#/} once, then deploy again"
+  done < <(awk -F'\t' '{print $5 "\t" $7}' <<<"$1" | sort -u)
+}
+
 # Every container of :latest here runs from source, so Watchtower is not asked at all.
 host_adopts() { [ "$before" -eq 0 ] && [ "$held" -gt 0 ]; }
 
@@ -99,6 +112,15 @@ watchtower() {
   echo "watchtower: $out"
   wt=$out
   jq -e '.summary.failed == 0' <<<"$out" >/dev/null
+}
+
+# `CHANGE_STACK_UP <container>...` runs `docker compose up -d` (no pull) on the services of the
+# containers Watchtower took, read before it acted. A rollback restores the image alone;
+# reverting config is reverting its commit.
+apply_config() {
+  local names
+  mapfile -t names < <(cut -f7 <<<"$towered" | sed 's#^/##')
+  "$CHANGE_STACK_UP" "${names[@]}"
 }
 
 # The registry answers :latest with digest $1, within a minute: Watchtower reads it moments later.
@@ -249,6 +271,7 @@ held=$(($(grep -c . <<<"$rows" || true) - before))
 live=$(sole 1 <<<"$rows") old=$(sole 1 <<<"$towered") oldimg=$(sole 5 <<<"$towered")
 # A re-run of an older run must never roll production back, a source-run container's included.
 [ -z "$live" ] || [ "$live" = "$sha" ] || no_rollback "$dir" "$name" "$live" "$sha" || exit 1
+unpulled "$towered"
 
 [ "$phase" = release ] || docker push -q "$ref:$sha"
 pid=$$
@@ -259,6 +282,7 @@ docker buildx imagetools create --prefer-index=false -t "$ref:latest" "$ref:$sha
 serves "$(docker buildx imagetools inspect --format '{{json .Manifest}}' "$ref:$sha" | jq -r .digest)" ||
   die "$ref:latest did not move to $sha"
 host_adopts || nudge "$img" || die "Watchtower's update of $ref failed"
+[ "$before" -eq 0 ] || apply_config || die "the host did not apply its compose config to $name's containers"
 [ "$held" -eq 0 ] || note "$ref:latest is $sha, for this host to adopt in its $held source-run container(s) of it"
 if [ "$before" -gt 0 ]; then
   watch "$img" || die "$name $sha did not come up healthy on this host"

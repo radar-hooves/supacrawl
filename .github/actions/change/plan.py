@@ -25,9 +25,10 @@ from dataclasses import dataclass
 
 # A member's own .md can be a runtime file (a prompt), so only these are ignored.
 IGNORED = re.compile(
-    r"(docs|\.github|\.vscode)/.*|\.claude/(?!hooks/).*|[^/]*\.md|(.*/)?docs/.*\.md"
+    r"(docs|\.github|\.vscode)/.*|\.claude/(?!hooks/).*|[^/]*\.md|HANDOFF\.html|(.*/)?docs/.*\.md"
     r"|(.*/)?(README\.md|CHANGELOG\.md|\.gitignore|\.gitattributes"
-    r"|LICENSE.*|renovate\.json.*|\.pre-commit-config\.yaml|\.editorconfig|\.mcp\.json)"
+    r"|LICENSE.*|renovate\.json.*|\.pre-commit-config\.yaml|\.editorconfig|\.mcp\.json"
+    r"|\.canonical-exceptions|\.template-parity\.json)"
 )
 SMOKE = ".github/image-smoke.sh"
 SYSTEM = "system-packages.txt"  # the factory image's apt list
@@ -95,7 +96,7 @@ def cap(xs: list[str], n: int = 8) -> list[str]:
     return xs[:n] + [f"+{len(xs) - n} more"] * (len(xs) > n)
 
 
-RUNNERS = ["self-hosted", "household"]
+RUNNERS = ["self-hosted", "household", "linux"]
 
 
 def runners(change: dict, key: str) -> list[str]:
@@ -638,18 +639,22 @@ def plan(
     def graph(lock: str, sha: str) -> dict[str, dict]:
         """uv.lock's packages by name, a forked resolution's entries merged."""
         out: dict[str, dict] = {}
-        for p in tomllib.loads(manifests(repo, sha)[join(lock, "uv.lock")].decode()).get("package", []):
-            e = out.setdefault(norm(p["name"]), {"dependencies": [], "optional-dependencies": {}})
+        for p in tomllib.loads(
+            manifests(repo, sha)[join(lock, "uv.lock")].decode()
+        ).get("package", []):
+            e = out.setdefault(
+                norm(p["name"]), {"dependencies": [], "optional-dependencies": {}}
+            )
             e["dependencies"] += p.get("dependencies", [])
             for k, v in p.get("optional-dependencies", {}).items():
                 e["optional-dependencies"].setdefault(k, []).extend(v)
         return out
 
     @functools.cache
-    def declared(m: Member, sha: str) -> frozenset[str]:
-        """The pins a member declares: its own third-party requirements and what each names,
-        read from the lock's graph (a deeper chain, an api-client's shared base, is that
-        package's to answer for). A moved pin is then the declarer's to test, and
+    def declared(m: Member, sha: str, deep: bool = True) -> frozenset[str]:
+        """The pins a member declares: its own third-party requirements and, when deep, what
+        each names, read from the lock's graph (a deeper chain, an api-client's shared base,
+        is that package's to answer for). A moved pin is then the declarer's to test, and
         its users ship on it without a test leg: the fleet runs what the lock says."""
         mine = lines(export(repo, sha, m.lock, m.name, m.group))
         raw = manifests(repo, sha).get(join(m.lock, "uv.lock"))
@@ -658,11 +663,55 @@ def plan(
         pkgs = graph(m.lock, sha)
         own = {norm(o.name) for o in members if o.lock == m.lock}
         seen = {r for r in m.runtime if r not in own}
-        for n in [*seen]:
+        for n in [*seen] if deep else []:
             deps = pkgs.get(n, {})
-            for d in [*deps.get("dependencies", []), *sum(deps.get("optional-dependencies", {}).values(), [])]:
+            for d in [
+                *deps.get("dependencies", []),
+                *sum(deps.get("optional-dependencies", {}).values(), []),
+            ]:
                 seen.add(norm(d["name"]))
         return frozenset(l for l in mine if norm(l) in seen)
+
+    def carries(m: Member) -> list[Member]:
+        """The library members m ships with, transitively: the legs its deploy waits on."""
+        seen, todo = [], [m]
+        while todo:
+            t = todo.pop()
+            new = [
+                o
+                for o in members
+                if o.library
+                and o is not m
+                and o not in seen
+                and norm(o.name) in t.runtime
+                and o.lock == m.lock
+            ]
+            seen, todo = seen + new, todo + new
+        return seen
+
+    @functools.cache
+    def covered(m: Member, base: str) -> tuple[frozenset[str], frozenset[str]]:
+        """The (added, removed) lines of the full sets of the library members m waits on
+        whose own requirements moved: those legs test it, and m ships none of them red. A
+        pin one hop below another member's requirement (api-common, below every api-client)
+        is carried, tested by no leg of its own, only when such a leg reaches it."""
+        added, removed = set(), set()
+        for o in carries(m):
+            if o.group or declared(o, base, False) == declared(o, head, False):
+                continue
+            old, new = (export(repo, s, o.lock, o.name, None) for s in (base, head))
+            if old is not None and new is not None:
+                added |= lines(new) - lines(old)
+                removed |= lines(old) - lines(new)
+        return frozenset(added), frozenset(removed)
+
+    def reached(m: Member, base: str) -> bool:
+        """Every line m's set gained or lost is one a library it waits on gained or lost."""
+        old, new = (
+            lines(export(repo, s, m.lock, m.name, m.group)) for s in (base, head)
+        )
+        added, removed = covered(m, base)
+        return new - old <= added and old - new <= removed
 
     @functools.cache
     def orphaned(lock: str, base: str) -> bool:
@@ -767,8 +816,9 @@ def plan(
             if moved := lock_moved(m, base):
                 if (
                     moved.startswith("lock: export failed")
-                    or declared(m, base) != declared(m, head)
+                    or declared(m, base, False) != declared(m, head, False)
                     or orphaned(m.lock, base)
+                    or not reached(m, base)
                 ):
                     why.append(moved)
                 else:

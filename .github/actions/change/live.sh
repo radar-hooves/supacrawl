@@ -11,14 +11,16 @@ revision='{{range .Config.Env}}{{if eq (index (split . "=") 0) "REVISION"}}{{ind
 
 # One line per running container of image $1 (:latest), tab-separated: its REVISION, its
 # health status (its state when it has no healthcheck), its id, its restart count, its image,
-# its household.run-from-source label.
+# its household.run-from-source label, its name (leading slash). A one-off `docker compose run`
+# container (label com.docker.compose.oneoff=True) is no service of the stack and is left out.
 # `.ID`, never `.Id`: one untyped field drops docker to the raw map, where a container
 # without a healthcheck has no Health key and is left out. `|| true`: one may exit mid-call.
 running() {
   docker ps -q | { xargs -r docker inspect --format '{{.Config.Image}}{{"\t"}}'"$revision"'{{"\t"}}
     {{- if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}{{"\t"}}{{.ID}}{{"\t"}}{{.RestartCount}}{{"\t"}}{{.Image}}{{"\t"}}
-    {{- index .Config.Labels "household.run-from-source"}}' \
-    || true; } | awk -F'\t' -v r="$1" 'BEGIN {OFS = FS} $1 == r || $1 == r ":latest" {print $2, $3, $4, $5, $6, $7}'
+    {{- index .Config.Labels "household.run-from-source"}}{{"\t"}}{{.Name}}{{"\t"}}
+    {{- index .Config.Labels "com.docker.compose.oneoff"}}' \
+    || true; } | awk -F'\t' -v r="$1" 'BEGIN {OFS = FS} ($1 == r || $1 == r ":latest") && $9 != "True" {print $2, $3, $4, $5, $6, $7, $8}'
 }
 
 # The one distinct value in column $1 of running()'s rows on stdin; nothing when none or several.
