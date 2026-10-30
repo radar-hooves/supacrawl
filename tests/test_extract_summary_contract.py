@@ -134,7 +134,54 @@ class TestExtractFollowsSchema:
             await _extract_service(PageScrape()).extract(urls=[URL], schema={"type": "array"})
 
 
+def _long_page(needle: str) -> str:
+    """A page well past the prompt budget with its answer in the last section, as a long docs page has."""
+    filler = "\n\n".join(f"## Option{i}\n\nOrdinary filler describing option {i} at length." for i in range(3000))
+    return f"# Config\n\n{filler}\n\n## minimumReleaseAgeBehaviour\n\n{needle}"
+
+
+class TestLongPagesAreSearchedNotCut:
+    NEEDLE = "Allowed values are timestamp-required and timestamp-optional."
+
+    async def test_an_answer_past_the_cut_still_reaches_the_model_and_the_cut_is_reported(
+        self, llm_wire: LLMWire
+    ) -> None:
+        page = PageScrape(_long_page(self.NEEDLE))
+        assert len(page.markdown) > 50_000 and page.markdown.index(self.NEEDLE) > 50_000
+        llm_wire.replies.append('{"allowed": ["timestamp-required", "timestamp-optional"]}')
+
+        data, cut = await _extract_service(page).extract_page(
+            URL, prompt="Quote the minimumReleaseAgeBehaviour option verbatim: allowed values"
+        )
+
+        sent = llm_wire.requests[0]["messages"][-1]["content"]
+        assert self.NEEDLE in sent
+        assert "[Excerpt:" in sent
+        assert cut is not None and cut["strategy"] == "query_ranked" and cut["total_chars"] == len(page.markdown)
+        assert data == {"allowed": ["timestamp-required", "timestamp-optional"]}
+
+    async def test_the_model_is_told_to_report_absence_not_invent(self, llm_wire: LLMWire) -> None:
+        llm_wire.replies.append('{"not_found": true, "reason": "the page does not show it"}')
+
+        data, cut = await _extract_service(PageScrape()).extract_page(URL, prompt="the warranty length")
+
+        system = llm_wire.requests[0]["messages"][0]["content"]
+        assert "never answer from your own knowledge" in system and "not_found" in system
+        assert cut is None
+        assert data["not_found"] is True
+
+
 class TestSummaryIsASummary:
+    async def test_focus_is_the_instruction_and_picks_the_excerpt(self, llm_wire: LLMWire) -> None:
+        llm_wire.replies.append("Names: use gerunds. Evaluations: not covered.")
+        page = PageScrape(_long_page("Naming: use gerund form for skill names."))
+
+        await supacrawl_summary(_services(page), URL, focus="naming guidance, evaluations")
+
+        sent = llm_wire.requests[0]["messages"][-1]["content"]
+        assert "naming guidance, evaluations" in sent and "not covered" in sent
+        assert "Naming: use gerund form" in sent
+
     async def test_returns_a_bounded_summary_with_the_source_url_and_never_the_page(self, llm_wire: LLMWire) -> None:
         llm_wire.replies.append(
             "The widget costs nine dollars fifty. It is sold by the example shop. "

@@ -144,8 +144,22 @@ class ExtractService:
         prompt: str | None = None,
         schema: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
+        """Extract from one URL; see :meth:`extract_page` for what it raises."""
+        data, _ = await self.extract_page(url, prompt, schema)
+        return data
+
+    async def extract_page(
+        self,
+        url: str,
+        prompt: str | None = None,
+        schema: dict[str, Any] | None = None,
+    ) -> tuple[dict[str, Any], dict[str, int | str] | None]:
         """
-        Extract from one URL.
+        Extract from one URL, returning ``(data, truncation)``.
+
+        ``truncation`` is None when the model saw the whole page; otherwise it
+        gives the page's full length, what the model saw and how it was chosen
+        (passages ranked against ``prompt``, else the head).
 
         Raises:
             ValidationError: ``schema`` is not valid JSON Schema for an object.
@@ -171,18 +185,24 @@ class ExtractService:
         if not content.strip():
             raise ProviderError("No content extracted from page", provider="scrape")
 
+        shown, cut = clip_content(content, prompt)
         messages = [
             {"role": "system", "content": self._build_system_prompt(schema)},
-            {"role": "user", "content": self._build_user_prompt(content, prompt, schema)},
+            {"role": "user", "content": self._build_user_prompt(shown, prompt, schema)},
         ]
-        return await client.chat_json(messages, schema=schema)
+        return await client.chat_json(messages, schema=schema), cut
 
     def _build_system_prompt(self, schema: dict[str, Any] | None) -> str:
         """Build system prompt for extraction."""
         base = (
             "You are a data extraction assistant. Your task is to extract "
             "structured information from web page content. "
-            "Always respond with valid JSON only, no explanations."
+            "Always respond with valid JSON only, no explanations. "
+            "Use only the page content given: never answer from your own knowledge. "
+            "When the page does not contain something asked for, say so: use null for that field "
+            '(or, with no schema, {"not_found": true, "reason": "..."}). '
+            "The page may be an excerpt; absence from an excerpt is not proof the page lacks it, "
+            "so say the excerpt did not show it."
         )
 
         if schema:
@@ -205,6 +225,6 @@ class ExtractService:
         if schema:
             parts.append("Extract data according to the provided schema.")
 
-        parts.append(f"\n\nWeb page content:\n\n{clip_content(content)}")
+        parts.append(f"\n\nWeb page content:\n\n{content}")
 
         return "\n".join(parts)

@@ -15,9 +15,11 @@ LOGGER = logging.getLogger(__name__)
 # Blocks longer than this (tables, long code) are split by line so one giant
 # block cannot hide the matching rows from the ranking.
 _BLOCK_SPLIT_CHARS = 1500
+_SECTION_BLOCK_CHARS = 4000
 _GAP_MARKER = "[…]"
 _TABLE_SEPARATOR = re.compile(r"^\|?\s*:?-{3,}")
 _WORD = re.compile(r"\w+")
+_HEADING = re.compile(r"^(#{1,6})\s+(.*?)\s*#*\s*$")
 
 
 def _tokens(text: str) -> list[str]:
@@ -45,11 +47,24 @@ def _split_long_block(block: str) -> list[str]:
 
 
 def _blocks(markdown: str) -> list[str]:
-    blocks: list[str] = []
+    """Blocks to rank: a short section (heading and everything under it) is one block, so its body is ranked
+    by its title; a longer one is split on blank lines, its heading kept with the first block under it."""
+    sections: list[list[str]] = []
     for block in re.split(r"\n\s*\n", markdown):
         if not block.strip():
             continue
-        blocks.extend(_split_long_block(block) if len(block) > _BLOCK_SPLIT_CHARS else [block])
+        if not sections or _HEADING.match(block.split("\n", 1)[0]):
+            sections.append([])
+        sections[-1].append(block)
+    blocks: list[str] = []
+    for parts in sections:
+        if len("\n\n".join(parts)) <= _SECTION_BLOCK_CHARS:
+            blocks.append("\n\n".join(parts))
+            continue
+        if len(parts) > 1 and _HEADING.match(parts[0]) and "\n" not in parts[0]:
+            parts = ["\n\n".join(parts[:2]), *parts[2:]]
+        for block in parts:
+            blocks.extend(_split_long_block(block) if len(block) > _BLOCK_SPLIT_CHARS else [block])
     return blocks
 
 
@@ -102,3 +117,38 @@ def bound_markdown(markdown: str, max_chars: int, query: str | None = None) -> t
     if not chosen:
         return _head(markdown, max_chars), "head"
     return text[:max_chars], "query_ranked"
+
+
+def _slug(text: str) -> str:
+    """A heading's anchor: lower-case words joined by hyphens, as GitHub and most doc sites make them."""
+    return "-".join(_tokens(re.sub(r"[`*_\[\]]", "", text)))
+
+
+def select_section(markdown: str, section: str) -> str | None:
+    """The part of ``markdown`` under the heading named by ``section``, or None when none matches.
+
+    ``section`` is a heading's text or its anchor (``#`` optional), compared
+    case-insensitively by anchor slug. The section runs from the heading to the
+    next heading of the same or higher level, so its subsections come with it.
+    Fenced code is never read as headings.
+    """
+    wanted = _slug(section.lstrip("#"))
+    if not wanted:
+        return None
+    lines = markdown.split("\n")
+    start = level = None
+    fence = False
+    for i, line in enumerate(lines):
+        if line.lstrip().startswith(("```", "~~~")):
+            fence = not fence
+            continue
+        match = None if fence else _HEADING.match(line)
+        if not match:
+            continue
+        depth = len(match.group(1))
+        if start is None:
+            if _slug(match.group(2)) == wanted:
+                start, level = i, depth
+        elif depth <= level:  # type: ignore[operator]
+            return "\n".join(lines[start:i]).strip()
+    return None if start is None else "\n".join(lines[start:]).strip()

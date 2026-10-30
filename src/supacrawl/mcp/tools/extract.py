@@ -48,6 +48,11 @@ async def supacrawl_extract(
     structured-output setting, the reply is validated against it, and a reply
     that still breaks it after one repair turn fails that URL.
 
+    A page too long for the model is cut to the passages best matching your
+    prompt (else its head), and the result says so in `truncation`. The model
+    answers from the page only: what the page does not show comes back null (or
+    `{"not_found": true}` with no schema), never from its own knowledge.
+
     Use this tool when you need structured data out of one or more pages:
     - You need structured data (JSON) from web pages
     - You want to extract specific fields from multiple URLs at once
@@ -91,7 +96,9 @@ async def supacrawl_extract(
             "succeeded_count": 1,
             "failed_count": 0,
             "data": [
-                {"url": "...", "success": true, "data": {...}},   # conforms to schema
+                {"url": "...", "success": true, "data": {...},    # conforms to schema
+                 "truncation": {...}},   # only when the page was too long for the model: full
+                                         # length, chars shown, strategy (query_ranked | head)
                 {"url": "...", "success": false, "error": "..."}
             ],
             "correlation_id": "..."
@@ -122,8 +129,11 @@ async def supacrawl_extract(
         async with ExtractService(scrape_service=api_client.scrape_service) as service:
             for url in validated_urls:
                 try:
-                    data = await service.extract_one(url, validated_prompt, validated_schema)
-                    results.append({"url": url, "success": True, "data": data})
+                    data, truncation = await service.extract_page(url, validated_prompt, validated_schema)
+                    item: dict[str, Any] = {"url": url, "success": True, "data": data}
+                    if truncation:
+                        item["truncation"] = truncation
+                    results.append(item)
                 except ConfigurationError, ValidationError:
                     # No LLM, or a schema no URL could satisfy: the whole call fails
                     raise

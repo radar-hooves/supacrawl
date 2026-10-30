@@ -9,7 +9,7 @@ from typing import Annotated, Any, Literal
 from api_common.correlation import generate_correlation_id
 from pydantic import Field
 
-from supacrawl.excerpt import bound_markdown
+from supacrawl.excerpt import bound_markdown, select_section
 from supacrawl.mcp.exceptions import SupacrawlValidationError, log_tool_exception, map_exception
 from supacrawl.mcp.validators import validate_timeout, validate_url
 from supacrawl.services.browser import ENGINE_CHOICES
@@ -52,6 +52,18 @@ def _bound_response(response: dict, max_chars: int | None, query: str | None) ->
         data[name] = cut
         fields[name] = {"total_chars": len(text), "returned_chars": len(cut), "strategy": strategy}
     response["truncation"] = {"max_chars": max_chars, "truncated": bool(fields), "fields": fields}
+
+
+def _select_section(response: dict, section: str | None) -> None:
+    """Narrow the markdown to ``section`` in place and report whether a heading matched."""
+    data = response.get("data")
+    if not section or not data or not data.get("markdown"):
+        return
+    total = len(data["markdown"])
+    picked = select_section(data["markdown"], section)
+    if picked is not None:
+        data["markdown"] = picked
+    response["section"] = {"requested": section, "found": picked is not None, "total_chars": total}
 
 
 async def supacrawl_scrape(
@@ -185,6 +197,12 @@ async def supacrawl_scrape(
         int | None,
         Field(
             description="Cap markdown/html/rawHtml at this many characters so a large page cannot overflow your tool-result budget. The response then carries `truncation` with the full length of every field it cut. With `query` set, markdown keeps the passages that best match it (strategy: query_ranked), otherwise the head. Default: no cap (a warning is added when markdown exceeds 100,000 characters).",
+        ),
+    ] = None,
+    section: Annotated[
+        str | None,
+        Field(
+            description="Return only one section of a long page: a heading's text or its anchor (e.g. `minimumReleaseAgeBehaviour` or `#minimumreleaseagebehaviour`), with its subsections. The result's `section` says whether it matched; when it did not, markdown is returned whole (a `section.found` of false) so nothing is lost. Applies before max_chars."
         ),
     ] = None,
     http_first: Annotated[
@@ -347,6 +365,10 @@ async def supacrawl_scrape(
             `truncation` with the full length of every field it cut. With `query`
             set, markdown keeps the passages that best match it (strategy
             "query_ranked"), otherwise the head. Default: no cap (a warning is added when markdown exceeds 100,000 characters).
+        section: Return only the part of the markdown under one heading (heading text
+            or anchor), with its subsections. The result carries `section`:
+            {"requested", "found", "total_chars"}; when no heading matches,
+            markdown is returned whole. Applies before max_chars.
         http_first: Try a cheap HTTP GET before launching a browser (default True).
             Static pages return faster; pages needing JavaScript or showing a bot
             challenge transparently escalate to the full browser render. Set False
@@ -475,6 +497,7 @@ async def supacrawl_scrape(
 
         response = result.model_dump()
         response["correlation_id"] = correlation_id
+        _select_section(response, section)
         _bound_response(response, limit, query)
         return response
 

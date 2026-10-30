@@ -42,3 +42,34 @@ def test_query_finds_a_row_deep_inside_a_giant_table():
 def test_a_query_matching_nothing_falls_back_to_the_head():
     text, strategy = bound_markdown("word " * 1000, 100, "zzzunmatched")
     assert strategy == "head" and len(text) <= 100
+
+
+DOC = "# Top\n\nintro\n\n## Alpha Option\n\nalpha body\n\n### Sub\n\nsub body\n\n```\n# not a heading\n```\n\n## Beta\n\nbeta body"
+
+
+def test_a_section_runs_to_the_next_heading_of_its_level_with_its_subsections():
+    from supacrawl.excerpt import select_section
+
+    out = select_section(DOC, "Alpha Option")
+    assert out is not None and out.startswith("## Alpha Option") and "sub body" in out
+    assert "# not a heading" in out and "beta body" not in out
+
+
+def test_a_section_is_found_by_anchor_and_the_last_runs_to_the_end():
+    from supacrawl.excerpt import select_section
+
+    assert select_section(DOC, "#alpha-option") == select_section(DOC, "alpha option")
+    assert select_section(DOC, "beta") == "## Beta\n\nbeta body"
+
+
+def test_an_unknown_section_is_none():
+    from supacrawl.excerpt import select_section
+
+    assert select_section(DOC, "gamma") is None
+
+
+def test_a_table_under_a_heading_is_ranked_by_the_headings_name():
+    filler = "\n\n".join(f"## Opt{i}\n\nfiller about option {i} and the default allowed values" for i in range(400))
+    doc = f"{filler}\n\n## zetaThing\n\nintro text\n\n| Name | Value |\n|---|---|\n| allowedValues | a, b |"
+    text, _ = bound_markdown(doc, 3000, "what are the allowed values of zetaThing")
+    assert "| allowedValues | a, b |" in text

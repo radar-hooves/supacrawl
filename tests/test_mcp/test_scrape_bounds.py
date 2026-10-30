@@ -81,3 +81,17 @@ async def test_a_non_positive_max_chars_is_refused():
 
     with pytest.raises(SupacrawlValidationError):
         await supacrawl_scrape(_client("x"), url="https://example.com", max_chars=0)
+
+
+async def test_section_returns_one_heading_and_reports_the_match():
+    text = "# Doc\n\n## One\n\nfirst\n\n## Two\n\nsecond"
+    out = await supacrawl_scrape(_client(text), url="https://example.com", section="#two")
+    assert out["data"]["markdown"] == "## Two\n\nsecond"
+    assert out["section"] == {"requested": "#two", "found": True, "total_chars": len(text)}
+
+
+async def test_an_unmatched_section_returns_the_page_whole_and_says_so():
+    text = "# Doc\n\n## One\n\nfirst"
+    out = await supacrawl_scrape(_client(text), url="https://example.com", section="nope")
+    assert out["data"]["markdown"] == text
+    assert out["section"]["found"] is False

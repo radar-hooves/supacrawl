@@ -7,6 +7,7 @@ from typing import Any
 import httpx
 
 from supacrawl.exceptions import ExtractionSchemaError, ProviderError, generate_correlation_id
+from supacrawl.excerpt import bound_markdown
 from supacrawl.llm.config import LLMConfig
 from supacrawl.llm.response import strip_reasoning_preamble, text_from_blocks
 from supacrawl.llm.schema import schema_errors, schema_validator
@@ -19,11 +20,22 @@ MAX_CONTENT_CHARS = 50_000
 SCHEMA_ATTEMPTS = 2
 
 
-def clip_content(content: str) -> str:
-    """Page content cut to what a prompt carries."""
-    if len(content) <= MAX_CONTENT_CHARS:
-        return content
-    return content[:MAX_CONTENT_CHARS] + "\n\n[Content truncated...]"
+def clip_content(content: str, query: str | None = None) -> tuple[str, dict[str, int | str] | None]:
+    """Page content cut to what a prompt carries, and what was cut (None when nothing was).
+
+    With ``query`` the budget goes to the passages that best match it, so an
+    answer deep in a long page is still in front of the model; the text then
+    says it is an excerpt, so the model can report what it did not see.
+    """
+    text, strategy = bound_markdown(content, MAX_CONTENT_CHARS, query)
+    if strategy == "none":
+        return content, None
+    note = (
+        f"[Excerpt: {len(text)} of {len(content)} characters of the page ({strategy}); "
+        "passages marked […] and anything after the end are omitted.]"
+    )
+    cut: dict[str, int | str] = {"total_chars": len(content), "returned_chars": len(text), "strategy": strategy}
+    return f"{text}\n\n{note}", cut
 
 
 def bound_words(text: str, max_words: int) -> str:
@@ -238,10 +250,15 @@ class LLMClient:
         """
         instruction = f"Summarise the following web page in at most {max_words} words, keeping its key information."
         if focus:
-            instruction += f" Focus on: {focus}."
+            instruction = (
+                f"Write a summary of the following web page in at most {max_words} words that answers this "
+                f"focus, point by point:\n{focus}\nFor any point the page does not cover, say so "
+                '("not covered"); never fill it from your own knowledge.'
+            )
+        clipped, _ = clip_content(text, focus)
         messages = [
             {"role": "system", "content": "You summarise web pages. Reply with the summary only, as plain text."},
-            {"role": "user", "content": f"{instruction}\n\n{clip_content(text)}"},
+            {"role": "user", "content": f"{instruction}\n\n{clipped}"},
         ]
         return bound_words(await self.chat(messages, think=False), max_words)
 

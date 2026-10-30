@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- **`extract` no longer answers from the model's prior when the page is too long**: a page over the 50,000-character prompt budget was cut at the head, so a section deep in a long page (Renovate's `minimumReleaseAgeBehaviour`) never reached the model, which invented `allow/deny/ask`. The budget now goes to the passages that best match the prompt (`bound_markdown`, a short section ranked as one block under its heading), the text tells the model it is an excerpt, the system prompt forbids answering from its own knowledge and asks for null / `{"not_found": true}` for what the page does not show, and the MCP result carries `truncation` (`total_chars`, `returned_chars`, `strategy`) per URL. Asked by master-project (MCP session feedback), 30/10/2026.
+- **`summary` honours `focus`**: focus is now the instruction, answered point by point with "not covered" for points the page lacks, and it picks the excerpt of a long page. Asked by master-project, 30/10/2026.
+
+### Added
+
+- **`section` on `supacrawl_scrape`**: return only the part of the markdown under one heading (text or anchor), subsections included; the result's `section` reports whether it matched, and an unmatched section returns the page whole. Asked by master-project, 30/10/2026.
+
 ### Security
 
 - **brotli 1.2.0 to 1.2.1 and Pillow 12.3.0 to 13.0.0**: CVE-2026-111497 (Brotli decoder, reachable from any scraped page because `httpx[brotli]` advertises `Accept-Encoding: br`) and the Pillow crafted-image code-execution flaw. Both are now explicit floors in `pyproject.toml`. Asked by master-project (estate security sweep), 30/10/2026.
