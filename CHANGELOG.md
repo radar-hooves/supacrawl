@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## [2026.10.0] - 30/10/2026
+
 ### Fixed
 
 - **`extract` no longer answers from the model's prior when the page is too long**: a page over the 50,000-character prompt budget was cut at the head, so a section deep in a long page (Renovate's `minimumReleaseAgeBehaviour`) never reached the model, which invented `allow/deny/ask`. The budget now goes to the passages that best match the prompt (`bound_markdown`, a short section ranked as one block under its heading), the text tells the model it is an excerpt, the system prompt forbids answering from its own knowledge and asks for null / `{"not_found": true}` for what the page does not show, and the MCP result carries `truncation` (`total_chars`, `returned_chars`, `strategy`) per URL. Asked by master-project (MCP session feedback), 30/10/2026.
@@ -13,6 +15,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
+- **`SUPACRAWL_OUTPUT_FILTER=package.module:callable` for the MCP server**: an opt-in `str -> str` text filter of the deployer's choosing (a PII masker, DLP call) that every tool result passes through, via one outermost FastMCP middleware so a later tool cannot skip it. Fail closed: an unusable filter stops the server at start, a filter that raises withholds the response, naming the setting and no page text. Binary screenshots and PDFs are skipped. See `docs/configuration.md`. Asked by master-project (radar-hooves/mcp-servers#1016), 30/10/2026.
 - **`section` on `supacrawl_scrape`**: return only the part of the markdown under one heading (text or anchor), subsections included; the result's `section` reports whether it matched, and an unmatched section returns the page whole. Asked by master-project, 30/10/2026.
 
 ### Security

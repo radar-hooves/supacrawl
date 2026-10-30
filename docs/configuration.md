@@ -81,6 +81,20 @@ When a self-hosted SearXNG's own engines go down under load, every query comes b
 
 A quieter failure exists: SearXNG's upstream engines get CAPTCHA-walled and return _nothing_ while SearXNG itself answers HTTP 200 with an empty set and names no unresponsive engine — indistinguishable, on a single query, from a genuine no-match. supacrawl handles it without ever turning a real no-match into an error: an empty answer from one provider lets the chain try the next **configured** provider (never an unconfigured public engine unless `PUBLIC_FALLBACK` is on), an unbroken run of empty answers degrades that provider's health (`consecutive_empty` climbs; a query with matches clears it), and — once a full window of caller searches has come back empty in a row — every search response carries `all_recent_empty: true`. That last flag is what lets a caller tell "no matches" from "the backend has stopped answering" off the response itself, without polling `supacrawl_health`. An all-configured-providers-empty result stays `success: true` with `data: []`: a query with nothing to find is a real outcome, not a failure.
 
+## Filtering what the MCP server returns
+
+`SUPACRAWL_OUTPUT_FILTER=package.module:callable` (MCP server only) scrubs every string the server returns to its client through a function you supply, so a PII masker, profanity filter or DLP call sits between scraped pages and the model. Unset (the default) changes nothing. supacrawl knows nothing about what the filter does.
+
+**The callable's contract:** a plain `str -> str`, importable as `module:callable` (a dotted attribute such as `module:obj.method` works) from the same environment as supacrawl. It runs inline on the server's event loop, once per text field, so keep it fast. It must return a string.
+
+**Fail closed.** A value that cannot be imported, is not `module:callable`, or is not callable stops `supacrawl-mcp` at start with an error naming `SUPACRAWL_OUTPUT_FILTER`; the server never serves unfiltered. A filter that raises or returns a non-string fails that tool call with an error naming the setting and carrying no page text.
+
+**Filtered:** every string in every tool result — `scrape` (markdown, html, rawHtml, links, images, metadata, summary, json, structuredData), `crawl`, `batch`, `map`, `search`, `extract`, `summary`, `diagnose`, `health` — and the text of an error a tool raises. A scrape response costs one call per string field, not one per line. Tools' own status fields and URLs are strings too, so they pass through the filter as well. HTML is filtered as markup text: an identifier split by tags is the filter's problem.
+
+**Not filtered:** screenshots and PDFs (base64 binary, not text; skipped only where a `screenshot`, `screenshots` or `pdf` field holds a long base64 run), non-string values (numbers, booleans), the server's static resources and prompts, and logs and the local cache, which hold unfiltered page content on the host. The REST API (`supacrawl-api`) is a separate surface and is not covered.
+
+**The seam.** A FastMCP middleware on `tools/call`, installed outermost, filters the whole result; a tool added later is covered without any code in it. A result carrying a content block that is neither text, image nor text resource is withheld rather than passed unproven.
+
 ## Telemetry over OTLP
 
 supacrawl always writes telemetry to the local `events.jsonl` (the durable record). Each event is **also** emitted as one structured log record on the `supacrawl.telemetry` logger, so a standard log/trace collector can pick it up without supacrawl pushing to any log store's own API or holding a credential for one.

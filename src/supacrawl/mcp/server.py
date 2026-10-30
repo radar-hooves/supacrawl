@@ -38,6 +38,7 @@ from supacrawl.mcp.config import (
     logger,
 )
 from supacrawl.mcp.exceptions import SupacrawlConnectionError
+from supacrawl.mcp.output_filter import OutputFilterError, OutputFilterMiddleware, resolve_filter
 from supacrawl.mcp.wiring import register_all_tools, register_prompts, register_resources
 from supacrawl.services.registry import create_supacrawl_services
 
@@ -110,6 +111,11 @@ class SupacrawlServer(BaseMCPServer):
             auth=auth,
             settings=self._settings,
         )
+        text_filter = resolve_filter(self._settings.output_filter)
+        if text_filter is not None:
+            # Outermost, so it also sees the final error after retries; every
+            # tool, present or future, answers through it.
+            self.mcp.middleware.insert(0, OutputFilterMiddleware(text_filter))
 
     async def create_api_client(self) -> Any:
         """Create and return the supacrawl services wrapper."""
@@ -246,7 +252,11 @@ def main() -> None:
             )
             sys.exit(1)
 
-    server = SupacrawlServer()
+    try:
+        server = SupacrawlServer()
+    except OutputFilterError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        sys.exit(1)
     anyio.run(
         lambda: server.run_async_server(
             transport=args.transport,

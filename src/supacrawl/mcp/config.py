@@ -149,6 +149,13 @@ class SupacrawlSettings(BaseMCPSettings):
         ),
     )
 
+    # ``package.module:callable``, a ``str -> str`` text filter every tool result
+    # passes through. Unset changes nothing; unusable stops the server at start.
+    output_filter: str | None = Field(
+        default=None,
+        description="Import path of a str -> str filter applied to every returned string (SUPACRAWL_OUTPUT_FILTER).",
+    )
+
     # Bearer token for HTTP transport auth. No default — an empty/absent value
     # means the HTTP surface starts unauthenticated. The token is consumed at
     # startup only; it never appears in logs, errors, or tool responses.
