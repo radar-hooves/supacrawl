@@ -11,6 +11,8 @@ names the setting and carries no page content.
 
 from __future__ import annotations
 
+import base64
+import binascii
 import importlib
 import json
 import re
@@ -28,7 +30,18 @@ SETTING = "SUPACRAWL_OUTPUT_FILTER"
 # the value really is a long base64 run, so a short string under a key that
 # happens to be named "pdf" is still filtered.
 _BINARY_KEYS = frozenset({"screenshot", "screenshots", "pdf"})
-_BASE64 = re.compile(r"[A-Za-z0-9+/=\s]{256,}")
+_BASE64 = re.compile(r"[A-Za-z0-9+/]{252,}={0,2}")
+
+
+def _is_base64(text: str) -> bool:
+    """A strict base64 run: no whitespace, padded to a multiple of 4, decodes."""
+    if len(text) % 4 or not _BASE64.fullmatch(text):
+        return False
+    try:
+        base64.b64decode(text, validate=True)
+    except binascii.Error, ValueError:
+        return False
+    return True
 
 
 class OutputFilterError(ValueError):
@@ -70,13 +83,23 @@ class OutputFilterMiddleware(Middleware):
 
     def _walk(self, node: Any, key: str | None = None) -> Any:
         if isinstance(node, str):
-            if key in _BINARY_KEYS and _BASE64.fullmatch(node):
+            if key in _BINARY_KEYS and _is_base64(node):
                 return node
             return self._apply(node) if node else node
         if isinstance(node, dict):
-            return {k: self._walk(v, k if isinstance(k, str) else None) for k, v in node.items()}
+            out: dict[Any, Any] = {}
+            for k, v in node.items():
+                new_key = self._apply(k) if isinstance(k, str) and k else k
+                if new_key in out:
+                    raise ToolError(f"{SETTING}: filtered keys collide; response withheld")
+                out[new_key] = self._walk(v, k if isinstance(k, str) else None)
+            return out
         if isinstance(node, list | tuple):
             return [self._walk(v, key) for v in node]
+        if isinstance(node, int) and not isinstance(node, bool):
+            text = str(node)
+            filtered = self._apply(text)
+            return node if filtered == text else filtered
         return node
 
     def _content_block(self, block: Any, original: Any, filtered: Any) -> Any:
@@ -99,7 +122,7 @@ class OutputFilterMiddleware(Middleware):
     async def on_call_tool(self, context: Any, call_next: Any) -> Any:
         try:
             result = await call_next(context)
-        except ToolError as exc:
+        except Exception as exc:  # noqa: BLE001 - every error text may carry page content
             raise ToolError(self._apply(str(exc))) from None
         original = result.structured_content
         filtered = self._walk(original) if original is not None else None

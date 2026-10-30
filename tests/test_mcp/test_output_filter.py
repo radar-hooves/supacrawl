@@ -139,9 +139,13 @@ class TestFailClosed:
         assert "Test Page" not in message
 
 
+def upper_values(text: str) -> str:
+    return text if text in {"data", "screenshot", "pdf", "markdown", "n", "ok"} else text.upper()
+
+
 class TestWalk:
     def test_binary_payload_skipped_text_filtered(self):
-        mw = OutputFilterMiddleware(str.upper)
+        mw = OutputFilterMiddleware(upper_values)
         b64 = "QUJD" * 100
         out = mw._walk({"data": {"screenshot": b64, "pdf": "short", "markdown": "abc", "n": 3, "ok": True}})
         assert out["data"]["screenshot"] == b64
@@ -150,7 +154,7 @@ class TestWalk:
         assert out["data"]["n"] == 3 and out["data"]["ok"] is True
 
     def test_base64_run_under_other_key_is_filtered(self):
-        mw = OutputFilterMiddleware(str.upper)
+        mw = OutputFilterMiddleware(upper_values)
         assert mw._walk({"markdown": "abcd" * 100})["markdown"] == "ABCD" * 100
 
 
@@ -175,3 +179,52 @@ class TestSeamCoversNewTools:
             with pytest.raises(ToolError) as exc:
                 await client.call_tool("supacrawl_refuses", {"x": "a"})
         assert "XXXX" in str(exc.value) and "Test content" not in str(exc.value)
+
+
+def mask_digits_and_name(text: str) -> str:
+    return text.replace("Zqxvorn Plimbotte", "XXXX").replace("881233456677", "NNNN")
+
+
+MASK_NAME = f"{__name__}:mask_digits_and_name"
+
+
+class TestBypasses:
+    @pytest.mark.asyncio
+    async def test_real_tool_error_via_map_exception_is_filtered(self, mock_api_client):
+        from supacrawl.mcp.exceptions import map_exception
+
+        server = _server(MASK_NAME, mock_api_client)
+
+        @server.mcp.tool
+        async def supacrawl_boom(x: str) -> str:
+            """Raises as the real tools do."""
+            try:
+                raise RuntimeError("locator resolved to <td>Zqxvorn Plimbotte</td>")
+            except RuntimeError as exc:
+                raise map_exception(exc, endpoint="/x", correlation_id="abcd1234") from exc
+
+        async with Client(server.mcp) as client:
+            with pytest.raises(ToolError) as exc:
+                await client.call_tool("supacrawl_boom", {"x": "a"})
+        assert "XXXX" in str(exc.value) and "Zqxvorn" not in str(exc.value)
+
+    def test_keys_and_ints_are_filtered(self):
+        mw = OutputFilterMiddleware(mask_digits_and_name)
+        out = mw._walk({"Zqxvorn Plimbotte": "enrolled", "account": 881233456677, "n": 3, "ok": True})
+        assert out == {"XXXX": "enrolled", "account": "NNNN", "n": 3, "ok": True}
+
+    def test_key_collision_fails_closed(self):
+        mw = OutputFilterMiddleware(lambda t: "k" if t.startswith("k") else t)
+        with pytest.raises(ToolError):
+            mw._walk({"k1": 1, "k2": 2})
+
+    def test_words_under_binary_key_are_filtered(self):
+        mw = OutputFilterMiddleware(upper_values)
+        assert mw._walk({"pdf": "word " * 60})["pdf"] == "WORD " * 60
+
+    def test_real_base64_under_binary_key_is_skipped(self):
+        import base64
+
+        blob = base64.b64encode(bytes(range(256)) * 2).decode()
+        mw = OutputFilterMiddleware(upper_values)
+        assert mw._walk({"screenshot": blob})["screenshot"] == blob

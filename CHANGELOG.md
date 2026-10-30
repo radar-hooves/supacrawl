@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## [2026.10.1] - 30/10/2026
+
+### Fixed
+
+- **`SUPACRAWL_OUTPUT_FILTER` bypasses closed**: every exception's text now goes through the filter, not only `ToolError` (tools raise `MCPError` via `map_exception`, which passed unfiltered, page content included); dictionary keys are filtered (colliding keys withhold the response); integers the filter would change are returned as the filtered string; the binary-field skip needs strict base64, so 256+ characters of words under `pdf` or `screenshot` are filtered. Found by fresh-context review of 2026.10.0 (radar-hooves/mcp-servers#1016).
+
 ## [2026.10.0] - 30/10/2026
 
 ### Fixed
