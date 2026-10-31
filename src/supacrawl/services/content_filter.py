@@ -29,6 +29,7 @@ from contextvars import ContextVar
 
 from bs4 import BeautifulSoup, Tag
 
+from supacrawl.excerpt import heading_names, query_tokens
 from supacrawl.models import QueryFilter
 
 LOGGER = logging.getLogger(__name__)
@@ -249,6 +250,17 @@ def _tokenise(text: str) -> list[str]:
     return text.lower().split()
 
 
+def _heading_text(section: Tag) -> str:
+    """The text of the heading that opens a section, or empty."""
+    heading = section.find(["h1", "h2", "h3", "h4", "h5", "h6"])
+    return heading.get_text(" ", strip=True) if isinstance(heading, Tag) else ""
+
+
+# Of the best section's score, what another section needs to stay when the
+# query names a section by its heading.
+_NAMED_SECTION_FLOOR = 0.5
+
+
 # ---------------------------------------------------------------------------
 # BM25 pruning
 # ---------------------------------------------------------------------------
@@ -337,7 +349,18 @@ def _bm25_prune_sections(sections: list[Tag], content_mode: float, query: str | 
         return sections
 
     drop_threshold = _BM25_DROP_THRESHOLD_BASE * content_mode * max_score
-    kept = [sec for sec, score in zip(sections, scores, strict=True) if score >= drop_threshold]
+    # A query that names a section by its heading (an option's identifier on a
+    # reference page) gets that section whole, and the rest only where it is
+    # nearly as relevant: with hundreds of sibling sections sharing the query's
+    # ordinary words, the base threshold alone kept 179 of 183.
+    named = {i for i, sec in enumerate(sections) if heading_names(_heading_text(sec), query_tokens(query))}
+    if named:
+        drop_threshold = max(drop_threshold, _NAMED_SECTION_FLOOR * max_score)
+    kept = [
+        sec
+        for i, (sec, score) in enumerate(zip(sections, scores, strict=True))
+        if i in named or score >= drop_threshold
+    ]
 
     if not kept:
         LOGGER.debug("BM25 prune would drop all sections; returning all")

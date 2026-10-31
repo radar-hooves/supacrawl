@@ -73,3 +73,32 @@ def test_a_table_under_a_heading_is_ranked_by_the_headings_name():
     doc = f"{filler}\n\n## zetaThing\n\nintro text\n\n| Name | Value |\n|---|---|\n| allowedValues | a, b |"
     text, _ = bound_markdown(doc, 3000, "what are the allowed values of zetaThing")
     assert "| allowedValues | a, b |" in text
+
+
+def test_the_section_the_query_names_comes_first_whole_on_a_reference_page():
+    """A long section is split into blocks; a row deep in it shares few words with the query, while hundreds
+    of sibling sections share its ordinary words. The heading the query names wins (the Renovate shape)."""
+    common = "The default settings this option applies: schedule, prCreation and prConcurrentLimit are read here. "
+    filler = "\n\n".join(f"## `opt{i}`\n\n{common * 3}" for i in range(300))
+    named = "## `vulnerabilityAlerts`\n\nConfig to apply when a PR is needed.\n\n" + "\n\n".join(
+        f"Paragraph {i} about enabling the dependency graph and alerts." for i in range(60)
+    )
+    answer = "| Name | Value |\n|---|---|\n| default | {schedule: [], prCreation: immediate} |"
+    doc = f"{filler}\n\n{named}\n\n{answer}\n\n## `zzz`\n\n{common}"
+    text, strategy = bound_markdown(
+        doc, 6000, "What are the default settings that the vulnerabilityAlerts option applies?"
+    )
+    assert strategy == "query_ranked"
+    assert answer in text, "the named section's table was not kept"
+    assert "## `vulnerabilityAlerts`" in text
+
+
+def test_heading_names_matches_an_identifier_however_the_heading_spells_it():
+    from supacrawl.excerpt import heading_names, query_tokens
+
+    q = query_tokens("What does minimumReleaseAgeBehaviour do, and the Vulnerability Alerts section?")
+    assert heading_names("`minimumReleaseAgeBehaviour`", q)
+    assert heading_names("Minimum Release Age Behaviour", q)
+    assert heading_names("Vulnerability Alerts", q)
+    assert not heading_names("Release", q)
+    assert not heading_names("", q)
