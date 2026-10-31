@@ -384,11 +384,6 @@ HARD_FAIL_VERDICTS: frozenset[QualityVerdict] = frozenset(
     }
 )
 
-# The one verdict that indicts supacrawl itself rather than the target. Kept as a
-# set so a caller (and our own code) can branch on "is this our fault?" without
-# enumerating verdict names.
-SCRAPER_FAULT_VERDICTS: frozenset[QualityVerdict] = frozenset({QualityVerdict.INFRASTRUCTURE})
-
 # The concrete next step a caller should take for each non-OK verdict. This is the
 # single source of the documented contract that a non-ok verdict always carries a
 # suggestion; ``QualityAssessment`` fills it from here so no construction site can
@@ -492,11 +487,6 @@ class QualityAssessment(BaseModel):
     def is_usable(self) -> bool:
         """Whether the result carries usable content (verdict is not a hard fail)."""
         return self.verdict not in HARD_FAIL_VERDICTS
-
-    @property
-    def is_scraper_fault(self) -> bool:
-        """Whether the failure was supacrawl's own, not the target site's."""
-        return self.verdict in SCRAPER_FAULT_VERDICTS
 
 
 class ScrapeData(BaseModel):

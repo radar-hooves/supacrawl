@@ -132,6 +132,13 @@ def test_cleanup_preserves_non_expired(store: JobStore) -> None:
     assert store.get_job(job.id) is not None
 
 
+def test_an_expired_job_is_dropped_when_the_next_job_is_created(store: JobStore) -> None:
+    old = store.create_job()
+    store._jobs[old.id].expires_at = datetime.now(timezone.utc) - timedelta(seconds=1)
+    store.create_job()
+    assert store.get_job(old.id) is None
+
+
 # --- max jobs enforcement -------------------------------------------------
 
 

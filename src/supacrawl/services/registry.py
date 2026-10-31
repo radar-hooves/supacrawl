@@ -32,9 +32,8 @@ class SupacrawlServices:
 
     This wrapper provides:
     1. Unified access to all services via a single object
-    2. Connection testing for MCP health checks
-    3. Cleanup/lifecycle management
-    4. Service status for health reporting
+    2. Cleanup/lifecycle management
+    3. Service status for health reporting
 
     All services are created externally and passed in during initialization.
     """
@@ -64,43 +63,6 @@ class SupacrawlServices:
         self.search_service = search_service
 
         logger.info("Supacrawl services wrapper initialised")
-
-    async def test_connection(self) -> bool:
-        """
-        Test connection for MCP health checks.
-
-        Verifies that the browser is running and core services are available.
-
-        Returns:
-            True if connection successful
-
-        Raises:
-            Exception: If connection test fails
-        """
-        try:
-            # Verify browser is running
-            if not self.browser_manager:
-                raise RuntimeError("Browser manager not initialised")
-
-            # All services should be non-None
-            services_ok = all(
-                [
-                    self.scrape_service is not None,
-                    self.crawl_service is not None,
-                    self.map_service is not None,
-                    self.search_service is not None,
-                ]
-            )
-
-            if not services_ok:
-                raise RuntimeError("One or more services not initialised")
-
-            logger.info("Connection test successful")
-            return True
-
-        except Exception as e:
-            logger.error(f"Connection test failed: {e}")
-            raise
 
     def get_service_status(self) -> dict[str, bool]:
         """

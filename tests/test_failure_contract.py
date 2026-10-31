@@ -107,13 +107,6 @@ class TestSuggestionAlwaysPresent:
 
 
 class TestInfrastructureIsDistinguishable:
-    def test_infrastructure_is_the_only_scraper_fault_verdict(self) -> None:
-        assert QualityAssessment(verdict=QualityVerdict.INFRASTRUCTURE, score=0).is_scraper_fault is True
-        for verdict in NON_OK_VERDICTS:
-            if verdict is QualityVerdict.INFRASTRUCTURE:
-                continue
-            assert QualityAssessment(verdict=verdict, score=0).is_scraper_fault is False
-
     def test_infrastructure_is_a_hard_fail(self) -> None:
         assert QualityVerdict.INFRASTRUCTURE in HARD_FAIL_VERDICTS
         assert QualityAssessment(verdict=QualityVerdict.INFRASTRUCTURE, score=0).is_usable is False
@@ -126,7 +119,6 @@ class TestInfrastructureIsDistinguishable:
         assert result.success is False
         assert result.quality is not None
         assert result.quality.verdict is QualityVerdict.INFRASTRUCTURE
-        assert result.quality.is_scraper_fault is True
         assert result.quality.suggestion is not None
         # The next step has to be the RIGHT one: restart the server, not retry
         # the site with different options.
@@ -149,7 +141,6 @@ class TestInfrastructureIsDistinguishable:
         assert result.success is False
         assert result.quality is not None
         assert result.quality.verdict is QualityVerdict.EMPTY
-        assert result.quality.is_scraper_fault is False
         assert result.quality.suggestion is not None
 
     @pytest.mark.asyncio
@@ -158,7 +149,6 @@ class TestInfrastructureIsDistinguishable:
 
         assert result.quality is not None
         assert result.quality.verdict is QualityVerdict.BOT_CHALLENGE
-        assert result.quality.is_scraper_fault is False
         assert result.quality.suggestion is not None
 
 
@@ -197,7 +187,6 @@ class TestOtherFailurePaths:
 
         assert result.quality is not None
         assert result.quality.verdict is QualityVerdict.EMPTY
-        assert result.quality.is_scraper_fault is False
         assert result.quality.suggestion is not None
 
     def test_an_unmet_expect_assertion_carries_a_next_step(self) -> None:

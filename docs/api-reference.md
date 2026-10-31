@@ -705,7 +705,7 @@ GET endpoints for crawl and batch scrape paginate results (up to 10 MB per respo
 
 ### Job Expiry
 
-Jobs are stored in memory and expire after a configurable TTL (default 24 hours). Jobs are lost on server restart.
+Jobs are stored in memory and expire after a configurable TTL (default 24 hours); an expired job is removed when the next job is created. Jobs are lost on server restart.
 
 ## Configuration
 

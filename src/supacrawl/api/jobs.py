@@ -48,8 +48,8 @@ class MaxJobsExceededError(Exception):
 class JobStore:
     """In-memory store for async jobs.
 
-    The store tracks active jobs, enforces a concurrency limit, and
-    supports TTL-based expiration.
+    The store tracks active jobs, enforces a concurrency limit, and drops a
+    job past its TTL when the next one is created.
 
     Configuration via environment variables:
         ``SUPACRAWL_API_MAX_JOBS`` - maximum concurrent active jobs (default 3).
@@ -62,14 +62,6 @@ class JobStore:
         self._max_jobs = int(os.environ.get("SUPACRAWL_API_MAX_JOBS", DEFAULT_MAX_JOBS))
         self._ttl = int(os.environ.get("SUPACRAWL_API_JOB_TTL", DEFAULT_JOB_TTL))
 
-    @property
-    def max_jobs(self) -> int:
-        return self._max_jobs
-
-    @property
-    def ttl(self) -> int:
-        return self._ttl
-
     def _active_count(self) -> int:
         """Count jobs that are still in progress."""
         return sum(1 for j in self._jobs.values() if j.status == JobStatus.scraping)
@@ -79,6 +71,7 @@ class JobStore:
 
         Raises ``MaxJobsExceededError`` if the active job limit is reached.
         """
+        self.cleanup_expired()
         if self._active_count() >= self._max_jobs:
             raise MaxJobsExceededError(f"Maximum concurrent jobs ({self._max_jobs}) exceeded. Try again later.")
 

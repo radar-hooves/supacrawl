@@ -552,30 +552,3 @@ class CaptchaSolver:
         await asyncio.sleep(1)
 
         return True
-
-
-def is_captcha_configured() -> bool:
-    """Check if CAPTCHA solving is properly configured.
-
-    Returns:
-        True if 2captcha-python is installed AND API key is set.
-    """
-    return _is_captcha_available() and _get_api_key() is not None
-
-
-def get_captcha_status_message() -> str:
-    """Get a human-readable status message about CAPTCHA configuration.
-
-    Returns:
-        Status message suitable for display to users or LLMs.
-    """
-    if not _is_captcha_available():
-        return "CAPTCHA solving not available. [HINT: Install with: pip install supacrawl[captcha]]"
-
-    if not _get_api_key():
-        return (
-            "CAPTCHA solving installed but not configured. "
-            "[HINT: Set environment variable CAPTCHA_API_KEY=your-2captcha-api-key]"
-        )
-
-    return "CAPTCHA solving configured and ready"

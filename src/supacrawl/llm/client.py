@@ -262,32 +262,6 @@ class LLMClient:
         ]
         return bound_words(await self.chat(messages, think=False), max_words)
 
-    async def check_health(self) -> bool:
-        """
-        Check if the LLM provider is accessible.
-
-        Returns:
-            True if provider is accessible, False otherwise.
-        """
-        try:
-            if self._config.provider == "ollama":
-                client = await self._get_ollama_client()
-                response = await client.list()
-                return isinstance(response, dict) and "models" in response
-            elif self._config.provider == "openai":
-                client = await self._get_http_client()
-                response = await client.get(
-                    f"{self._config.base_url}/v1/models",
-                    headers={"Authorization": f"Bearer {self._config.api_key}"},
-                )
-                return response.status_code == 200
-            elif self._config.provider == "anthropic":
-                # Anthropic doesn't have a simple health check endpoint
-                return bool(self._config.api_key)
-            return False
-        except Exception:
-            return False
-
     async def _chat_ollama(
         self,
         messages: list[dict[str, str]],

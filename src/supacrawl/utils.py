@@ -4,7 +4,7 @@ import hashlib
 import logging
 import re
 from typing import Any
-from urllib.parse import parse_qsl, urlencode, urljoin, urlparse, urlsplit, urlunsplit
+from urllib.parse import parse_qsl, urlencode, urljoin, urlsplit, urlunsplit
 
 from bs4 import BeautifulSoup
 
@@ -48,20 +48,6 @@ def content_hash(text: str, url: str | None = None) -> str:
     """
     basis = (url or "") + "||" + text
     return hashlib.sha256(basis.encode("utf-8")).hexdigest()
-
-
-def url_path(url: str) -> str:
-    """
-    Extract a path component from a URL with a sensible default.
-
-    Args:
-        url: URL string.
-
-    Returns:
-        Path portion or "/" when absent.
-    """
-    parsed = urlparse(url)
-    return parsed.path or "/"
 
 
 # URL normalisation utilities

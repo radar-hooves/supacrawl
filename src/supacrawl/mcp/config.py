@@ -200,15 +200,6 @@ class SupacrawlSettings(BaseMCPSettings):
             return Path(self.cache_dir).expanduser()
         return None
 
-    def get_locale_config(self):
-        """Get LocaleConfig from locale and timezone settings."""
-        from supacrawl.models import LocaleConfig
-
-        return LocaleConfig(
-            language=self.locale,
-            timezone=self.timezone,
-        )
-
 
 @lru_cache
 def get_settings() -> SupacrawlSettings:
