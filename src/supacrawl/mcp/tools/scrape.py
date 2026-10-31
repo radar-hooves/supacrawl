@@ -408,7 +408,9 @@ async def supacrawl_scrape(
                 "reasons": [...],
                 "suggestion": null, // Concrete next step when verdict is not "ok"
                 "attempts": 1,      // How many strategies were tried
-                "escalated": false  // Whether auto-escalation fired
+                "escalated": false, // Whether auto-escalation fired
+                "tried": [...]      // Per strategy run, in order: strategy, verdict, status_code, reason.
+                                    // All blocked = no engine here clears it; try another route.
             }
         }
 

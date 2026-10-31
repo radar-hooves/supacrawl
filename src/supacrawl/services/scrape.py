@@ -40,6 +40,7 @@ from supacrawl.exceptions import ProviderError, ValidationError, generate_correl
 from supacrawl.llm.schema import schema_validator
 from supacrawl.models import (
     ActionsOutput,
+    AttemptRecord,
     QualityAssessment,
     QualityVerdict,
     QueryFilter,
@@ -562,6 +563,27 @@ class _Rung(NamedTuple):
     label: str
 
 
+def _strategy_label(engine: str | None, stealth: bool, prefs: dict[str, Any] | None) -> str:
+    """Name the strategy an attempt ran, as the caller would pin it."""
+    if engine == "camoufox":
+        return "camoufox (HTTP/1.1)" if prefs else "camoufox"
+    if engine == "patchright" or stealth:
+        return "patchright"
+    return engine or "playwright"
+
+
+def _attempt_record(result: ScrapeResult, strategy: str) -> AttemptRecord | None:
+    """Summarise one attempt's outcome, or None when it carries no quality verdict."""
+    if result.quality is None:
+        return None
+    return AttemptRecord(
+        strategy=strategy,
+        verdict=result.quality.verdict,
+        status_code=result.data.metadata.status_code if result.data else None,
+        reason=result.quality.reasons[0] if result.quality.reasons else None,
+    )
+
+
 def _next_escalation(
     *,
     engine: str | None,
@@ -1066,6 +1088,8 @@ class ScrapeService:
         # the HTTP-first probe — the champion is browser-based for a reason.
         seed_requires_browser = bool(attempt_stealth or attempt_engine not in (None, "playwright"))
 
+        http_attempt: AttemptRecord | None = None
+
         # HTTP-first fast path: try a cheap httpx GET and skip the browser
         # entirely when the page needs no JavaScript and shows no bot challenge.
         # Any render-needed/bot signal returns None here and falls through to
@@ -1099,6 +1123,7 @@ class ScrapeService:
                 # page — fall through to the browser ladder instead of returning a
                 # poor result, and do not record it as a champion.
                 fast_verdict = fast_result.quality.verdict if fast_result.quality else None
+                http_attempt = _attempt_record(fast_result, "http")
                 if fast_verdict not in _ESCALATABLE_VERDICTS:
                     if memory_domain and self._strategy_store is not None:
                         self._strategy_store.record(
@@ -1401,6 +1426,10 @@ class ScrapeService:
             record_wait_for=wait_for,
             record_only_main=only_main_content,
         )
+        if http_attempt is not None and final_result.quality is not None:
+            final_result.quality.tried.insert(0, http_attempt)
+            final_result.quality.attempts += 1
+            final_result.quality.escalated = True
         return self._finish(final_result, url, telemetry_started, query)
 
     def _finish(self, result: ScrapeResult, url: str, started: float | None, query: str | None) -> ScrapeResult:
@@ -1613,6 +1642,8 @@ class ScrapeService:
         if result.quality is not None:
             result.quality.attempts = level + 1
             result.quality.escalated = level > 0
+            own = _attempt_record(result, _strategy_label(current_engine, current_stealth, current_prefs))
+            result.quality.tried = [own] if own else []
 
         # Per-domain strategy memory (#130): fold this attempt's (strategy, outcome)
         # into the domain's champion. Each rung records its own observation, so a
@@ -1683,6 +1714,8 @@ class ScrapeService:
             deepest = escalated.quality.attempts if escalated.quality else level + 2
             best.quality.attempts = max(best.quality.attempts, deepest)
             best.quality.escalated = best.quality.attempts > 1
+            first = result.quality.tried if result.quality else []
+            best.quality.tried = [*first, *(escalated.quality.tried if escalated.quality else [])]
         return best
 
     @staticmethod

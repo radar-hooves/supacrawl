@@ -122,6 +122,20 @@ async def test_escalation_budget_bounds_attempts(monkeypatch: pytest.MonkeyPatch
     assert len(created) == 4
 
 
+async def test_exhausted_ladder_reports_each_attempt(monkeypatch: pytest.MonkeyPatch) -> None:
+    # The caller must see which strategies ran and how each failed, in order.
+    _patch_ladder(monkeypatch, lambda engine, stealth: (_BLOCKED_HTML, 403))
+    result = await ScrapeService().scrape("https://x.example", formats=["markdown"], http_first=False)
+
+    assert result.quality is not None
+    tried = result.quality.tried
+    assert [t.strategy for t in tried] == ["playwright", "patchright", "camoufox", "camoufox (HTTP/1.1)"]
+    assert all(t.verdict == QualityVerdict.BOT_CHALLENGE and t.status_code == 403 for t in tried)
+    assert all(t.reason for t in tried)
+    assert len(tried) == result.quality.attempts
+    assert result.model_dump()["quality"]["tried"][0]["strategy"] == "playwright"
+
+
 async def test_captcha_wall_fails_fast_after_one_attempt(monkeypatch: pytest.MonkeyPatch) -> None:
     # A bare CAPTCHA wall is terminal for the engine ladder (#153): stop after a
     # single attempt rather than burning three doomed escalations, and hand the

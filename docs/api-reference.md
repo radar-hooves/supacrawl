@@ -129,7 +129,8 @@ Fields not listed here (e.g. `skipTlsVerification`, `blockAds`, `removeBase64Ima
     "reasons": [],
     "suggestion": null,
     "attempts": 1,
-    "escalated": false
+    "escalated": false,
+    "tried": [{"strategy": "playwright", "verdict": "ok", "status_code": 200, "reason": null}]
   }
 }
 ```
@@ -144,6 +145,7 @@ Fields not listed here (e.g. `skipTlsVerification`, `blockAds`, `removeBase64Ima
 | `suggestion` | Concrete next step when verdict is not `ok` |
 | `attempts` | Number of strategies tried (auto-escalation may try several) |
 | `escalated` | Whether auto-escalation fired beyond the first attempt |
+| `tried` | Each strategy run, in order (`http`, `playwright`, `patchright`, `camoufox`, `camoufox (HTTP/1.1)`), with its `verdict`, `status_code` and first `reason`. When every entry is a block, no engine here clears the wall: take another route (a real-browser session) rather than retry |
 
 **Example:**
 

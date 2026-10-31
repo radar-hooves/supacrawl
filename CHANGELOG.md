@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## [2026.10.2] - 31/10/2026
+
+### Added
+
+- **`quality.tried` on every scrape result**: each strategy that ran (`http`, `playwright`, `patchright`, `camoufox`, `camoufox (HTTP/1.1)`), in order, with its verdict, HTTP status and first reason. A scrape that ends on a bot wall now says which engines ran and how each failed, so the caller can tell an exhausted ladder from a single failure and take another route (a real-browser session) instead of retrying. Same field in the library, MCP and REST results. No new escalation and no CAPTCHA solving. Asked by caspo (radar-hooves/caspo), 31/10/2026.
+
 ## [2026.10.1] - 30/10/2026
 
 ### Fixed

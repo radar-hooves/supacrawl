@@ -448,6 +448,15 @@ FALLBACK_SUGGESTION = (
 )
 
 
+class AttemptRecord(BaseModel):
+    """One strategy tried during a scrape and how it ended."""
+
+    strategy: str  # "http", "playwright", "patchright", "camoufox", "camoufox (HTTP/1.1)"
+    verdict: QualityVerdict
+    status_code: int | None = None
+    reason: str | None = None  # first quality reason for this attempt
+
+
 class QualityAssessment(BaseModel):
     """Structured, honest signal of how good a scrape result is.
 
@@ -464,6 +473,7 @@ class QualityAssessment(BaseModel):
     suggestion: str | None = None  # a concrete next action when the result is poor
     attempts: int = 1  # how many strategies were tried (set by auto-escalation)
     escalated: bool = False  # whether auto-escalation moved beyond the cheapest strategy
+    tried: list[AttemptRecord] = Field(default_factory=list)  # each strategy run, in order, and how it failed
 
     @model_validator(mode="after")
     def _guarantee_suggestion(self) -> "QualityAssessment":
