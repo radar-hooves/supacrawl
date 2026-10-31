@@ -175,8 +175,9 @@ async def fetch_static(
                 raw_bytes=body,
             )
 
-    # Only markup is fast-pathable; other binary content belongs to the browser.
-    if content_type and "html" not in content_type and "xml" not in content_type:
+    # Markup and plain text are fast-pathable (a .txt, an llms.txt, a raw source
+    # file is its own markdown); other content belongs to the browser.
+    if content_type and "html" not in content_type and "xml" not in content_type and content_type != "text/plain":
         LOGGER.debug("HTTP-first skipped for %s: non-HTML content type %r", url, content_type)
         return None
 

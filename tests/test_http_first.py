@@ -327,6 +327,15 @@ class TestTryHttpFirst:
         )
         assert await self._run(monkeypatch, _fetched(html)) is None
 
+    async def test_plain_text_is_served_as_its_own_markdown(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        text = "Letter 1\n\nSt. Petersburgh, Dec. 11th, 17—.\n\n" + ("You will rejoice to hear that no disaster. " * 40)
+        fetched = HttpFetchResult(
+            url="https://example.com/book.txt", html=text, status_code=200, content_type="text/plain", headers={}
+        )
+        result = await self._run(monkeypatch, fetched)
+        assert result is not None and result.success
+        assert result.data is not None and result.data.markdown == text
+
     async def test_a_static_catalogue_page_is_served_with_its_listing(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """A product grid prunes to a few words under only_main_content; the fast path recovers the full page
         the way the browser path does, instead of launching a browser over the same HTML."""

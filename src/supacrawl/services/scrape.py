@@ -1955,6 +1955,36 @@ class ScrapeService:
 
         html = fetched.html
 
+        if fetched.content_type == "text/plain":
+            # The text is the markdown; nothing here needs rendering, and a
+            # browser would spend seconds laying out a 400 KB book (measured
+            # 31/10/2026: 6.0 s in Chromium, under a second here).
+            if fetched.status_code >= 400 or not html.strip():
+                return None
+            return await self._assemble_result(
+                url=url,
+                page_content=PageContent(url=fetched.url, html=html, title=None, status_code=fetched.status_code),
+                browser=self._browser or BrowserManager(locale_config=self._locale_config),
+                formats=formats,
+                only_main_content=only_main_content,
+                include_tags=include_tags,
+                exclude_tags=exclude_tags,
+                content_mode=content_mode,
+                query=query,
+                markdown=html,
+                metadata=PageMetadata(*([None] * 11)),
+                json_schema=json_schema,
+                json_prompt=json_prompt,
+                capture_screenshot=False,
+                capture_pdf=False,
+                content_quality_warnings=None,
+                wants_change_tracking=wants_change_tracking,
+                previous_entry=previous_entry,
+                change_tracking_modes=change_tracking_modes,
+                max_age=max_age,
+                cache_variant=cache_variant,
+            )
+
         # Iframes are expanded only in the browser; if the page has any and the
         # caller wants them expanded, escalate so no embedded content is lost.
         if expand_iframes != "none" and "<iframe" in html.lower():
