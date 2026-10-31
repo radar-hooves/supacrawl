@@ -23,10 +23,22 @@ class TestBrowserManagerHeadlessDefaults:
         bm = BrowserManager()
         assert bm.headless is True
 
-    def test_headless_default_with_stealth(self):
-        """With stealth, headless defaults to False (headful is more effective)."""
+    def test_headless_default_with_stealth(self, monkeypatch):
+        """With stealth, headless defaults to False (headful is more effective) where a display exists."""
+        monkeypatch.setenv("DISPLAY", ":0")
+        monkeypatch.delenv("SUPACRAWL_HEADLESS", raising=False)
         bm = BrowserManager(stealth=True)
         assert bm.headless is False
+
+    def test_stealth_is_headless_on_a_host_without_a_display(self, monkeypatch):
+        """A headed Chromium cannot start without a display, and the ladder would die at the Patchright rung."""
+        monkeypatch.setattr("supacrawl.services.browser.sys.platform", "linux")
+        monkeypatch.delenv("DISPLAY", raising=False)
+        monkeypatch.delenv("WAYLAND_DISPLAY", raising=False)
+        monkeypatch.delenv("SUPACRAWL_HEADLESS", raising=False)
+        assert BrowserManager(stealth=True).headless is True
+        monkeypatch.setenv("SUPACRAWL_HEADLESS", "false")
+        assert BrowserManager(stealth=True).headless is False
 
     def test_explicit_headless_overrides_stealth_default(self):
         """Explicitly passing headless=True overrides stealth's headful default."""

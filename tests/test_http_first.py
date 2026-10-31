@@ -293,6 +293,57 @@ class TestTryHttpFirst:
     async def test_bot_challenge_escalates(self, monkeypatch: pytest.MonkeyPatch) -> None:
         assert await self._run(monkeypatch, _fetched(BOT_HTML)) is None
 
+    async def test_prose_about_captchas_and_blocking_is_served(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """An article that mentions a CAPTCHA, being blocked and access denied is content, not a wall."""
+        html = (
+            "<html><head><title>Web scraping</title></head><body><main><h1>Web scraping</h1>"
+            "<p>Sites deploy a CAPTCHA, and a crawler that is blocked sees access denied; please wait "
+            "is a common interstitial. " + ("word " * 120) + "</p></main></body></html>"
+        )
+        result = await self._run(monkeypatch, _fetched(html))
+        assert result is not None and result.success
+
+    async def test_an_over_pruned_catalogue_page_is_recovered_without_a_browser(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A static grid whose main-content prune leaves a few words is served from the full page."""
+        products = "".join(
+            f"<article class='product'><h3><a href='/p{i}'>Book {i}</a></h3><p class='price'>£{i}.00</p></article>"
+            for i in range(60)
+        )
+        html = (
+            "<html><head><title>Books</title><meta name='robots' content='all'></head><body>"
+            "<main><p>All products</p></main>"
+            f"<section>{products}</section></body></html>"
+        )
+        result = await self._run(monkeypatch, _fetched(html))
+        assert result is not None and result.success
+        assert result.data is not None and result.data.markdown and "Book 59" in result.data.markdown
+
+    async def test_a_challenge_widget_escalates_whatever_the_word_count(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        html = (
+            "<html><head><title>Checking</title></head><body><main><p>" + ("word " * 120) + "</p>"
+            '<div class="g-recaptcha" data-sitekey="x"></div></main></body></html>'
+        )
+        assert await self._run(monkeypatch, _fetched(html)) is None
+
+    async def test_a_static_catalogue_page_is_served_with_its_listing(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A product grid prunes to a few words under only_main_content; the fast path recovers the full page
+        the way the browser path does, instead of launching a browser over the same HTML."""
+        items = "".join(
+            f"<article class='product_pod'><h3><a href='/b{i}'>Title {i}</a></h3><p class='price'>£{i}.00</p></article>"
+            for i in range(40)
+        )
+        html = (
+            '<html><head><title>Books</title><meta name="robots" content="index"></head><body>'
+            "<nav><a href='/'>Home</a><a href='/books'>Books</a></nav>"
+            f"<main><section>{items}</section></main>"
+            "<footer><p>A footer.</p></footer></body></html>"
+        )
+        result = await self._run(monkeypatch, _fetched(html))
+        assert result is not None and result.success
+        assert result.data is not None and result.data.markdown and "Title 39" in result.data.markdown
+
     async def test_blocking_status_escalates(self, monkeypatch: pytest.MonkeyPatch) -> None:
         assert await self._run(monkeypatch, _fetched(GOOD_HTML, status=403)) is None
 

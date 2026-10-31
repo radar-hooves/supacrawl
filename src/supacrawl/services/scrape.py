@@ -62,7 +62,6 @@ from supacrawl.services.browser import (
 from supacrawl.services.content_filter import QUERY_OUTCOME
 from supacrawl.services.converter import MarkdownConverter
 from supacrawl.services.detection import (
-    detect_bot_protection,
     detect_collapsed_disclosures,
     estimate_js_requirement,
 )
@@ -163,6 +162,17 @@ _ESCALATION_WAIT_MS = 5000
 # times richer (and above the floor) — the selector likely matched a tiny wrapper.
 _THIN_MAIN_FLOOR = 50
 _THIN_FALLBACK_RATIO = 3
+
+
+# Markup that only a challenge page carries: the containers reCAPTCHA, hCaptcha
+# and Turnstile mount into, and Cloudflare's challenge form and script names.
+_CHALLENGE_WIDGET_MARKERS = ("g-recaptcha", "h-captcha", "cf-turnstile", "challenge-form", "cf-chl-", "_cf_chl")
+
+
+def _challenge_widget_present(html: str) -> bool:
+    """Whether the page carries a bot-challenge widget, as opposed to prose that mentions one."""
+    lowered = html.lower()
+    return any(marker in lowered for marker in _CHALLENGE_WIDGET_MARKERS)
 
 
 def _looks_like_bot_block(status_code: int, html: str, markdown: str | None) -> bool:
@@ -1951,11 +1961,15 @@ class ScrapeService:
             LOGGER.debug("HTTP-first escalating %s: iframe expansion requested", url)
             return None
 
-        # Keyword bot-protection markers (CAPTCHA, "just a moment", access denied)
-        # — the browser and its stealth ladder may help. This needs no word count.
-        bot_indicators = detect_bot_protection(html)
-        if bot_indicators["challenge_detected"] or bot_indicators["captcha_present"] or bot_indicators["access_denied"]:
-            LOGGER.debug("HTTP-first escalating %s: bot-protection markers present", url)
+        # A challenge widget in the markup (a reCAPTCHA or Turnstile container,
+        # Cloudflare's challenge form) — the browser and its stealth ladder may
+        # help. Prose markers ("captcha", "blocked", "please wait") are judged
+        # with the word count in _looks_like_bot_block below: an article about
+        # web scraping or a 45,000-word reference page mentions them too, and
+        # escalating on the words alone sent both to a browser (measured
+        # 31/10/2026: 5.9 s and 12.1 s where the fast path takes under a second).
+        if _challenge_widget_present(html):
+            LOGGER.debug("HTTP-first escalating %s: challenge widget present", url)
             return None
 
         # JavaScript shell — the real content is injected client-side.
@@ -1983,6 +1997,20 @@ class ScrapeService:
                 content_mode=content_mode,
                 query=query,
             )
+            # The same thin-main recovery the browser path runs: a product grid
+            # or listing whose main-content prune leaves a few words is a static
+            # page over-pruned, not a page that needs a browser. Without it the
+            # density check below read 22 words on a 50 KB catalogue page and
+            # launched a browser that recovered the identical HTML.
+            if markdown is not None and only_main_content and not include_tags:
+                markdown = self._recover_thin_main_content(
+                    html=html,
+                    main_markdown=markdown,
+                    url=url,
+                    exclude_tags=exclude_tags,
+                    content_mode=content_mode,
+                    query=query,
+                )
 
         # The density-based bot and quality heuristics need a real word count.
         # When markdown was not produced for output (e.g. a links-only request),

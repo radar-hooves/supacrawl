@@ -574,6 +574,13 @@ def _close_timeout_s() -> float:
         return _DEFAULT_CLOSE_TIMEOUT_S
 
 
+def _display_available() -> bool:
+    """Whether a headed browser could open a window here: always on macOS and Windows, a display on Linux."""
+    if sys.platform in ("darwin", "win32"):
+        return True
+    return bool(os.getenv("DISPLAY") or os.getenv("WAYLAND_DISPLAY"))
+
+
 def _is_containerised() -> bool:
     """Best-effort detection of running inside a container.
 
@@ -811,8 +818,13 @@ class BrowserManager:
         if headless is not None:
             self.headless = headless
         elif self.engine == "patchright":
-            # Patchright + headless has worse detection scores than headful
-            self.headless = self._env_bool("SUPACRAWL_HEADLESS", False)
+            # Patchright + headless has worse detection scores than headful, but a
+            # headed Chromium needs a display: on a server without one the launch
+            # dies at once and the escalation ladder stops dead at this rung
+            # (measured 31/10/2026: every bot-walled page ended on the HTTP 403
+            # because the Patchright rung never started and Camoufox was never
+            # reached). Headful only where a display exists.
+            self.headless = self._env_bool("SUPACRAWL_HEADLESS", not _display_available())
         elif self.engine == "camoufox":
             # Camoufox works well headless with humanize=True
             self.headless = self._env_bool("SUPACRAWL_HEADLESS", True)
@@ -1109,6 +1121,14 @@ class BrowserManager:
         # Apply Firefox user preferences (e.g. disable HTTP/2)
         if self.firefox_user_prefs:
             camoufox_options["firefox_user_prefs"] = self.firefox_user_prefs
+
+        # Camoufox's Firefox is a downloaded binary that needs the host's GTK
+        # libraries; on NixOS they are not on the default search path, and the
+        # same path on LD_LIBRARY_PATH crashes the Chromium engines, so it is
+        # handed to this launch alone.
+        libs = os.getenv("SUPACRAWL_CAMOUFOX_LIBS")
+        if libs:
+            camoufox_options["env"] = {**os.environ, "LD_LIBRARY_PATH": libs}
 
         # Camoufox returns a context manager; we enter it and store the browser
         self._camoufox_cm = AsyncCamoufox(**camoufox_options)
