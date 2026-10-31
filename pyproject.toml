@@ -20,17 +20,10 @@ classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.14",
 ]
+# Every name here and in every extra resolves from PyPI alone: this package is
+# published there, and a name that exists only on a private index would make
+# `pip install supacrawl` fail, or install a stranger's package of that name.
 dependencies = [
-  "aiofiles>=25.1.0",
-  # The household telemetry contract (platform/telemetry.md): the one
-  # api_common.telemetry.configure() call every entry point makes at process
-  # start. redactyl-core arrives transitively (api-common depends on it), but
-  # under the explicit godswood index below a [tool.uv.sources] pin only
-  # reaches a declared dependency — a transitive-only name resolves against
-  # PyPI and is not found. Declaring it here makes its index pin apply
-  # (mirrors radar-hooves/cadmus's backend/pyproject.toml); api-common, the
-  # telemetry extra, takes the same index pin.
-  "redactyl-core>=2026.7.0",
   "beautifulsoup4>=4.14.3",
   "click>=8.3.1",
   "httpx[brotli]>=0.28.1",
@@ -55,10 +48,24 @@ Homepage = "https://github.com/radar-hooves/supacrawl"
 Repository = "https://github.com/radar-hooves/supacrawl"
 
 [dependency-groups]
-# MCP surface deps, separated from dev so CI (no sibling checkouts) can
-# exclude exactly this slice and still lint/type/test everything else.
+# The MCP server is built on mcp-common, the household's private MCP framework,
+# which is not on PyPI. Dependency groups never reach the published wheel, so
+# this is the one place it may be named: local development installs it (with
+# api-common, which it carries) to run tests/test_mcp; CI and a PyPI install do
+# not, and those tests skip themselves when it is absent.
 mcp-dev = [
   "supacrawl[mcp]",
+  "mcp-common",
+  # mcp-common's own private dependencies, declared so their index pins below
+  # apply: under an explicit index a transitive-only name resolves against PyPI.
+  "api-common",
+  "portcullis-client",
+  "redactyl-core",
+]
+# The field readers the benchmark compares against (`supacrawl bench run --provider`).
+bench = [
+  "crawl4ai>=0.7",
+  "trafilatura>=2.0",
 ]
 dev = [
   "supacrawl[stealth,camoufox,captcha,pdf-ocr,api,readability]",
@@ -68,18 +75,10 @@ dev = [
   "pytest-asyncio>=1.3.0",
   "pytest-xdist>=3.8.0",
   "ruff>=0.15.4",
-  "types-aiofiles>=25.1.0.20251011",
   "types-PyYAML>=6.0.12.20250915",
 ]
 
 [project.optional-dependencies]
-telemetry = [
-  # The household telemetry contract (platform/telemetry.md): the one
-  # api_common.telemetry.configure() call. api-common is private-index only,
-  # so it is an extra: `supacrawl[telemetry]` inside the household, and a plain
-  # PyPI install leaves logging to the standard library.
-  "api-common[telemetry]>=2026.9.3",
-]
 stealth = [
   "patchright>=1.40.0",  # Keep >=1.40.0 for NixOS — see #79, #104
 ]
@@ -111,14 +110,10 @@ readability = [
   "rank-bm25>=0.2",
 ]
 mcp = [
-  # Shared MCP framework (BaseMCPServer, exceptions, config, logging). The MCP
-  # layer consumes the real mcp_common — it does NOT vendor a copy (a vendored
-  # fork silently drifts from the shared package; see the de-vendoring in this
-  # repo's history). mcp-common transitively pulls api-common (correlation),
-  # fastmcp, pydantic, and pydantic-settings.
-  "mcp-common",
-  # Transitive via mcp-common, declared so its index pin applies (as redactyl-core).
-  "portcullis-client>=2026.10.383",
+  # What the MCP server needs from PyPI. It also needs mcp-common, the
+  # household's private framework (see the mcp-dev group), which the deployment
+  # that runs `supacrawl-mcp` installs alongside this extra; `supacrawl-mcp`
+  # says so when it is missing.
   "anyio>=4.12.1",
   "fastmcp>=3.1.0",
   "pydantic-settings>=2.13.1",
@@ -132,7 +127,7 @@ mcp = [
 
 [project.scripts]
 supacrawl = "supacrawl.cli:app"
-supacrawl-mcp = "supacrawl.mcp.server:main"
+supacrawl-mcp = "supacrawl.mcp_launch:main"
 
 [tool.pytest.ini_options]
 markers = [
@@ -218,67 +213,27 @@ ignore_missing_imports = true
 module = "rank_bm25.*"
 ignore_missing_imports = true
 
-# The MCP-surface deps are absent on CI (no sibling checkouts; see the
-# mcp-dev dependency group). Locally they are installed and fully typed.
+# The MCP-surface packages (mcp-dev group) are absent on CI and under a PyPI
+# install; the benchmark's field readers (bench group) likewise.
 [[tool.mypy.overrides]]
-module = "fastmcp.*"
-ignore_missing_imports = true
-
-[[tool.mypy.overrides]]
-module = "mcp.*"
-ignore_missing_imports = true
-
-[[tool.mypy.overrides]]
-module = "mcp_common.*"
-ignore_missing_imports = true
-
-# api-common ships its own py.typed marker and resolves fine at runtime (it is
-# a genuine editable-path sibling, see [tool.uv.sources]) but is present in
-# every environment including CI (it is a base dependency now, unlike the
-# mcp-surface deps above) — the sole reason it needs an override is that mypy
-# cannot statically follow Hatchling's PEP 660 finder-based editable-install
-# .pth (unlike mcp-common's plain directory-path .pth, which mypy resolves
-# without issue) — a known mypy/Hatchling gap, not a real missing-stub problem.
-[[tool.mypy.overrides]]
-module = "api_common.*"
-ignore_missing_imports = true
-
-# pydantic-settings is declared only in the `mcp` extra here (unlike
-# redactyl, where it is already pulled in by the always-on `api` extra) — so
-# it is absent on CI for the same mcp-dev reason above. python-dotenv needs
-# no override: it resolves fine on CI regardless, as a genuine transitive
-# dependency of uvicorn[standard] (in the always-on `api` extra).
-[[tool.mypy.overrides]]
-module = "pydantic_settings.*"
+module = ["fastmcp.*", "mcp.*", "mcp_common.*", "api_common.*", "pydantic_settings.*", "trafilatura.*", "crawl4ai.*"]
 ignore_missing_imports = true
 
 [tool.uv]
 environments = ["sys_platform == 'darwin'", "sys_platform == 'linux'"]
 
-# dev only: `uv run` performs an implicit default-groups sync wherever it
-# executes, including CI runners and consumer checkouts where the editable
-# mcp-dev sibling does not exist on disk. Local dev installs
-# every group via .envrc (`uv sync --all-groups`); uv run never prunes the
-# extra groups it finds already installed.
+# dev only: `uv run` syncs the default groups wherever it runs, CI included.
+# Local dev installs every group via .envrc (`uv sync --all-groups`).
 default-groups = ["dev"]
 
-# Household private package index (devpi). explicit = true → only the
-# packages pinned to it below resolve here; everything else stays on PyPI.
-# On the atlas CI runner uv authenticates ambiently via the vended devpi-read
-# netrc (NETRC), a dev machine via ~/.netrc — no per-repo GitHub secret.
-# Mirrors radar-hooves/cadmus's backend/pyproject.toml.
+# The household's private package index, used by the mcp-dev group alone
+# (explicit = true: only the names pinned below resolve here). Nothing in
+# [project] or any extra resolves from it.
 [[tool.uv.index]]
 name = "godswood"
 url = "https://pypi.godswood.au/poodle64/prod/+simple/"
 explicit = true
 
-# mcp-common is published to the household index (mcp-servers' publish-wheels
-# leg), so the mcp extra resolves it there like api-common and redactyl-core:
-# a runner or consumer checkout with no sibling mcp-servers installs the
-# whole extra set.
-#
-# api-common (the telemetry extra) resolves from the index too: mcp-servers'
-# own root pins it there for every consumer, so nothing here inherits a path.
 [tool.uv.sources]
 mcp-common = { index = "godswood" }
 portcullis-client = { index = "godswood" }
