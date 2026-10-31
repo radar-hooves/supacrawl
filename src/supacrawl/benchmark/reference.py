@@ -24,6 +24,7 @@ from pydantic import BaseModel
 
 from supacrawl.exceptions import ValidationError
 from supacrawl.services.browser import _install_navigation_guard
+from supacrawl.services.renderers import page_closed, page_opened, schedule_reap
 from supacrawl.services.url_guard import resolve_and_pin
 
 LOGGER = logging.getLogger(__name__)
@@ -204,6 +205,7 @@ class ReferenceRenderer:
         page = None
         try:
             page = await self._browser.new_page()
+            page_opened()
             response = None
 
             # The pre-flight above only checks the original URL; a redirect or
@@ -258,3 +260,5 @@ class ReferenceRenderer:
                     await page.close()
                 except Exception:
                     pass
+                page_closed()
+                schedule_reap(url)

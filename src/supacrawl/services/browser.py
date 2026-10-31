@@ -54,6 +54,7 @@ import httpx
 from bs4 import BeautifulSoup
 
 from supacrawl.exceptions import ValidationError
+from supacrawl.services.renderers import page_closed, page_opened, schedule_reap
 from supacrawl.services.url_guard import block_page_scripts, guarded_hop, resolve_and_pin, strict_mode
 
 if TYPE_CHECKING:
@@ -1527,6 +1528,7 @@ class BrowserManager:
 
         try:
             context, page = await self._open_page(owns_context=owns_context, device=device, extra_headers=extra_headers)
+            page_opened()
             engine_in_use = self._browser
 
             # Navigate to URL - use parameter if provided, else fall back to env var
@@ -1646,6 +1648,9 @@ class BrowserManager:
                     await context.close()
                 except Exception:
                     pass
+            if page:
+                page_closed()
+                schedule_reap(url)
 
     async def _expand_iframes(
         self,
@@ -1871,6 +1876,7 @@ class BrowserManager:
 
         try:
             context, page = await self._open_page(owns_context=owns_context, extra_headers=extra_headers)
+            page_opened()
             engine_in_use = self._browser
 
             # Navigate to URL - use parameter if provided, else fall back to env var
@@ -1915,6 +1921,9 @@ class BrowserManager:
                     await context.close()
                 except Exception:
                     pass
+            if page:
+                page_closed()
+                schedule_reap(url)
 
     async def extract_images(self, html: str, base_url: str) -> list[str]:
         """Extract all image URLs from HTML content.
