@@ -60,11 +60,12 @@ def _get_llm_config() -> dict[str, Any]:
     if not provider:
         return {"configured": False}
 
-    return {
-        "configured": True,
-        "provider": provider,
-        "model": model or "default",
-    }
+    report: dict[str, Any] = {"configured": True, "provider": provider, "model": model or "default"}
+    if provider.lower() in ("ollama", "openai", "anthropic"):
+        from supacrawl.llm.config import resolve_base_url
+
+        report["base_url"] = resolve_base_url(provider.lower())  # type: ignore[arg-type]
+    return report
 
 
 def _get_search_config(search_service: Any = None) -> dict[str, Any]:

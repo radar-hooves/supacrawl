@@ -34,10 +34,11 @@ For Ollama (local):
   SUPACRAWL_LLM_MODEL=qwen3:8b
   OLLAMA_HOST=http://localhost:11434  (optional, this is the default)
 
-For OpenAI:
+For OpenAI, or any OpenAI-compatible gateway:
   SUPACRAWL_LLM_PROVIDER=openai
   SUPACRAWL_LLM_MODEL=gpt-4o-mini
   OPENAI_API_KEY=sk-...
+  SUPACRAWL_LLM_BASE_URL=https://gateway.example.invalid  (optional; the gateway's URL)
 
 For Anthropic:
   SUPACRAWL_LLM_PROVIDER=anthropic
@@ -65,6 +66,27 @@ class LLMConfig:
                 correlation_id=correlation_id,
                 context={"provider": self.provider},
             )
+
+
+def resolve_base_url(provider: LLMProvider) -> str:
+    """The endpoint for ``provider``.
+
+    ``SUPACRAWL_LLM_BASE_URL`` wins for every provider, so ``openai`` can point
+    at any OpenAI-compatible gateway (LiteLLM, vLLM, a remote Ollama's
+    ``/v1``) with that gateway's bearer key in ``OPENAI_API_KEY``. Below it,
+    each provider's own convention: ``OLLAMA_HOST`` and ``OPENAI_BASE_URL``. A
+    trailing ``/v1`` is dropped for ``openai``, since the client adds the
+    versioned path itself and the OpenAI SDK's convention includes it.
+    """
+    base_url = os.getenv("SUPACRAWL_LLM_BASE_URL") or ""
+    if not base_url and provider == "ollama":
+        base_url = os.getenv("OLLAMA_HOST") or ""
+    if not base_url and provider == "openai":
+        base_url = os.getenv("OPENAI_BASE_URL") or ""
+    base_url = (base_url or DEFAULT_BASE_URLS[provider]).rstrip("/")
+    if provider == "openai":
+        base_url = base_url.removesuffix("/v1")
+    return base_url
 
 
 def load_llm_config() -> LLMConfig:
@@ -96,11 +118,7 @@ def load_llm_config() -> LLMConfig:
 
     provider: LLMProvider = provider_str  # type: ignore[assignment]
 
-    # Base URL: Ollama uses OLLAMA_HOST, others use defaults
-    if provider == "ollama":
-        base_url = os.getenv("OLLAMA_HOST") or DEFAULT_BASE_URLS[provider]
-    else:
-        base_url = DEFAULT_BASE_URLS[provider]
+    base_url = resolve_base_url(provider)
 
     # API keys: Use provider-specific environment variables
     api_key: str | None = None

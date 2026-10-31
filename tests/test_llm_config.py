@@ -171,6 +171,29 @@ class TestLoadLLMConfig:
 
         assert config.base_url == "http://remote-ollama:11434"
 
+    def test_openai_points_at_an_openai_compatible_gateway(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """SUPACRAWL_LLM_BASE_URL wins for every provider; a trailing /v1 is the SDK's spelling and is dropped."""
+        monkeypatch.setenv("SUPACRAWL_LLM_PROVIDER", "openai")
+        monkeypatch.setenv("SUPACRAWL_LLM_MODEL", "atlas/fast")
+        monkeypatch.setenv("OPENAI_API_KEY", "gateway-key")
+        monkeypatch.setenv("SUPACRAWL_LLM_BASE_URL", "https://gateway.example.invalid/v1/")
+
+        assert load_llm_config().base_url == "https://gateway.example.invalid"
+
+        monkeypatch.delenv("SUPACRAWL_LLM_BASE_URL")
+        monkeypatch.setenv("OPENAI_BASE_URL", "https://other.example.invalid/v1")
+        assert load_llm_config().base_url == "https://other.example.invalid"
+
+    def test_base_url_override_reaches_ollama_and_anthropic_too(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("SUPACRAWL_LLM_MODEL", "m")
+        monkeypatch.setenv("SUPACRAWL_LLM_BASE_URL", "http://llm.example.invalid:9000/")
+        monkeypatch.setenv("OLLAMA_HOST", "http://ignored:11434")
+        monkeypatch.setenv("SUPACRAWL_LLM_PROVIDER", "ollama")
+        assert load_llm_config().base_url == "http://llm.example.invalid:9000"
+        monkeypatch.setenv("SUPACRAWL_LLM_PROVIDER", "anthropic")
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "k")
+        assert load_llm_config().base_url == "http://llm.example.invalid:9000"
+
     def test_error_message_includes_examples(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Test that error message includes helpful examples."""
         monkeypatch.delenv("SUPACRAWL_LLM_PROVIDER", raising=False)
