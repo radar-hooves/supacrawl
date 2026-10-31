@@ -7,6 +7,7 @@ from pathlib import Path
 
 import click
 
+from supacrawl.benchmark.providers import PROVIDERS
 from supacrawl.benchmark.store import DEFAULT_BASE_DIR
 from supacrawl.cli._common import app
 
@@ -23,6 +24,26 @@ def bench() -> None:
     type=click.Path(exists=True, dir_okay=False, path_type=Path),
     default=None,
     help="Path to a YAML suite file. Defaults to the packaged corpus.",
+)
+@click.option(
+    "--provider",
+    type=click.Choice(sorted(PROVIDERS)),
+    default="supacrawl",
+    show_default=True,
+    help="The reader to measure. Third-party readers need their package installed (see the bench dependency group).",
+)
+@click.option(
+    "--reference/--no-reference",
+    default=True,
+    show_default=True,
+    help="Capture a browser reference for each HTML page. Off, cases score on anchors and structure alone and "
+    "the run's time and memory are the reader's own.",
+)
+@click.option(
+    "--searches/--no-searches",
+    default=True,
+    show_default=True,
+    help="Run the suite's search queries through the reader's search surface, where it has one.",
 )
 @click.option(
     "--judge/--no-judge",
@@ -54,6 +75,9 @@ def bench() -> None:
 )
 def bench_run(
     suite_path: Path | None,
+    provider: str,
+    reference: bool,
+    searches: bool,
     judge: bool,
     concurrency: int,
     only: tuple[str, ...],
@@ -61,12 +85,14 @@ def bench_run(
 ) -> None:
     """Run the benchmark suite and persist results.
 
-    Scrapes each case in the suite, captures a browser reference for HTML pages,
-    scores every metric, and writes results under BASE_DIR. Prints a summary
-    to stdout and the result path to stderr.
+    Scrapes each case in the suite with the chosen reader, captures a browser
+    reference for HTML pages, scores every metric, runs the suite's search
+    queries, and writes results under BASE_DIR. Prints a summary to stdout and
+    the result path to stderr.
 
     Examples:
         supacrawl bench run
+        supacrawl bench run --provider trafilatura --no-reference
         supacrawl bench run --only static --only article
         supacrawl bench run --suite ./my-suite.yaml --judge --concurrency 5
     """
@@ -78,7 +104,8 @@ def bench_run(
     suite = load_suite(suite_path) if suite_path else load_default_suite()
 
     click.echo(
-        f"Running benchmark: {suite.name} ({len(suite.cases)} cases, concurrency={concurrency})",
+        f"Running benchmark: {suite.name} ({len(suite.cases)} cases, {len(suite.queries)} queries, "
+        f"reader={provider}, concurrency={concurrency})",
         err=True,
     )
 
@@ -86,10 +113,13 @@ def bench_run(
         result = asyncio.run(
             run_benchmark(
                 suite,
+                provider=provider,
                 judge=judge,
                 concurrency=concurrency,
                 base_dir=base_dir,
                 only=list(only) if only else None,
+                reference=reference,
+                searches=searches,
             )
         )
     except Exception as exc:
@@ -148,6 +178,37 @@ def bench_compare(run_a: str | None, run_b: str | None, base_dir: Path) -> None:
     click.echo(render_comparison(cmp))
 
 
+@bench.command("table", help="A markdown table comparing readers, one row per run.")
+@click.argument("run_ids", nargs=-1)
+@click.option(
+    "--base-dir",
+    "base_dir",
+    type=click.Path(file_okay=False, path_type=Path),
+    default=DEFAULT_BASE_DIR,
+    show_default=True,
+    help="Base directory for benchmark artefacts.",
+)
+def bench_table(run_ids: tuple[str, ...], base_dir: Path) -> None:
+    """Render RUN_IDS side by side; with none given, the newest run of each reader.
+
+    Examples:
+        supacrawl bench table
+        supacrawl bench table 20260614T083012-supacrawl-abc1234 20260614T090000-trafilatura-abc1234
+    """
+    from supacrawl.benchmark.report import render_table
+    from supacrawl.benchmark.store import latest_run_per_provider, load_run
+
+    try:
+        runs = [load_run(base_dir, rid) for rid in run_ids] if run_ids else latest_run_per_provider(base_dir)
+    except FileNotFoundError as exc:
+        click.echo(f"Error: {exc}", err=True)
+        raise SystemExit(1) from exc
+    if not runs:
+        click.echo("No benchmark runs found.", err=True)
+        raise SystemExit(1)
+    click.echo(render_table(runs))
+
+
 @bench.command("list", help="List stored benchmark runs.")
 @click.option(
     "--base-dir",
@@ -171,15 +232,15 @@ def bench_list(base_dir: Path) -> None:
         click.echo("No benchmark runs found.")
         return
 
-    click.echo(f"{'Run ID':<40} {'Date':<20} {'Quality':>8}")
-    click.echo("-" * 72)
+    click.echo(f"{'Run ID':<48} {'Date':<20} {'Reader':<12} {'Quality':>8}")
+    click.echo("-" * 92)
     for run_id in run_ids:
         try:
             run = load_run(base_dir, run_id)
             date_str = run.started_at[:19].replace("T", " ")
             q = run.aggregate.overall_quality
             q_str = f"{q:.1f}" if q is not None else "n/a"
-            click.echo(f"{run_id:<40} {date_str:<20} {q_str:>8}")
+            click.echo(f"{run_id:<48} {date_str:<20} {run.provider:<12} {q_str:>8}")
         except Exception as exc:
             click.echo(f"{run_id:<40} [error: {exc}]")
 

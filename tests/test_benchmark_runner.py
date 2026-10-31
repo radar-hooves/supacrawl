@@ -163,7 +163,7 @@ async def test_run_benchmark_returns_run_result(tmp_path: Path) -> None:
     suite = _make_suite()
 
     with (
-        patch("supacrawl.benchmark.runner.SupacrawlProvider", FakeProvider),
+        patch("supacrawl.benchmark.runner.make_provider", lambda name: FakeProvider()),
         patch("supacrawl.benchmark.runner.ReferenceRenderer", FakeReferenceRenderer),
     ):
         result = await run_benchmark(suite, base_dir=tmp_path)
@@ -179,7 +179,7 @@ async def test_run_benchmark_case_ids_match(tmp_path: Path) -> None:
     suite = _make_suite()
 
     with (
-        patch("supacrawl.benchmark.runner.SupacrawlProvider", FakeProvider),
+        patch("supacrawl.benchmark.runner.make_provider", lambda name: FakeProvider()),
         patch("supacrawl.benchmark.runner.ReferenceRenderer", FakeReferenceRenderer),
     ):
         result = await run_benchmark(suite, base_dir=tmp_path)
@@ -194,7 +194,7 @@ async def test_run_benchmark_html_case_has_metrics(tmp_path: Path) -> None:
     suite = _make_suite()
 
     with (
-        patch("supacrawl.benchmark.runner.SupacrawlProvider", FakeProvider),
+        patch("supacrawl.benchmark.runner.make_provider", lambda name: FakeProvider()),
         patch("supacrawl.benchmark.runner.ReferenceRenderer", FakeReferenceRenderer),
     ):
         result = await run_benchmark(suite, base_dir=tmp_path)
@@ -217,7 +217,7 @@ async def test_run_benchmark_pdf_case_skips_reference_metrics(tmp_path: Path) ->
     suite = _make_suite()
 
     with (
-        patch("supacrawl.benchmark.runner.SupacrawlProvider", FakeProvider),
+        patch("supacrawl.benchmark.runner.make_provider", lambda name: FakeProvider()),
         patch("supacrawl.benchmark.runner.ReferenceRenderer", FakeReferenceRenderer),
     ):
         result = await run_benchmark(suite, base_dir=tmp_path)
@@ -240,7 +240,7 @@ async def test_run_benchmark_aggregate_populated(tmp_path: Path) -> None:
     suite = _make_suite()
 
     with (
-        patch("supacrawl.benchmark.runner.SupacrawlProvider", FakeProvider),
+        patch("supacrawl.benchmark.runner.make_provider", lambda name: FakeProvider()),
         patch("supacrawl.benchmark.runner.ReferenceRenderer", FakeReferenceRenderer),
     ):
         result = await run_benchmark(suite, base_dir=tmp_path)
@@ -258,7 +258,7 @@ async def test_run_benchmark_only_filter(tmp_path: Path) -> None:
     suite = _make_suite()
 
     with (
-        patch("supacrawl.benchmark.runner.SupacrawlProvider", FakeProvider),
+        patch("supacrawl.benchmark.runner.make_provider", lambda name: FakeProvider()),
         patch("supacrawl.benchmark.runner.ReferenceRenderer", FakeReferenceRenderer),
     ):
         result = await run_benchmark(suite, base_dir=tmp_path, only=["static"])
@@ -273,7 +273,7 @@ async def test_run_benchmark_only_filter_by_id(tmp_path: Path) -> None:
     suite = _make_suite()
 
     with (
-        patch("supacrawl.benchmark.runner.SupacrawlProvider", FakeProvider),
+        patch("supacrawl.benchmark.runner.make_provider", lambda name: FakeProvider()),
         patch("supacrawl.benchmark.runner.ReferenceRenderer", FakeReferenceRenderer),
     ):
         result = await run_benchmark(suite, base_dir=tmp_path, only=["pdf-test"])
@@ -288,7 +288,7 @@ async def test_run_benchmark_artifacts_written(tmp_path: Path) -> None:
     suite = _make_suite()
 
     with (
-        patch("supacrawl.benchmark.runner.SupacrawlProvider", FakeProvider),
+        patch("supacrawl.benchmark.runner.make_provider", lambda name: FakeProvider()),
         patch("supacrawl.benchmark.runner.ReferenceRenderer", FakeReferenceRenderer),
     ):
         result = await run_benchmark(suite, base_dir=tmp_path)

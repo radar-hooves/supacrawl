@@ -81,10 +81,13 @@ def write_run(run: RunResult, base_dir: Path) -> Path:
         index_row = {
             "run_id": run.run_id,
             "started_at": run.started_at,
+            "provider": run.provider,
             "overall_quality": run.aggregate.overall_quality,
             "success_rate": run.aggregate.success_rate,
             "scored_cases": run.aggregate.scored_cases,
             "by_category": run.aggregate.by_category,
+            "median_latency_ms": run.aggregate.median_latency_ms,
+            "peak_rss_mb": run.peak_rss_mb,
         }
         fh.write(json.dumps(index_row) + "\n")
 
@@ -116,6 +119,7 @@ def _case_row(run: RunResult, case: CaseResult) -> dict:
         "latency_ms": m.latency_ms,
         "markdown_chars": m.markdown_chars,
         "markdown_words": m.markdown_words,
+        "approx_tokens": m.approx_tokens,
         "reference_chars": m.reference_chars,
         "reference_words": m.reference_words,
         "char_coverage": m.char_coverage,
@@ -173,6 +177,15 @@ def load_run(base_dir: Path, run_id: str) -> RunResult:
     if not run_path.exists():
         raise FileNotFoundError(f"Run not found: {run_path}")
     return RunResult.model_validate_json(run_path.read_text(encoding="utf-8"))
+
+
+def latest_run_per_provider(base_dir: Path) -> list[RunResult]:
+    """The newest stored run of each reader, in the order the readers were first seen (newest first)."""
+    seen: dict[str, RunResult] = {}
+    for run_id in list_runs(base_dir):
+        run = load_run(base_dir, run_id)
+        seen.setdefault(run.provider, run)
+    return list(seen.values())
 
 
 def latest_runs(base_dir: Path, n: int = 2) -> list[RunResult]:

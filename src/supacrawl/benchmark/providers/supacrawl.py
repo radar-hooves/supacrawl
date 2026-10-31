@@ -10,7 +10,7 @@ import logging
 import time
 from typing import Literal
 
-from supacrawl.benchmark.providers.base import ProviderOutput
+from supacrawl.benchmark.providers.base import ProviderOutput, SearchOutput
 from supacrawl.services.scrape import ScrapeService
 
 LOGGER = logging.getLogger(__name__)
@@ -124,4 +124,29 @@ class SupacrawlProvider:
         Returns:
             None
         """
+        await self._service.close()
+
+
+class SupacrawlSearchProvider:
+    """supacrawl's own web search, configured from the environment as the CLI is."""
+
+    name = "supacrawl"
+
+    def __init__(self) -> None:
+        from supacrawl.services.search import SearchService
+
+        self._service = SearchService()
+
+    async def search(self, query: str, *, limit: int = 5) -> SearchOutput:
+        t0 = time.monotonic()
+        try:
+            result = await self._service.search(query, limit=limit)
+        except Exception as exc:
+            return SearchOutput(success=False, error=str(exc), latency_ms=(time.monotonic() - t0) * 1000)
+        elapsed = (time.monotonic() - t0) * 1000
+        if not result.success:
+            return SearchOutput(success=False, error=result.error, latency_ms=elapsed)
+        return SearchOutput(success=True, urls=[item.url for item in result.data], latency_ms=elapsed)
+
+    async def aclose(self) -> None:
         await self._service.close()

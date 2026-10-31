@@ -1,7 +1,29 @@
 name: default
 description: >-
-  Curated scrape-quality corpus spanning static HTML through JavaScript-heavy single-page apps, structured-data commerce, data tables, PDFs, anti-bot, and non-Latin/RTL pages. URLs favour frozen targets (purpose-built sandboxes, Wikipedia permalink revisions, immutable arXiv PDFs) so that score changes over time reflect supacrawl changes rather than the web shifting underneath. Volatile targets are marked stable=false and excluded from the regression index; they exist to probe the capability ceiling.
+  Curated scrape-quality corpus spanning static HTML through JavaScript-heavy single-page apps, structured-data commerce, data tables, PDFs, anti-bot, long reference pages, news and non-Latin/RTL pages, plus a handful of web-search queries. URLs favour frozen targets (purpose-built sandboxes, Wikipedia permalink revisions, immutable arXiv PDFs) so that score changes over time reflect supacrawl changes rather than the web shifting underneath. Volatile targets are marked stable=false and excluded from the regression index; they exist to probe the capability ceiling.
 
+# A hit is any of the top five results on one of the expected domains.
+queries:
+  - id: q-python-json
+    query: python json module documentation
+    why: A documentation lookup an agent makes daily.
+    expect_domains: [docs.python.org]
+  - id: q-renovate-vulnerability-alerts
+    query: renovate vulnerabilityAlerts configuration option
+    why: An identifier query; the answer is one page of a large reference site.
+    expect_domains: [docs.renovatebot.com]
+  - id: q-ato-working-from-home
+    query: ATO working from home expenses deduction
+    why: A government guidance query with one authoritative source.
+    expect_domains: [ato.gov.au]
+  - id: q-playwright-python-install
+    query: playwright python install chromium
+    why: A tooling how-to with an official docs page.
+    expect_domains: [playwright.dev]
+  - id: q-attention-paper
+    query: Attention Is All You Need paper arxiv
+    why: A named paper; the canonical copy is on arXiv.
+    expect_domains: [arxiv.org]
 
 cases:
   # --- Static / baseline -------------------------------------------------
@@ -9,10 +31,10 @@ cases:
     url: https://example.com/
     category: static
     title: IANA example domain
-    why: Irreducible baseline; if this is not clean, nothing will be.
+    why: Irreducible baseline; if this is not clean, nothing will be. IANA rewrote the body in 2025, so the anchors are its current sentences.
     difficulty: 1
     probes: [baseline]
-    expect: ['Example Domain', 'illustrative examples']
+    expect: ['for use in documentation examples', 'without needing permission']
 
   - id: static-sandbox-simple
     url: https://www.scrapethissite.com/pages/simple/
@@ -275,3 +297,126 @@ cases:
     probes: [js_render, structured_data, microdata]
     expect: ['Playwright', 'web automation']
     expect_absent: ['Skip to content']
+
+  # --- Long reference page -----------------------------------------------
+  - id: docs-renovate-config-options
+    url: https://docs.renovatebot.com/configuration-options/
+    category: docs
+    title: Renovate configuration options (one very long reference page)
+    why: >-
+      About 300,000 characters of markdown, 180 option sections with tables; the page behind the extract and
+      query-filter retrieval work. Tests that a very long page comes back whole and quickly.
+    difficulty: 3
+    probes: [long_page, tables, docs]
+    expect: ['vulnerabilityAlerts', 'minimumReleaseAgeBehaviour', 'timestamp-required']
+    expect_absent: ['Skip to content', 'Table of contents']
+
+  - id: docs-mdn-fetch
+    url: https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API/Using_Fetch
+    category: docs
+    title: MDN — Using the Fetch API
+    why: A mainstream documentation site with heavy sidebar and footer chrome around code-rich prose.
+    difficulty: 2
+    probes: [code_blocks, main_content, boilerplate_removal]
+    expect: ['fetch()', 'Response', 'await']
+    expect_absent: ['Skip to main content', 'MDN Plus']
+
+  - id: docs-uv
+    url: https://docs.astral.sh/uv/
+    category: docs
+    title: uv documentation landing page (mkdocs-material)
+    why: A docs landing page whose navigation outweighs its body; tests that the body is what survives.
+    difficulty: 2
+    probes: [main_content, boilerplate_removal]
+    expect: ['uv', 'pip']
+    expect_absent: ['Skip to content']
+
+  # --- News ----------------------------------------------------------------
+  - id: news-abc-brainwaves
+    url: https://www.abc.net.au/news/2025-06-16/mind-reading-ai-brain-computer-interface/105376164
+    category: news
+    title: ABC News article (JS-rendered news CMS)
+    why: A published news article on a JS-heavy CMS with related-story rails and a site header; the prose must survive, the rails must not.
+    difficulty: 3
+    js_heavy: true
+    probes: [news, main_content, boilerplate_removal]
+    expect: ['brainwaves', 'Sydney']
+    expect_absent: ['Skip to main content', 'Top Stories']
+
+  # --- JS-rendered applications -------------------------------------------
+  - id: spa-react-docs
+    url: https://react.dev/learn
+    category: spa
+    title: react.dev Quick Start (React application shell)
+    why: A documentation site that is itself a React app; server-rendered, hydrated on load.
+    difficulty: 2
+    js_heavy: true
+    spa: true
+    probes: [js_render, code_blocks]
+    expect: ['Quick Start', 'component']
+
+  - id: forum-hn-item-1
+    url: https://news.ycombinator.com/item?id=1
+    category: forum
+    title: Hacker News item 1 (frozen thread)
+    why: The oldest HN thread; a static table-layout forum page whose comments must come through in order.
+    difficulty: 1
+    probes: [static_list, forum]
+    expect: ['Y Combinator']
+
+  - id: forum-stackoverflow-yield
+    url: https://stackoverflow.com/questions/231767/what-does-the-yield-keyword-do-in-python
+    category: forum
+    title: Stack Overflow question (cookie banner, bot protection)
+    why: A high-traffic Q&A page behind Cloudflare with a cookie consent banner; tests the banner goes and the answer stays. Live protection, so a probe.
+    difficulty: 3
+    antibot: true
+    stable: false
+    probes: [antibot, cookie_banner, code_blocks]
+    expect: ['yield', 'generator']
+    expect_absent: ['Accept all cookies']
+
+  # --- Package registries ------------------------------------------------
+  - id: registry-pypi-httpx
+    url: https://pypi.org/project/httpx/
+    category: docs
+    title: PyPI project page — httpx
+    why: A registry page whose README body sits inside a dense sidebar of metadata and navigation.
+    difficulty: 2
+    probes: [main_content, boilerplate_removal]
+    expect: ['httpx', 'pip install httpx']
+    expect_absent: ['Skip to main content']
+
+  - id: registry-npm-express
+    url: https://www.npmjs.com/package/express
+    category: docs
+    title: npm package page — express
+    why: A server-rendered React registry page; the README must survive the install sidebar and header.
+    difficulty: 2
+    js_heavy: true
+    probes: [main_content, js_render]
+    expect: ['express', 'npm i express']
+
+  # --- Bot-walled and app-shell probes -------------------------------------
+  - id: antibot-reddit-old
+    url: https://old.reddit.com/r/Python/
+    category: antibot
+    title: old.reddit.com subreddit listing (live bot wall)
+    why: Reddit refuses most automated clients; a probe of whether any rung of the ladder gets a listing.
+    difficulty: 4
+    antibot: true
+    stable: false
+    probes: [antibot]
+    expect: ['Python']
+
+  - id: spa-youtube-watch
+    url: https://www.youtube.com/watch?v=dQw4w9WgXcQ
+    category: spa
+    title: YouTube watch page (app shell)
+    why: A pure application shell whose useful text (title, description) arrives by script; a capability probe, not regression signal.
+    difficulty: 4
+    js_heavy: true
+    spa: true
+    stable: false
+    probes: [js_render, app_shell]
+    expect: ['Rick Astley']

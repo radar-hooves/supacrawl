@@ -1,20 +1,28 @@
 """Benchmark runner — orchestrates a full benchmark run over a suite.
 
-Accepts a ``BenchSuite``, drives each case through the provider and optionally
-the browser reference renderer, scores every metric, and returns a ``RunResult``
-with per-case detail and a run-level aggregate.
+Accepts a ``BenchSuite``, drives each case through the chosen reader and
+optionally the browser reference renderer, scores every metric, runs the
+suite's search queries through the reader's search surface when it has one,
+and returns a ``RunResult`` with per-case detail and a run-level aggregate.
 
 Concurrency is throttled via an ``asyncio.Semaphore`` because browser pages are
-memory-heavy; the default is intentionally conservative.
+memory-heavy; the default is intentionally conservative. Peak memory is the
+whole process tree (the reader's browser included), sampled through the run.
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
+import os
+import platform
+import statistics
 import subprocess
 from datetime import UTC, datetime
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as pkg_version
 from pathlib import Path
+from urllib.parse import urlparse
 
 from supacrawl.benchmark.judge import judge_case
 from supacrawl.benchmark.metrics import (
@@ -25,15 +33,18 @@ from supacrawl.benchmark.metrics import (
     token_prf,
 )
 from supacrawl.benchmark.models import (
+    CHARS_PER_TOKEN,
     BenchCase,
+    BenchQuery,
     BenchSuite,
     CaseMetrics,
     CaseResult,
     RunAggregate,
     RunResult,
+    SearchResult,
 )
-from supacrawl.benchmark.providers.base import ProviderOutput, ScraperProvider
-from supacrawl.benchmark.providers.supacrawl import SupacrawlProvider
+from supacrawl.benchmark.providers import make_provider, make_search_provider
+from supacrawl.benchmark.providers.base import ProviderOutput, ScraperProvider, SearchProvider
 from supacrawl.benchmark.reference import ReferenceCapture, ReferenceRenderer
 from supacrawl.quality import (
     count_structure,
@@ -44,8 +55,11 @@ from supacrawl.quality import (
     tokenize,
     word_spacing,
 )
+from supacrawl.services.renderers import process_tree_rss_bytes
 
 LOGGER = logging.getLogger(__name__)
+
+_RSS_SAMPLE_S = 0.5
 
 
 def _git_sha() -> str | None:
@@ -68,18 +82,27 @@ def _git_sha() -> str | None:
     return None
 
 
-def _run_id(sha: str | None) -> str:
-    """Build a compact run ID from the current UTC time and git SHA.
-
-    Args:
-        sha: Short git SHA or ``None``.
+def _run_id(sha: str | None, provider: str) -> str:
+    """Build a compact run ID from the current UTC time, the reader and the git SHA.
 
     Returns:
-        String like ``"20260614T083012-a1b2c3d4"`` or ``"20260614T083012"`` when
-        no SHA is available.
+        String like ``"20260614T083012-supacrawl-a1b2c3d4"``.
     """
     ts = datetime.now(UTC).strftime("%Y%m%dT%H%M%S")
-    return f"{ts}-{sha}" if sha else ts
+    return f"{ts}-{provider}-{sha}" if sha else f"{ts}-{provider}"
+
+
+def _provider_version(name: str) -> str | None:
+    """The installed version of the package behind a reader; None for a hosted service."""
+    try:
+        return pkg_version(name)
+    except PackageNotFoundError:
+        return None
+
+
+def _platform() -> str:
+    """The machine without its name: OS, architecture and core count."""
+    return f"{platform.system()} {platform.machine()}, {os.cpu_count()} cores"
 
 
 def _score_case(
@@ -174,6 +197,7 @@ def _score_case(
         latency_ms=output.latency_ms,
         markdown_chars=md_chars,
         markdown_words=md_words,
+        approx_tokens=len(markdown) // CHARS_PER_TOKEN,
         reference_chars=ref_chars,
         reference_words=ref_words,
         char_coverage=char_cov,
@@ -381,21 +405,46 @@ async def _run_case(
     )
 
 
-def _build_aggregate(results: list[CaseResult]) -> RunAggregate:
+def _domain_hit(urls: list[str], expect_domains: list[str]) -> bool | None:
+    """Whether any result URL is on one of the expected domains; None when the query expects none."""
+    if not expect_domains:
+        return None
+    hosts = [(urlparse(u).hostname or "").lower() for u in urls]
+    return any(host == d or host.endswith("." + d) for host in hosts for d in expect_domains)
+
+
+async def _run_query(query: BenchQuery, provider: SearchProvider) -> SearchResult:
+    """Run one search query through the reader's search surface."""
+    LOGGER.info("Running query: %s (%s)", query.id, query.query)
+    output = await provider.search(query.query, limit=5)
+    return SearchResult(
+        query_id=query.id,
+        query=query.query,
+        success=output.success,
+        latency_ms=output.latency_ms,
+        results=len(output.urls),
+        expect_hit=_domain_hit(output.urls, query.expect_domains) if output.success else None,
+        error=output.error,
+    )
+
+
+def _build_aggregate(results: list[CaseResult], searches: list[SearchResult] | None = None) -> RunAggregate:
     """Build the run-level aggregate from all case results.
 
     Args:
         results: All case results from the run.
+        searches: The run's search results, if it had a search provider.
 
     Returns:
         ``RunAggregate`` with overall and per-category rollups.
     """
     total = len(results)
-    succeeded = sum(1 for r in results if r.metrics.success)
-    success_rate = succeeded / total if total else 0.0
+    succeeded = [r for r in results if r.metrics.success]
+    success_rate = len(succeeded) / total if total else 0.0
 
     latencies = [r.metrics.latency_ms for r in results if r.metrics.latency_ms is not None]
     mean_latency = sum(latencies) / len(latencies) if latencies else None
+    median_latency = statistics.median(latencies) if latencies else None
 
     scored = [r for r in results if r.scored and r.metrics.quality is not None]
     scored_count = len(scored)
@@ -413,6 +462,17 @@ def _build_aggregate(results: list[CaseResult]) -> RunAggregate:
             cat_qualities: list[float] = [r.metrics.quality for r in cat_scored]  # type: ignore[misc]
             by_category[cat] = round(sum(cat_qualities) / len(cat_scored), 1)
 
+    def _mean(values: list[float]) -> float | None:
+        return round(sum(values) / len(values), 3) if values else None
+
+    hits = [r.metrics.expect_hit for r in succeeded if r.metrics.expect_hit is not None]
+    absent = [r.metrics.expect_absent_ok for r in succeeded if r.metrics.expect_absent_ok is not None]
+    tokens = [float(r.metrics.approx_tokens) for r in succeeded]
+
+    searches = searches or []
+    search_ok = [s for s in searches if s.success]
+    judged = [s for s in search_ok if s.expect_hit is not None]
+
     return RunAggregate(
         overall_quality=overall_quality,
         by_category=by_category,
@@ -420,16 +480,35 @@ def _build_aggregate(results: list[CaseResult]) -> RunAggregate:
         scored_cases=scored_count,
         success_rate=success_rate,
         mean_latency_ms=mean_latency,
+        median_latency_ms=median_latency,
+        mean_approx_tokens=_mean(tokens),
+        expect_hit=_mean(hits),
+        expect_absent_ok=_mean(absent),
+        search_queries=len(searches),
+        search_success_rate=(len(search_ok) / len(searches)) if searches else None,
+        search_expect_hit=_mean([1.0 if s.expect_hit else 0.0 for s in judged]),
     )
+
+
+async def _sample_peak_rss(peak: list[int]) -> None:
+    """Keep ``peak[0]`` at the largest process-tree RSS seen, until cancelled."""
+    while True:
+        rss = process_tree_rss_bytes()
+        if rss is not None and rss > peak[0]:
+            peak[0] = rss
+        await asyncio.sleep(_RSS_SAMPLE_S)
 
 
 async def run_benchmark(
     suite: BenchSuite,
     *,
+    provider: str = "supacrawl",
     judge: bool = False,
     concurrency: int = 3,
     base_dir: Path,
     only: list[str] | None = None,
+    reference: bool = True,
+    searches: bool = True,
 ) -> RunResult:
     """Run the full benchmark over ``suite`` and return results.
 
@@ -439,21 +518,25 @@ async def run_benchmark(
 
     Args:
         suite: The benchmark suite to run.
+        provider: The reader to drive, by name (``supacrawl``, ``trafilatura``, ``jina``, ...).
         judge: Whether to invoke the LLM judge on each scored case.
         concurrency: Maximum number of cases running in parallel.
         base_dir: Root directory for artefact storage; artefacts land in
             ``base_dir/runs/<run_id>/<case_id>.*``.
         only: Optional list of case IDs or category names to restrict the run.
             When ``None``, all cases are run.
+        reference: Whether to capture the browser reference for HTML cases.
+            Off, cases score on their anchors, structure and spacing alone, and
+            the run's memory and time are the reader's own.
+        searches: Whether to run the suite's queries through the reader's
+            search surface (skipped for a reader without one).
 
     Returns:
         ``RunResult`` with all case results and the run aggregate.
     """
-    from importlib.metadata import version as pkg_version
-
     started_at = datetime.now(UTC).isoformat()
     sha = _git_sha()
-    run_id = _run_id(sha)
+    run_id = _run_id(sha, provider)
 
     try:
         supacrawl_version = pkg_version("supacrawl")
@@ -472,13 +555,18 @@ async def run_benchmark(
     # at a time and do not contend with concurrent browser reference captures.
     pdf_semaphore = asyncio.Semaphore(1)
 
-    provider: ScraperProvider = SupacrawlProvider()
+    reader = make_provider(provider)
+    search_reader = make_search_provider(provider) if searches and suite.queries else None
+    peak = [process_tree_rss_bytes() or 0]
+    sampler = asyncio.ensure_future(_sample_peak_rss(peak))
+    search_results: list[SearchResult] = []
     try:
-        async with ReferenceRenderer() as renderer:
+
+        async def _cases(renderer: ReferenceRenderer | None) -> list[CaseResult]:
             tasks = [
                 _run_case(
                     case=case,
-                    provider=provider,
+                    provider=reader,
                     renderer=renderer,
                     judge=judge,
                     semaphore=semaphore,
@@ -487,12 +575,23 @@ async def run_benchmark(
                 )
                 for case in cases
             ]
-            case_results = await asyncio.gather(*tasks)
-    finally:
-        await provider.aclose()
+            return list(await asyncio.gather(*tasks))
 
-    results = list(case_results)
-    aggregate = _build_aggregate(results)
+        if reference:
+            async with ReferenceRenderer() as renderer:
+                results = await _cases(renderer)
+        else:
+            results = await _cases(None)
+        if search_reader is not None:
+            for query in suite.queries:
+                search_results.append(await _run_query(query, search_reader))
+    finally:
+        sampler.cancel()
+        await reader.aclose()
+        if search_reader is not None:
+            await search_reader.aclose()
+
+    aggregate = _build_aggregate(results, search_results)
 
     finished_at = datetime.now(UTC).isoformat()
 
@@ -502,9 +601,14 @@ async def run_benchmark(
         finished_at=finished_at,
         supacrawl_version=supacrawl_version,
         git_sha=sha,
-        provider=provider.name,
+        provider=reader.name,
+        provider_version=supacrawl_version if provider == "supacrawl" else _provider_version(provider),
         judge_enabled=judge,
+        reference_enabled=reference,
+        peak_rss_mb=round(peak[0] / 1_048_576, 1) if peak[0] else None,
+        platform=_platform(),
         suite_name=suite.name,
         cases=results,
+        searches=search_results,
         aggregate=aggregate,
     )

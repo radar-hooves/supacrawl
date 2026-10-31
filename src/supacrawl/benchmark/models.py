@@ -2,11 +2,13 @@
 
 Two families of model live here:
 
-- **Corpus** (``BenchCase``, ``BenchSuite``) — the input: a curated, annotated
-  list of test sites loaded from a YAML manifest.
-- **Results** (``CaseMetrics``, ``CaseResult``, ``RunAggregate``, ``RunResult``)
-  — the output: per-case scores and a run-level aggregate, persisted to disk in
-  a versioned, dashboard-ingestible shape.
+- **Corpus** (``BenchCase``, ``BenchQuery``, ``BenchSuite``) — the input: a
+  curated, annotated list of test sites and search queries loaded from a YAML
+  manifest.
+- **Results** (``CaseMetrics``, ``CaseResult``, ``SearchResult``,
+  ``RunAggregate``, ``RunResult``) — the output: per-case scores and a
+  run-level aggregate, persisted to disk in a versioned, dashboard-ingestible
+  shape.
 
 ``SCHEMA_VERSION`` is stamped on every persisted run so that a downstream
 dashboard can evolve its reader as the result shape changes.
@@ -16,11 +18,15 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, Field
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 # Categories a case can belong to. Kept as a closed set so the aggregate can
 # report a stable per-category breakdown across runs.
 type Category = str
+
+# The token estimate's basis: about four characters per token for English
+# markdown under the common BPE tokenisers, stated wherever the figure is shown.
+CHARS_PER_TOKEN = 4
 
 
 class BenchCase(BaseModel):
@@ -78,12 +84,22 @@ class BenchCase(BaseModel):
         return self.stable if self.scored is None else self.scored
 
 
+class BenchQuery(BaseModel):
+    """One web-search query: a hit is any result from one of ``expect_domains``."""
+
+    id: str
+    query: str
+    why: str = ""
+    expect_domains: list[str] = Field(default_factory=list)
+
+
 class BenchSuite(BaseModel):
-    """A named, loadable collection of benchmark cases."""
+    """A named, loadable collection of benchmark cases and search queries."""
 
     name: str
     description: str = ""
     cases: list[BenchCase]
+    queries: list[BenchQuery] = Field(default_factory=list)
 
 
 class CaseMetrics(BaseModel):
@@ -104,6 +120,8 @@ class CaseMetrics(BaseModel):
     # Volume
     markdown_chars: int = 0
     markdown_words: int = 0
+    # Output size as a model would pay for it: markdown_chars / CHARS_PER_TOKEN.
+    approx_tokens: int = 0
     reference_chars: int | None = None
     reference_words: int | None = None
 
@@ -127,7 +145,7 @@ class CaseMetrics(BaseModel):
     # Deterministic structured data
     json_ld_found: bool = False
 
-    # Curated anchors (reference-free)
+    # Curated anchors (reference-free): the main content survived, the boilerplate went.
     expect_hit: float | None = None
     expect_absent_ok: float | None = None
 
@@ -156,6 +174,19 @@ class CaseResult(BaseModel):
     artifacts: dict[str, str] = Field(default_factory=dict)
 
 
+class SearchResult(BaseModel):
+    """One query's outcome through the run's search provider."""
+
+    query_id: str
+    query: str
+    success: bool
+    latency_ms: float | None = None
+    results: int = 0
+    # Whether a result came from one of the query's expected domains; None when the search failed.
+    expect_hit: bool | None = None
+    error: str | None = None
+
+
 class RunAggregate(BaseModel):
     """Run-level rollup, the headline numbers a trend view charts."""
 
@@ -168,6 +199,15 @@ class RunAggregate(BaseModel):
     scored_cases: int = 0
     success_rate: float = 0.0
     mean_latency_ms: float | None = None
+    median_latency_ms: float | None = None
+    # Over successful cases: output size and the two anchor rates.
+    mean_approx_tokens: float | None = None
+    expect_hit: float | None = None
+    expect_absent_ok: float | None = None
+    # Search queries, when the run had a search provider.
+    search_queries: int = 0
+    search_success_rate: float | None = None
+    search_expect_hit: float | None = None
 
 
 class RunResult(BaseModel):
@@ -186,7 +226,15 @@ class RunResult(BaseModel):
     supacrawl_version: str
     git_sha: str | None = None
     provider: str = "supacrawl"
+    provider_version: str | None = None
     judge_enabled: bool = False
+    reference_enabled: bool = True
+    # Peak resident memory of this process and its children (the browser's
+    # processes included), sampled through the run. None off Linux.
+    peak_rss_mb: float | None = None
+    # The machine, without its name: enough to say what the timings were measured on.
+    platform: str | None = None
     suite_name: str
     cases: list[CaseResult]
+    searches: list[SearchResult] = Field(default_factory=list)
     aggregate: RunAggregate

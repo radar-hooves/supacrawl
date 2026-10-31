@@ -63,3 +63,22 @@ class ScraperProvider(Protocol):
             None
         """
         ...
+
+
+class SearchOutput(BaseModel):
+    """Normalised output from a reader's web search: the result URLs in rank order."""
+
+    success: bool
+    urls: list[str] = []
+    error: str | None = None
+    latency_ms: float = 0.0
+
+
+class SearchProvider(Protocol):
+    """A reader's web-search surface, for the suite's queries."""
+
+    name: str
+
+    async def search(self, query: str, *, limit: int = 5) -> SearchOutput: ...
+
+    async def aclose(self) -> None: ...

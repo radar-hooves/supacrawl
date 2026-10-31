@@ -43,9 +43,11 @@ def render_run(run: RunResult) -> str:
     agg = run.aggregate
 
     con.print(f"[bold]Run:[/bold] {run.run_id}")
-    con.print(f"[bold]Suite:[/bold] {run.suite_name}   [bold]Provider:[/bold] {run.provider}")
-    con.print(f"[bold]Version:[/bold] {run.supacrawl_version}   [bold]SHA:[/bold] {run.git_sha or 'n/a'}")
-    con.print(f"[bold]Started:[/bold] {run.started_at[:19].replace('T', ' ')} UTC")
+    reader = f"{run.provider} {run.provider_version}" if run.provider_version else run.provider
+    con.print(f"[bold]Suite:[/bold] {run.suite_name}   [bold]Reader:[/bold] {reader}")
+    con.print(f"[bold]supacrawl:[/bold] {run.supacrawl_version}   [bold]SHA:[/bold] {run.git_sha or 'n/a'}")
+    con.print(f"[bold]Started:[/bold] {run.started_at[:19].replace('T', ' ')} UTC   {run.platform or ''}")
+    con.print(f"[bold]Reference renderer:[/bold] {'on' if run.reference_enabled else 'off'}")
     con.print()
 
     # Headline numbers
@@ -54,8 +56,22 @@ def render_run(run: RunResult) -> str:
     con.print(
         f"[bold]Success rate:[/bold] {agg.success_rate * 100:.1f}%  ({agg.total_cases} cases, {agg.scored_cases} scored)"
     )
-    if agg.mean_latency_ms is not None:
-        con.print(f"[bold]Mean latency:[/bold] {agg.mean_latency_ms:.0f} ms")
+    if agg.mean_latency_ms is not None and agg.median_latency_ms is not None:
+        con.print(
+            f"[bold]Latency:[/bold] median {agg.median_latency_ms / 1000:.1f} s, mean {agg.mean_latency_ms / 1000:.1f} s"
+        )
+    if agg.expect_hit is not None or agg.expect_absent_ok is not None:
+        hit = f"{agg.expect_hit * 100:.0f}%" if agg.expect_hit is not None else "n/a"
+        gone = f"{agg.expect_absent_ok * 100:.0f}%" if agg.expect_absent_ok is not None else "n/a"
+        con.print(f"[bold]Content kept:[/bold] {hit}   [bold]Boilerplate gone:[/bold] {gone}")
+    if agg.mean_approx_tokens is not None:
+        con.print(f"[bold]Output:[/bold] {agg.mean_approx_tokens:,.0f} tokens per page (chars/4)")
+    if run.peak_rss_mb is not None:
+        con.print(f"[bold]Peak memory:[/bold] {run.peak_rss_mb:,.0f} MB (process tree)")
+    if agg.search_queries:
+        ok = f"{(agg.search_success_rate or 0) * 100:.0f}%"
+        hit = f"{agg.search_expect_hit * 100:.0f}%" if agg.search_expect_hit is not None else "n/a"
+        con.print(f"[bold]Search:[/bold] {agg.search_queries} queries, {ok} answered, expected domain in {hit}")
     con.print()
 
     # Per-category table
@@ -102,6 +118,40 @@ def render_run(run: RunResult) -> str:
 
     assert isinstance(con.file, io.StringIO)
     return con.file.getvalue()
+
+
+def _pct(value: float | None) -> str:
+    return f"{value * 100:.0f}%" if value is not None else "n/a"
+
+
+def render_table(runs: list[RunResult]) -> str:
+    """A markdown table, one row per run, for comparing readers side by side.
+
+    Columns are the figures the decision needs: whether pages came back,
+    whether the main content survived and the boilerplate went, how long a
+    page took, how much a model would read, and how much memory the reader's
+    process tree peaked at. Every run states its reader version.
+    """
+    header = (
+        "| Reader | Pages | Content kept | Boilerplate gone | Median s | Mean s | Tokens/page | Peak MB | Search |\n"
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |"
+    )
+    rows = []
+    for run in runs:
+        agg = run.aggregate
+        reader = f"{run.provider} {run.provider_version}" if run.provider_version else run.provider
+        search = (
+            f"{_pct(agg.search_expect_hit)} of {agg.search_queries}"
+            if agg.search_queries and agg.search_expect_hit is not None
+            else ("failed" if agg.search_queries else "none")
+        )
+        rows.append(
+            f"| {reader} | {_pct(agg.success_rate)} of {agg.total_cases} | {_pct(agg.expect_hit)} | "
+            f"{_pct(agg.expect_absent_ok)} | "
+            f"{(agg.median_latency_ms or 0) / 1000:.1f} | {(agg.mean_latency_ms or 0) / 1000:.1f} | "
+            f"{agg.mean_approx_tokens or 0:,.0f} | {run.peak_rss_mb or 0:,.0f} | {search} |"
+        )
+    return "\n".join([header, *rows])
 
 
 def render_comparison(cmp: RunComparison) -> str:
