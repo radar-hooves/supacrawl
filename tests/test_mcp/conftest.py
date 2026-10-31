@@ -1,8 +1,13 @@
 """Pytest configuration and fixtures for Supacrawl MCP server tests."""
 
+import importlib.util
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+
+# Every module here imports the MCP framework, which only the mcp-dev group installs.
+if importlib.util.find_spec("mcp_common") is None:
+    collect_ignore_glob = ["test_*.py"]
 
 from supacrawl.services.registry import SupacrawlServices
 from supacrawl.services.search.providers import ProviderChain

@@ -1,5 +1,6 @@
 """Pytest configuration and shared fixtures for supacrawl tests."""
 
+import importlib.util
 import json
 import os
 from dataclasses import dataclass, field
@@ -154,6 +155,19 @@ def make_case_result(
     )
 
 
+# The MCP server's framework (mcp-common) is not on PyPI; only the mcp-dev group
+# installs it, and CI and a PyPI install do not. Modules that import it at module
+# level are not collected without it; tests marked ``mcp`` are skipped.
+HAS_MCP_COMMON = importlib.util.find_spec("mcp_common") is not None
+if not HAS_MCP_COMMON:
+    collect_ignore = [
+        "test_health_search_config.py",
+        "test_health_search_probe.py",
+        "test_provider_fallback_visibility.py",
+        "test_secret_redaction.py",
+    ]
+
+
 def pytest_configure(config: pytest.Config) -> None:
     """Register custom markers."""
     config.addinivalue_line("markers", "unit: Pure logic tests with no I/O, network, or browser")
@@ -178,9 +192,12 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
     Chromium is not installed.
     """
     skip = None if _chromium_installed() else pytest.mark.skip(reason="Playwright Chromium is not installed")
+    mcp_skip = None if HAS_MCP_COMMON else pytest.mark.skip(reason="mcp-common is not installed (the mcp-dev group)")
     for item in items:
         if skip and "browser" in item.keywords:
             item.add_marker(skip)
+        if mcp_skip and "mcp" in item.keywords:
+            item.add_marker(mcp_skip)
         # Skip if already has a category marker
         markers = list(item.iter_markers())
         marker_names = [m.name for m in markers]

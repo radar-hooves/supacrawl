@@ -294,7 +294,7 @@ async def test_pdf_case_stable_non_zero_in_bench_run(tmp_path: Path) -> None:
 
     for run_idx in range(3):
         with (
-            patch("supacrawl.benchmark.runner.SupacrawlProvider", _FakeProviderForConcurrency),
+            patch("supacrawl.benchmark.runner.make_provider", lambda name: _FakeProviderForConcurrency()),
             patch("supacrawl.benchmark.runner.ReferenceRenderer", _FakeRendererForPdf),
         ):
             result = await run_benchmark(suite, base_dir=tmp_path, concurrency=3)
