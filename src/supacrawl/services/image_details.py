@@ -9,14 +9,13 @@ rendering, not the original.
 """
 
 import asyncio
-import io
 import logging
 import re
 from urllib.parse import urljoin, urlparse
 
 import httpx
 from bs4 import BeautifulSoup
-from PIL import Image
+from PIL import ImageFile
 
 from supacrawl.models import ImageDetail
 from supacrawl.services.http_fetch import DEFAULT_USER_AGENT
@@ -24,8 +23,8 @@ from supacrawl.services.url_guard import guarded_stream
 
 LOGGER = logging.getLogger(__name__)
 
-# Image headers fit in the first bytes; EXIF-heavy JPEGs rarely exceed this.
-HEADER_BYTES = 65536
+# The size sits in the file header, but a JPEG's EXIF and embedded preview can push it past 64 KB.
+HEADER_BYTES = 524288
 MAX_PROBES = 40
 PROBE_CONCURRENCY = 8
 PROBE_TIMEOUT_S = 8.0
@@ -104,13 +103,15 @@ async def _probe(client: httpx.AsyncClient, url: str, hint: int | None, semaphor
                     detail.bytes = int(length)
                 elif total:
                     detail.bytes = int(total.group(1))
-                buffer = bytearray()
+                parser = ImageFile.Parser()
+                fed = 0
                 async for chunk in response.aiter_bytes():
-                    buffer.extend(chunk)
-                    if len(buffer) >= HEADER_BYTES:
+                    parser.feed(chunk)
+                    fed += len(chunk)
+                    if parser.image is not None or fed >= HEADER_BYTES:
                         break
-            with Image.open(io.BytesIO(bytes(buffer))) as image:
-                detail.width, detail.height = image.size
+            if parser.image is not None:
+                detail.width, detail.height = parser.image.size
         except Exception as exc:
             LOGGER.debug("Image size probe failed for %s: %s", url, exc)
     return detail
