@@ -364,7 +364,7 @@ class TestGuardedRequestRedirectChain:
         """A 30x pivot to the metadata endpoint is refused like a direct request."""
         client, _calls = self._client([(302, {"location": "http://169.254.169.254/latest/meta-data/"})])
 
-        def fake_resolve(url):
+        def fake_resolve(url, strict=None):
             if "169.254.169.254" in url:
                 raise ValidationError("blocked range (link-local / cloud-metadata)", field="url", value=url)
             return ("93.184.216.34", "example.com")
@@ -383,7 +383,7 @@ class TestGuardedRequestRedirectChain:
         )
         seen = []
 
-        def fake_resolve(url):
+        def fake_resolve(url, strict=None):
             seen.append(url)
             return ("93.184.216.34", "cdn.example.com" if "cdn" in url else "example.com")
 
@@ -396,7 +396,7 @@ class TestGuardedRequestRedirectChain:
 
     async def test_too_many_redirects_is_refused(self) -> None:
         """A redirect chain deeper than max_redirects is refused, not followed forever."""
-        client, _calls = self._client([(302, {"location": "https://example.com/next"})] * 3)
+        client, _calls = self._client([(302, {"location": f"https://example.com/n{i}"}) for i in range(3)])
 
         with patch(
             "supacrawl.services.url_guard.resolve_and_pin",
@@ -424,7 +424,7 @@ class TestGuardedRequestRedirectChain:
         client, calls = self._client([(302, {"location": "/moved/here"}), (200, {})])
         seen = []
 
-        def fake_resolve(url):
+        def fake_resolve(url, strict=None):
             seen.append(url)
             return ("93.184.216.34", "example.com")
 
