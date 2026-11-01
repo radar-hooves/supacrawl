@@ -586,6 +586,46 @@ def _title_heading(soup: BeautifulSoup, content: Tag) -> None:
         content.insert(0, heading)
 
 
+# A table left in unwrapped layout text is chrome when it is one cell of little text or mostly links.
+_CHROME_TABLE_MAX_WORDS = 40
+_CHROME_LINK_SHARE = 0.8
+
+
+def _is_chrome_table(table: Tag) -> bool:
+    """A header-less table in a laid-out page that is a promo box or a row of links, not data."""
+    if table.find(["th", "caption", "thead"]) is not None:
+        return False
+    words = _words(table)
+    if words == 0:
+        return True
+    cells = table.find_all("td")
+    if len(cells) == 1 and words <= _CHROME_TABLE_MAX_WORDS:
+        return True
+    linked = sum(_words(a) for a in table.find_all("a"))
+    return linked >= _CHROME_LINK_SHARE * words
+
+
+def _strip_layout_chrome(content: Tag) -> None:
+    """Drop the site chrome a table-laid-out page leaves in its text cell.
+
+    That is the logo (an image-only link before any text), promo boxes and rows of
+    translation or navigation links set as small tables.
+    """
+    for node in list(content.descendants):
+        if isinstance(node, Tag) and node.decomposed:
+            continue
+        if isinstance(node, NavigableString):
+            if node.strip():
+                break
+        elif isinstance(node, Tag) and node.name == "a" and not node.get_text(strip=True) and node.find("img"):
+            node.decompose()
+        elif isinstance(node, Tag) and node.name == "img":
+            break
+    for table in content.find_all("table"):
+        if table.parent is not None and _is_chrome_table(table):
+            table.decompose()
+
+
 def unwrap_layout_table(soup: BeautifulSoup) -> int:
     """Replace a page-layout table with its text cell, dropping the navigation, logo and spacer cells.
 
@@ -617,6 +657,7 @@ def unwrap_layout_table(soup: BeautifulSoup) -> int:
         outermost = outermost or content
         unwrapped += 1
     if outermost is not None:
+        _strip_layout_chrome(outermost)
         # After the last unwrap, so a title image nested inside an inner layout table is the first thing found.
         _title_heading(soup, outermost)
     return unwrapped

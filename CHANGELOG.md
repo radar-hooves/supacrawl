@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## [2026.11.5] - 02/11/2026
+
+### Fixed
+
+- **A table-laid-out essay loses its logo, promo box and translation links, on the plain install too.** After a layout table is unwrapped, a leading image-only link (the logo), a header-less one-cell table of little text (a promo box) and a header-less table that is mostly links (the translation row) are dropped. Before, they came out as markdown beside the article unless the `readability` extra happened to pick the article.
+- **Readability no longer picks a block that boilerplate removal deleted.** A thin `<main>` (a one-line "moved" page) fell through the selector rung and readability, which reads the raw HTML, chose the cookie banner or navigation: 6,623 characters of chrome in place of the page's line. A readability pick now stands only when over half its words are still in the cleaned page; the stub converts to its line with or without the extra. Asked by the household library (radar-hooves/library#297).
+
 ## [2026.11.4] - 01/11/2026
 
 ### Fixed

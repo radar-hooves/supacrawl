@@ -412,7 +412,24 @@ def _strategy1(soup: BeautifulSoup, main_content_selectors: list[str], content_m
     return None
 
 
-def _strategy2(html: str, content_mode: float) -> Tag | None:
+# Share of a readability pick's words that must still be in the boilerplate-cleaned page.
+_S2_MIN_KEPT_SHARE = 0.5
+
+
+def _survives_cleaning(root: Tag, soup: BeautifulSoup) -> bool:
+    """True when the readability pick is mostly text boilerplate removal left in the page.
+
+    Readability reads the raw HTML, so it can choose a cookie banner or navigation block that
+    cleaning deleted, over a thin ``<main>`` that is the page's real content.
+    """
+    picked = [w.casefold() for w in root.get_text(" ").split()]
+    if not picked:
+        return False
+    kept = {w.casefold() for w in soup.get_text(" ").split()}
+    return sum(w in kept for w in picked) >= _S2_MIN_KEPT_SHARE * len(picked)
+
+
+def _strategy2(html: str, content_mode: float, soup: BeautifulSoup | None = None) -> Tag | None:
     """readability-lxml extraction (Strategy 2).
 
     Parses the full original HTML (not the pre-cleaned soup) through
@@ -445,6 +462,10 @@ def _strategy2(html: str, content_mode: float) -> Tag | None:
         words = _word_count(root)
         if words < _S2_MIN_WORDS:
             LOGGER.debug("Strategy 2 thin: %d words (< %d)", words, _S2_MIN_WORDS)
+            return None
+
+        if soup is not None and not _survives_cleaning(root, soup):
+            LOGGER.debug("Strategy 2 rejected: pick was removed as boilerplate")
             return None
 
         LOGGER.debug("Strategy 2 accepted: %d words", words)
@@ -592,7 +613,7 @@ def extract(
 
     # Strategy 2: readability-lxml
     if result is None:
-        result = _strategy2(html, content_mode)
+        result = _strategy2(html, content_mode, soup)
 
     # Strategy 3: BM25 body-section prune
     if result is None:
