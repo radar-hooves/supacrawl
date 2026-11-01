@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## [2026.11.4] - 01/11/2026
+
+### Fixed
+
+- **A layout table nested in a layout table's text cell is unwrapped too.** Older sites put the essay in a second, often one-cell, table inside the text cell; 2026.11.3 left that inner table, so the whole essay came out as one markdown table cell with its paragraphs collapsed and the title still an image. Layout tables now unwrap down to three deep, a header cell or caption belonging to a nested data table no longer stops the outer table unwrapping, the `<br><br>` paragraphs come out as paragraphs, and the title image's alt heads the text. A data table inside the text still renders as a table. Asked by the household library (radar-hooves/library).
+
 ## [2026.11.3] - 01/11/2026
 
 ### Fixed

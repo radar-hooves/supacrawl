@@ -64,3 +64,24 @@ def test_table_of_equal_cells_is_not_a_layout() -> None:
     html = f"<html><body><table><tr>{cells}</tr></table></body></html>"
     md = _md(html)
     assert "word word" in md and md.count("|") > 4
+
+
+def test_nested_one_cell_layout_table_is_unwrapped_and_br_runs_are_paragraphs() -> None:
+    assert ESSAY.count("<table") == 2, "the fixture nests a one-cell layout table in the text cell"
+    md = _md(ESSAY)
+    assert "|" not in md
+    assert "![" not in md
+    assert md.count("\n\n") >= 4
+    assert md.splitlines()[0] == "# On Slow Gardens"
+
+
+def test_data_table_inside_the_nested_text_cell_still_renders_as_a_table() -> None:
+    table = (
+        "<table><tr><th>Plant</th><th>Depth</th></tr><tr><td>Bean</td><td>5 cm</td></tr>"
+        "<tr><td>Pea</td><td>4 cm</td></tr></table>"
+    )
+    html = ESSAY.replace("</font>\n</td></tr>", f"{table}</font>\n</td></tr>", 1)
+    md = _md(html)
+    assert "| Plant | Depth |" in md
+    assert "| Bean | 5 cm |" in md
+    assert md.startswith("# On Slow Gardens")
