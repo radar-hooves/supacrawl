@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## [2026.11.2] - 01/11/2026
+
+### Added
+
+- **`assess_quality(..., link_index=True)`: a caller reading the page as an index of links gets `ok` from one content link with anchor text**, so a young source's page with its first letter or two is a page. Undeclared, the five-link rule is unchanged. Walls, error statuses, CAPTCHAs, tarpits and a script's shell with no content links are judged the same either way. Asked by the household library (radar-hooves/library#307).
+
 ## [2026.11.1] - 01/11/2026
 
 ### Added

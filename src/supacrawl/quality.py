@@ -18,7 +18,7 @@ from __future__ import annotations
 import re
 from urllib.parse import unquote, urljoin, urlparse
 
-from supacrawl.link_index import extract_page_links, is_link_index
+from supacrawl.link_index import MIN_INDEX_LINKS, extract_page_links, is_link_index
 from supacrawl.models import HARD_FAIL_VERDICTS, QualityAssessment, QualityVerdict
 
 # ``supacrawl.services.detection`` holds the pure CDN/framework/bot heuristics
@@ -420,6 +420,7 @@ def _classify(
     is_pdf: bool,
     spacing: float | None,
     page_url: str | None = None,
+    declared_link_index: bool = False,
 ) -> tuple[QualityVerdict, list[str]]:
     """Resolve the verdict from cheap structural signals (the "gate").
 
@@ -493,7 +494,7 @@ def _classify(
     index_links = 0
     if word_count < _THIN_WORD_FLOOR:
         links = extract_page_links(html, page_url or "http://unknown.invalid/")
-        if is_link_index(links):
+        if is_link_index(links, minimum=1 if declared_link_index else MIN_INDEX_LINKS):
             index_links = sum(1 for link in links if not link.chrome and link.text)
 
     if word_count == 0 and not index_links:
@@ -537,6 +538,7 @@ def assess_quality(
     visible_text: str | None = None,
     is_pdf: bool = False,
     url: str | None = None,
+    link_index: bool = False,
 ) -> QualityAssessment:
     """Assess how usable a scrape result is: a verdict plus a 0-100 score.
 
@@ -555,6 +557,10 @@ def assess_quality(
         is_pdf: True when this is a PDF extraction (no HTML; spacing matters).
         url: The URL that was scraped, needed to detect a self-referential
             crawler-tarpit link maze; omitted, that check simply never fires.
+        link_index: The caller is reading this page as an index of links. One content
+            link with anchor text then makes a short page ``ok``; undeclared, it takes
+            ``MIN_INDEX_LINKS``. Walls, error statuses, CAPTCHAs, tarpits and a shell
+            with no content links are judged the same either way.
 
     Returns:
         A :class:`QualityAssessment` carrying the verdict, score, reasons, and a
@@ -572,6 +578,7 @@ def assess_quality(
         is_pdf=is_pdf,
         spacing=spacing,
         page_url=url,
+        declared_link_index=link_index,
     )
 
     link_count = count_structure(text)["links"] if text else 0

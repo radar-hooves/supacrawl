@@ -135,9 +135,9 @@ def extract_page_links(html: str, page_url: str) -> list[PageLink]:
     return [link.model_copy(update={"text": " / ".join(texts[url])[:CONTEXT_CHARS]}) for url, link in found.items()]
 
 
-def is_link_index(links: list[PageLink]) -> bool:
-    """Whether the content holds enough distinct linked pages, each named by its anchor, to be an index."""
-    return sum(1 for link in links if not link.chrome and link.text) >= MIN_INDEX_LINKS
+def is_link_index(links: list[PageLink], *, minimum: int = MIN_INDEX_LINKS) -> bool:
+    """Whether the content holds at least ``minimum`` distinct linked pages, each named by its anchor."""
+    return sum(1 for link in links if not link.chrome and link.text) >= minimum
 
 
 __all__ = ["MIN_INDEX_LINKS", "extract_page_links", "is_link_index"]
