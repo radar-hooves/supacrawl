@@ -2378,7 +2378,7 @@ wheels = [
 
 [[package]]
 name = "supacrawl"
-version = "2026.11.3"
+version = "2026.11.4"
 source = { editable = "." }
 dependencies = [
     { name = "beautifulsoup4", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },

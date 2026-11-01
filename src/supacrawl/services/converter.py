@@ -547,10 +547,10 @@ def _layout_text_cell(table: Tag, page_words: int) -> Tag | None:
     cells, then a cell with the text) have no data table in them: no header cells, no caption, and
     one cell holding nearly all of the page's words. A data table has many cells of similar size.
     """
-    if table.find(["th", "caption", "thead"]) is not None:
+    if any(header.find_parent("table") is table for header in table.find_all(["th", "caption", "thead"])):
         return None
     cells = [cell for cell in table.find_all("td") if cell.find_parent("table") is table]
-    if len(cells) < 2:
+    if not cells:
         return None
     best = max(cells, key=_words)
     words = _words(best)
@@ -589,10 +589,12 @@ def _title_heading(soup: BeautifulSoup, content: Tag) -> None:
 def unwrap_layout_table(soup: BeautifulSoup) -> int:
     """Replace a page-layout table with its text cell, dropping the navigation, logo and spacer cells.
 
-    Returns how many layout tables were unwrapped. Pages whose text is not in one dominant cell of a
+    A layout table nested in the text cell (often a single cell) is unwrapped too. Returns how many
+    layout tables were unwrapped. Pages whose text is not in one dominant cell of a
     header-less table are left exactly as they are.
     """
     unwrapped = 0
+    outermost: Tag | None = None
     for _ in range(_LAYOUT_MAX_NESTING):
         body = soup.find("body") or soup
         page_words = _words(body)
@@ -611,10 +613,12 @@ def unwrap_layout_table(soup: BeautifulSoup) -> int:
         content = soup.new_tag("div")
         for child in list(cell.contents):
             content.append(child.extract())
-        if not unwrapped:
-            _title_heading(soup, content)
         table.replace_with(content)
+        outermost = outermost or content
         unwrapped += 1
+    if outermost is not None:
+        # After the last unwrap, so a title image nested inside an inner layout table is the first thing found.
+        _title_heading(soup, outermost)
     return unwrapped
 
 
