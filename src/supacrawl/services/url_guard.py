@@ -124,6 +124,19 @@ _ALLOWED_SCHEMES = {"http", "https"}
 _STRICT_ENV = "SUPACRAWL_BLOCK_PRIVATE_NETWORKS"
 _SCRIPTS_ENV = "SUPACRAWL_BLOCK_PAGE_SCRIPTS"
 
+
+class BlockedAddressError(ValidationError):
+    """The URL's host, or an address it resolves to, is in a refused range."""
+
+
+class UnresolvableHostError(ValidationError):
+    """The host did not resolve to any usable address."""
+
+
+class RedirectLimitError(ValidationError):
+    """A redirect chain ran too deep, looped, or carried an unusable Location."""
+
+
 # Redirect hops followed by guarded_request/guarded_stream before giving up.
 MAX_REDIRECTS = 10
 
@@ -155,9 +168,9 @@ def block_page_scripts() -> bool:
     return os.environ.get(_SCRIPTS_ENV, "").strip().lower() in {"1", "true", "yes", "on"}
 
 
-def _blocked_networks() -> tuple[IPNetwork, ...]:
-    """The networks refused under the current policy."""
-    if _strict_mode():
+def _blocked_networks(strict: bool | None = None) -> tuple[IPNetwork, ...]:
+    """The networks refused; *strict* overrides the environment when not None."""
+    if _strict_mode() if strict is None else strict:
         return _BLOCKED_NETWORKS + _PRIVATE_NETWORKS
     return _BLOCKED_NETWORKS
 
@@ -208,7 +221,7 @@ def _describe(addr: IPAddress) -> str:
     return "private / loopback"
 
 
-def is_blocked_address(addr: IPAddress) -> bool:
+def is_blocked_address(addr: IPAddress, strict: bool | None = None) -> bool:
     """Whether *addr* falls in a range refused under the current policy.
 
     An IPv4-mapped/6to4/NAT64 IPv6 form is classified by the IPv4 destination it
@@ -217,14 +230,16 @@ def is_blocked_address(addr: IPAddress) -> bool:
 
     Args:
         addr: A parsed IP address.
+        strict: True refuses private and loopback ranges too, False only link-local;
+            None follows ``SUPACRAWL_BLOCK_PRIVATE_NETWORKS``.
 
     Returns:
         True when the address must not be connected to.
     """
-    return any(c in net for c in _candidate_addresses(addr) for net in _blocked_networks())
+    return any(c in net for c in _candidate_addresses(addr) for net in _blocked_networks(strict))
 
 
-def _is_blocked_ip(host: str) -> bool:
+def _is_blocked_ip(host: str, strict: bool | None = None) -> bool:
     """Whether *host* is an IP literal in a blocked range.
 
     Non-IP hostnames return False; they are checked after resolution by
@@ -240,10 +255,10 @@ def _is_blocked_ip(host: str) -> bool:
         addr = ipaddress.ip_address(host)
     except ValueError:
         return False
-    return is_blocked_address(addr)
+    return is_blocked_address(addr, strict)
 
 
-def assert_safe_url(url: str) -> None:
+def assert_safe_url(url: str, strict: bool | None = None) -> None:
     """Raise when *url* is not safe for outbound fetching, without resolving it.
 
     The cheap, offline half of the guard: scheme and IP-literal checks only. It
@@ -252,6 +267,7 @@ def assert_safe_url(url: str) -> None:
 
     Args:
         url: The URL to validate.
+        strict: Per-call override of ``SUPACRAWL_BLOCK_PRIVATE_NETWORKS``.
 
     Raises:
         ValidationError: When the URL contains a parser-divergence character,
@@ -314,8 +330,8 @@ def assert_safe_url(url: str) -> None:
             value=url,
         )
 
-    if _is_blocked_ip(host):
-        raise ValidationError(
+    if _is_blocked_ip(host, strict):
+        raise BlockedAddressError(
             f"URL host {host!r} is in a blocked IP range ({_describe(ipaddress.ip_address(host))}).",
             field="url",
             value=url,
@@ -338,7 +354,7 @@ def _resolve(host: str, port: int) -> list[IPAddress]:
     try:
         infos = socket.getaddrinfo(host, port, proto=socket.IPPROTO_TCP)
     except socket.gaierror as exc:
-        raise ValidationError(f"Cannot resolve host {host!r}: {exc}", field="url", value=host) from exc
+        raise UnresolvableHostError(f"Cannot resolve host {host!r}: {exc}", field="url", value=host) from exc
 
     addresses: list[IPAddress] = []
     for info in infos:
@@ -351,11 +367,11 @@ def _resolve(host: str, port: int) -> list[IPAddress]:
             addresses.append(addr)
 
     if not addresses:
-        raise ValidationError(f"Host {host!r} resolved to no usable address", field="url", value=host)
+        raise UnresolvableHostError(f"Host {host!r} resolved to no usable address", field="url", value=host)
     return addresses
 
 
-def resolve_and_pin(url: str) -> tuple[str, str]:
+def resolve_and_pin(url: str, strict: bool | None = None) -> tuple[str, str]:
     """Validate *url*, resolve it, and return an address safe to connect to.
 
     This is the half of the guard that closes the rebinding window. It resolves
@@ -367,6 +383,7 @@ def resolve_and_pin(url: str) -> tuple[str, str]:
 
     Args:
         url: The URL about to be fetched.
+        strict: Per-call override of ``SUPACRAWL_BLOCK_PRIVATE_NETWORKS``.
 
     Returns:
         Tuple of (pinned address, host) — the address to connect to, and the
@@ -377,7 +394,7 @@ def resolve_and_pin(url: str) -> tuple[str, str]:
         ValidationError: When the scheme is disallowed, the host cannot be
             resolved, or any resolved address is in a blocked range.
     """
-    assert_safe_url(url)
+    assert_safe_url(url, strict)
 
     parsed = urlparse(url)
     host = parsed.hostname or ""
@@ -388,8 +405,8 @@ def resolve_and_pin(url: str) -> tuple[str, str]:
     addresses = _resolve(host, port)
 
     for addr in addresses:
-        if is_blocked_address(addr):
-            raise ValidationError(
+        if is_blocked_address(addr, strict):
+            raise BlockedAddressError(
                 f"URL host {host!r} resolves to {addr}, which is in a blocked range ({_describe(addr)}).",
                 field="url",
                 value=url,
@@ -441,6 +458,7 @@ async def guarded_stream(
     url: str,
     *,
     max_redirects: int = MAX_REDIRECTS,
+    strict: bool | None = None,
 ) -> AsyncIterator[httpx.Response]:
     """Open a streaming request for *url*, pinning every hop to a validated address.
 
@@ -459,20 +477,34 @@ async def guarded_stream(
         method: HTTP method, e.g. "GET" or "HEAD".
         url: The URL to fetch.
         max_redirects: Maximum redirect hops to follow before giving up.
+        strict: True refuses every non-public address for this call, False only
+            link-local; None follows ``SUPACRAWL_BLOCK_PRIVATE_NETWORKS``.
 
     Yields:
         The final non-redirect response, still streaming (call ``.aread()`` if
-        the buffered body is needed).
+        the buffered body is needed). ``response.history`` holds the redirect
+        responses, ``response.extensions["supacrawl_hops"]`` the logical URL of
+        every hop in order (the first is *url*), and
+        ``response.extensions["supacrawl_final_url"]`` the URL arrived at; the
+        request URL itself is the pinned IP.
 
     Raises:
-        ValidationError: When any hop fails validation or the chain is too deep.
+        BlockedAddressError: A hop's host or resolved address is refused.
+        UnresolvableHostError: A hop's host does not resolve.
+        RedirectLimitError: The chain is too deep, loops, or has a bad Location.
+        ValidationError: Any other refusal (scheme, characters); the parent of the above.
     """
     current_url = url
+    hops: list[str] = []
+    history: list[httpx.Response] = []
     for _ in range(max_redirects + 1):
+        if current_url in hops:
+            raise RedirectLimitError(f"Redirect loop at {current_url!r} starting from {url!r}", field="url", value=url)
+        hops.append(current_url)
         # resolve_and_pin does a blocking socket.getaddrinfo; run it off the
         # event loop so a slow resolver does not stall other concurrent fetches
         # (httpx's own resolution is threaded for the same reason).
-        address, host = await asyncio.to_thread(resolve_and_pin, current_url)
+        address, host = await asyncio.to_thread(resolve_and_pin, current_url, strict)
         request_url = pinned_url(current_url, address)
 
         # The connection goes to the pinned address, but the server still needs
@@ -487,6 +519,9 @@ async def guarded_stream(
         response = await client.send(request, stream=True, follow_redirects=False)
 
         if not response.is_redirect:
+            response.history = history
+            response.extensions["supacrawl_hops"] = hops
+            response.extensions["supacrawl_final_url"] = current_url
             try:
                 yield response
             finally:
@@ -495,8 +530,11 @@ async def guarded_stream(
 
         location = response.headers.get("location")
         await response.aclose()
+        history.append(response)
         if not location:
-            raise ValidationError(f"Redirect from {current_url!r} carried no Location header", field="url", value=url)
+            raise RedirectLimitError(
+                f"Redirect from {current_url!r} carried no Location header", field="url", value=url
+            )
         # Resolve against the logical URL, not the pinned one: a relative
         # Location off a pinned-IP request URL would silently drop the
         # hostname and with it the vhost/certificate identity.
@@ -508,13 +546,13 @@ async def guarded_stream(
         try:
             current_url = urljoin(current_url, location)
         except ValueError as exc:
-            raise ValidationError(
+            raise RedirectLimitError(
                 f"Redirect Location {location!r} from {current_url!r} could not be parsed: {exc}",
                 field="url",
                 value=location,
             ) from exc
 
-    raise ValidationError(f"Too many redirects (>{max_redirects}) starting from {url!r}", field="url", value=url)
+    raise RedirectLimitError(f"Too many redirects (>{max_redirects}) starting from {url!r}", field="url", value=url)
 
 
 async def guarded_request(
@@ -523,6 +561,7 @@ async def guarded_request(
     url: str,
     *,
     max_redirects: int = MAX_REDIRECTS,
+    strict: bool | None = None,
 ) -> httpx.Response:
     """Issue a fully-read request whose every hop is pinned (see :func:`guarded_stream`).
 
@@ -537,14 +576,16 @@ async def guarded_request(
         method: HTTP method, e.g. "GET" or "HEAD".
         url: The URL to fetch.
         max_redirects: Maximum redirect hops to follow before giving up.
+        strict: Per-call strictness (see :func:`guarded_stream`).
 
     Returns:
-        The final, already-read response.
+        The final, already-read response, carrying the same history and hop
+        metadata as :func:`guarded_stream`.
 
     Raises:
         ValidationError: When any hop fails validation or the chain is too deep.
     """
-    async with guarded_stream(client, method, url, max_redirects=max_redirects) as response:
+    async with guarded_stream(client, method, url, max_redirects=max_redirects, strict=strict) as response:
         await response.aread()
         return response
 
@@ -556,6 +597,7 @@ async def guarded_hop(
     *,
     headers: dict[str, str] | None = None,
     content: bytes | None = None,
+    strict: bool | None = None,
 ) -> httpx.Response:
     """Fetch exactly one hop of *url* at a validated, pinned address; never follow a redirect.
 
@@ -569,6 +611,7 @@ async def guarded_hop(
         url: The URL to fetch.
         headers: Request headers to forward; ``Host`` is set from *url*.
         content: Request body, if any.
+        strict: Per-call strictness (see :func:`guarded_stream`).
 
     Returns:
         The response, fully read, redirects unfollowed.
@@ -576,7 +619,7 @@ async def guarded_hop(
     Raises:
         ValidationError: When the URL or its resolved address is blocked.
     """
-    address, host = await asyncio.to_thread(resolve_and_pin, url)
+    address, host = await asyncio.to_thread(resolve_and_pin, url, strict)
     request = client.build_request(
         method,
         pinned_url(url, address),

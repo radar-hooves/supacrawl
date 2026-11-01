@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Added
+
+- **Per-call strictness on the URL guard.** `guarded_stream`, `guarded_request`, `guarded_hop`, `resolve_and_pin`, `assert_safe_url` and `is_blocked_address` take `strict: bool | None = None`: `True` refuses every non-public address for that call, `False` only link-local, `None` follows `SUPACRAWL_BLOCK_PRIVATE_NETWORKS`.
+- **Where a guarded fetch went.** The final response carries `history` (the redirect responses), `extensions["supacrawl_hops"]` (the logical URL of every hop) and `extensions["supacrawl_final_url"]`.
+- **Typed refusals**, all subclasses of `ValidationError`: `BlockedAddressError`, `UnresolvableHostError`, `RedirectLimitError` (too deep, looping, or an unusable `Location`).
+
 ## [2026.11.0] - 01/11/2026
 
 The first release on PyPI since 2026.7.0, and the first whose dependency set resolves from PyPI alone. 2026.7.0's `mcp` extra named `mcp-common`, which on PyPI is an unrelated third party's project, so `pip install supacrawl[mcp]` installed a stranger's library; that extra and the version behind it are superseded by this release. 2026.10.0 to 2026.10.2 were never published.
