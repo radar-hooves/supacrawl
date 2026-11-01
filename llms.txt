@@ -18,7 +18,7 @@ For the full agent onboarding guide read SKILL.md, or run
 - crawl: a site → scrape many pages to a folder (robots-aware). `supacrawl crawl <url> --output dir/`
 - llm-extract: URLs → schema-shaped JSON via an LLM. `supacrawl llm-extract <url...> --schema s.json`
 - agent: open-ended gathering. `supacrawl agent "<task>"`
-- bench: measure supacrawl against the field. `supacrawl bench run [--provider trafilatura|jina|crawl4ai|firecrawl]`
+- bench: measure supacrawl against the field. `supacrawl bench run`
 
 ## Things an agent should know
 

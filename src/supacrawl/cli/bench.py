@@ -92,7 +92,7 @@ def bench_run(
 
     Examples:
         supacrawl bench run
-        supacrawl bench run --provider trafilatura --no-reference
+        supacrawl bench run --no-reference
         supacrawl bench run --only static --only article
         supacrawl bench run --suite ./my-suite.yaml --judge --concurrency 5
     """
@@ -193,7 +193,7 @@ def bench_table(run_ids: tuple[str, ...], base_dir: Path) -> None:
 
     Examples:
         supacrawl bench table
-        supacrawl bench table 20260614T083012-supacrawl-abc1234 20260614T090000-trafilatura-abc1234
+        supacrawl bench table 20260614T083012-supacrawl-abc1234 20260614T090000-supacrawl-def5678
     """
     from supacrawl.benchmark.report import render_table
     from supacrawl.benchmark.store import latest_run_per_provider, load_run

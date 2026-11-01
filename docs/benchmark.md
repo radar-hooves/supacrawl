@@ -18,6 +18,8 @@ The corpus (`src/supacrawl/benchmark/corpus/default.yaml`) spans static pages, d
 | trafilatura | An HTTP GET, then `trafilatura.extract` to markdown; it reads HTML only |
 | Firecrawl | The self-hosted build's `POST /v2/scrape` with `onlyMainContent`; see below for whether it ran |
 
+The figures below were taken on 01/11/2026 with each rival reader driven by its own provider module over the same corpus; those modules (Crawl4AI, Firecrawl, Jina Reader, trafilatura) are removed from the tree and live in git history.
+
 Claude Code's own WebFetch and WebSearch have no programmatic entry point outside a Claude Code session, so they are not in the table.
 
 ## Results, 01/11/2026
@@ -71,12 +73,9 @@ Firecrawl's self-host stack is five services (API, Playwright service, Redis, Ra
 ## Running it
 
 ```bash
-uv sync --all-groups --all-extras          # the bench group holds trafilatura and crawl4ai
+uv sync --all-extras
 supacrawl bench run                        # supacrawl, with the browser reference renderer
-supacrawl bench run --provider trafilatura --no-reference
-supacrawl bench run --provider jina --no-reference
-supacrawl bench run --provider crawl4ai --no-reference
-FIRECRAWL_API_URL=http://localhost:3002 supacrawl bench run --provider firecrawl --no-reference
+supacrawl bench run --no-reference         # anchors alone, for the reader's own time and memory
 supacrawl bench table                      # the newest run of each reader, as markdown
 supacrawl bench compare                    # the two newest runs, regressions and improvements
 ```

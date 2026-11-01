@@ -37,7 +37,7 @@ class ProviderOutput(BaseModel):
 class ScraperProvider(Protocol):
     """Protocol for scraper provider adapters.
 
-    Implement this to add a new provider (Firecrawl, Crawl4AI, etc.) to the
+    Implement this to add a new provider to the
     benchmark without changing the runner.
     """
 

@@ -62,11 +62,6 @@ mcp-dev = [
   "portcullis-client",
   "redactyl-core",
 ]
-# The field readers the benchmark compares against (`supacrawl bench run --provider`).
-bench = [
-  "crawl4ai>=0.7",
-  "trafilatura>=2.0",
-]
 dev = [
   "supacrawl[stealth,camoufox,captcha,pdf-ocr,api,readability]",
   "mypy>=1.19.1",
@@ -214,9 +209,9 @@ module = "rank_bm25.*"
 ignore_missing_imports = true
 
 # The MCP-surface packages (mcp-dev group) are absent on CI and under a PyPI
-# install; the benchmark's field readers (bench group) likewise.
+# install.
 [[tool.mypy.overrides]]
-module = ["fastmcp.*", "mcp.*", "mcp_common.*", "api_common.*", "pydantic_settings.*", "trafilatura.*", "crawl4ai.*"]
+module = ["fastmcp.*", "mcp.*", "mcp_common.*", "api_common.*", "pydantic_settings.*"]
 ignore_missing_imports = true
 
 [tool.uv]

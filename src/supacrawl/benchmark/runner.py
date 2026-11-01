@@ -526,7 +526,7 @@ async def run_benchmark(
 
     Args:
         suite: The benchmark suite to run.
-        provider: The reader to drive, by name (``supacrawl``, ``trafilatura``, ``jina``, ...).
+        provider: The reader to drive, by name (``supacrawl``).
         judge: Whether to invoke the LLM judge on each scored case.
         concurrency: Maximum number of cases running in parallel.
         base_dir: Root directory for artefact storage; artefacts land in
