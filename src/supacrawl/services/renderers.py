@@ -117,15 +117,24 @@ def renderers() -> list[int]:
     return [pid for pid in _descendants(os.getpid()) if _is_renderer(pid)]
 
 
-def process_tree_rss_bytes() -> int | None:
-    """Resident memory of this process and every descendant (a browser is several processes); None off Linux."""
+def process_tree_pss_bytes() -> int | None:
+    """Proportional set size of this process and every descendant; None off Linux.
+
+    A browser is dozens of processes sharing the same libraries and memory, so
+    summing resident sets counts every shared page once per process (measured
+    01/11/2026: 16 GB where the real figure was a fraction). ``Pss`` from
+    ``smaps_rollup`` divides each shared page among its sharers, so the sum
+    over the tree is what the tree actually holds.
+    """
     if not sys.platform.startswith("linux"):
         return None
-    page_size = os.sysconf("SC_PAGE_SIZE")
     total = 0
     for pid in [os.getpid(), *_descendants(os.getpid())]:
         try:
-            total += int(Path(f"/proc/{pid}/statm").read_text().split()[1]) * page_size
+            for line in Path(f"/proc/{pid}/smaps_rollup").read_text().splitlines():
+                if line.startswith("Pss:"):
+                    total += int(line.split()[1]) * 1024
+                    break
         except OSError, IndexError, ValueError:
             continue
     return total

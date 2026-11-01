@@ -72,8 +72,8 @@ def render_run(run: RunResult) -> str:
         con.print(f"[bold]Content kept:[/bold] {hit}   [bold]Boilerplate gone:[/bold] {gone}")
     if agg.mean_approx_tokens is not None:
         con.print(f"[bold]Output:[/bold] {agg.mean_approx_tokens:,.0f} tokens per page (chars/4)")
-    if run.peak_rss_mb is not None:
-        con.print(f"[bold]Peak memory:[/bold] {run.peak_rss_mb:,.0f} MB (process tree)")
+    if run.peak_pss_mb is not None:
+        con.print(f"[bold]Peak memory:[/bold] {run.peak_pss_mb:,.0f} MB (process tree, proportional set size)")
     if agg.search_queries:
         ok = f"{(agg.search_success_rate or 0) * 100:.0f}%"
         hit = f"{agg.search_expect_hit * 100:.0f}%" if agg.search_expect_hit is not None else "n/a"
@@ -160,7 +160,7 @@ def render_table(runs: list[RunResult]) -> str:
             f"| {reader} | {_pct(agg.success_rate)} of {agg.total_cases} | {_pct(agg.expect_hit)} | "
             f"{_pct(agg.expect_absent_ok)} | "
             f"{(agg.median_latency_ms or 0) / 1000:.1f} | {(agg.mean_latency_ms or 0) / 1000:.1f} | "
-            f"{agg.mean_approx_tokens or 0:,.0f} | {run.peak_rss_mb or 0:,.0f} | {search} | {load} |"
+            f"{agg.mean_approx_tokens or 0:,.0f} | {run.peak_pss_mb or 0:,.0f} | {search} | {load} |"
         )
     return "\n".join([header, *rows])
 

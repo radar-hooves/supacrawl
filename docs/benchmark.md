@@ -26,24 +26,28 @@ Measured on a 20-core Linux x86_64 host that was running other work throughout: 
 
 | Reader | Pages | Content kept | Boilerplate gone | Median s | Mean s | Tokens/page | Peak MB | Search |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| supacrawl 2026.11.0 | 88% of 33 | 93% | 92% | 9.7 | 16.0 | 13,650 | 16,013 | 5 of 5 |
+| supacrawl 2026.11.0 | 88% of 33 | 93% | 92% | 9.7 | 16.0 | 13,650 | 2,642 | 5 of 5 |
 | Firecrawl self-hosted (v2 API) | 85% of 33 | 95% | 40% | 3.6 | 4.1 | 15,103 | 77 (client only) | not run |
-| Crawl4AI 0.9.5 | 82% of 33 | 96% | 56% | 5.2 | 5.8 | 11,001 | 2,667 | none |
+| Crawl4AI 0.9.5 | 82% of 33 | 96% | 56% | 5.2 | 5.8 | 11,001 | 2,667 (overstated) | none |
 | Jina Reader (keyless) | 94% of 33 | 95% | 24% | 2.1 | 3.1 | 14,535 | 83 | needs a key |
 | trafilatura 2.3.1 | 76% of 33 | 74% | 97% | 0.8 | 1.0 | 5,044 | 174 | none |
 
-Reading the table: supacrawl is the only reader that both keeps the content and drops the boilerplate, and the only one with search. It pays for that in time and memory: three concurrent escalation ladders, Camoufox's Firefox among them, is what the peak figure measures. Firecrawl's figure is the HTTP client's process alone; its five containers were not sampled. Jina keeps nearly everything, navigation included. trafilatura is fastest and cleanest on static HTML and fails on anything that needs a browser or is a PDF. Crawl4AI is close on content and keeps about half the chrome. On the bot-walled pages, supacrawl was the only reader to return the two Australian Taxation Office pages; no reader returned the DataDome, Cloudflare or CAPTCHA probes without a proxy pool.
+Peak MB is the process tree's proportional set size (`Pss` from `smaps_rollup`), which divides each shared page among the processes sharing it. supacrawl's figure was re-measured that way in a separate run (load 37 to 49); Crawl4AI's was taken by the earlier resident-set sum, which counts a browser's shared pages once per process and so overstates a multi-process reader, and is left marked rather than re-run on the busy host. The single-process readers are barely affected either way. Firecrawl's figure is the HTTP client's process alone; its five containers were not sampled.
 
-Run one page at a time, as a CLI user does, on the same loaded host, supacrawl's figures were: 88% of 33 pages, median 4.0 s, mean 8.3 s, 2,289 MB peak; the median is less than half the concurrent figure, the memory one seventh.
+Reading the table: supacrawl is the only reader that both keeps the content and drops the boilerplate, and the only one with search. It pays for that in time and memory: three concurrent escalation ladders, Camoufox's Firefox among them, is what its peak figure measures. Jina keeps nearly everything, navigation included. trafilatura is fastest and cleanest on static HTML and fails on anything that needs a browser or is a PDF. Crawl4AI is close on content and keeps about half the chrome. On the bot-walled pages, supacrawl was the only reader to return the two Australian Taxation Office pages; no reader returned the DataDome, Cloudflare or CAPTCHA probes without a proxy pool.
+
+Run one page at a time, as a CLI user does, on the same loaded host, supacrawl's figures were: 88% of 33 pages, median 4.0 s, mean 8.3 s, and 1,433 MB peak (proportional set size, from a later run at load 47 to 68); the median is less than half the concurrent figure, the memory about half.
 
 ### Before and after this release
 
 The same corpus, one page at a time, at the commit before the fast-path changes and after them, run back to back on the same loaded host (so the two rows compare with each other, not with a quiet machine):
 
-| | Pages | Quality | Median s | Mean s | Peak MB |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| 2026.10.2 (2411377) | 76% of 33 | 82.5 | 4.1 | 6.9 | 2,402 |
-| 2026.11.0 (7c17fa1) | 88% of 33 | 84.8 | 4.0 | 8.3 | 2,289 |
+| | Pages | Quality | Median s | Mean s |
+| --- | ---: | ---: | ---: | ---: |
+| 2026.10.2 (2411377) | 76% of 33 | 82.5 | 4.1 | 6.9 |
+| 2026.11.0 (7c17fa1) | 88% of 33 | 84.8 | 4.0 | 8.3 |
+
+(These two runs measured memory by the resident-set sum, so their memory column is withdrawn; both read about 2.3 GB by that measure, so the release did not move it.)
 
 What changed and what it did, per page:
 

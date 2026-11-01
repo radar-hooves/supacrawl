@@ -42,13 +42,14 @@ jobs:
           shell=$scratch/chromium_headless_shell-$rev/chrome-headless-shell-linux64
           full=$scratch/chromium-$rev/chrome-linux64
           mkdir -p "$shell" "$full"
-          cp -rs "$nix_browsers"/chromium_headless_shell-*/chrome-linux/. "$shell/"
-          cp -rs "$nix_browsers"/chromium-*/chrome-linux/. "$full/"
+          # Each Nix build holds one directory (chrome-headless-shell-linux64, chrome-linux64),
+          # named as Playwright names it; the glob survives the next rename.
+          cp -rs "$nix_browsers"/chromium_headless_shell-*/*/. "$shell/"
+          cp -rs "$nix_browsers"/chromium-*/*/. "$full/"
           # Chromium's zygote cannot fork under the runner service (measured: every launch
           # dies on it), so the binaries start with --no-zygote.
-          for bin in "$shell/chrome-headless-shell:headless_shell" "$full/chrome:chrome"; do
-            wrapper=${bin%%:*}
-            real=$(readlink -f "$(dirname "$wrapper")/${bin##*:}")
+          for wrapper in "$shell/chrome-headless-shell" "$full/chrome"; do
+            real=$(readlink -f "$wrapper")
             rm -f "$wrapper"
             printf '#!/bin/sh\nexec %s --no-zygote "$@"\n' "$real" > "$wrapper"
             chmod +x "$wrapper"

@@ -231,7 +231,7 @@ class RunResult(BaseModel):
     reference_enabled: bool = True
     # Peak resident memory of this process and its children (the browser's
     # processes included), sampled through the run. None off Linux.
-    peak_rss_mb: float | None = None
+    peak_pss_mb: float | None = None
     # The machine, without its name: enough to say what the timings were measured on.
     platform: str | None = None
     # The host's one-minute load average when the run started and when it ended.

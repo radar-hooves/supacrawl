@@ -87,7 +87,7 @@ def write_run(run: RunResult, base_dir: Path) -> Path:
             "scored_cases": run.aggregate.scored_cases,
             "by_category": run.aggregate.by_category,
             "median_latency_ms": run.aggregate.median_latency_ms,
-            "peak_rss_mb": run.peak_rss_mb,
+            "peak_pss_mb": run.peak_pss_mb,
         }
         fh.write(json.dumps(index_row) + "\n")
 

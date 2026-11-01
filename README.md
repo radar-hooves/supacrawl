@@ -22,13 +22,13 @@ Supacrawl fetches the cheap way first and escalates only when a page needs it: a
 
 | Reader | Pages | Content kept | Boilerplate gone | Median s | Peak MB |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| supacrawl 2026.11.0 | 88% | 93% | 92% | 9.7 | 16,013 |
+| supacrawl 2026.11.0 | 88% | 93% | 92% | 9.7 | 2,642 |
 | Firecrawl self-hosted | 85% | 95% | 40% | 3.6 | 77 (client only) |
-| Crawl4AI 0.9.5 | 82% | 96% | 56% | 5.2 | 2,667 |
+| Crawl4AI 0.9.5 | 82% | 96% | 56% | 5.2 | 2,667 (overstated) |
 | Jina Reader (keyless) | 94% | 95% | 24% | 2.1 | 83 |
 | trafilatura 2.3.1 | 76% | 74% | 97% | 0.8 | 174 |
 
-Supacrawl is the one reader that both keeps the content and drops the boilerplate, and the one with web search; it pays in time and memory where a page forces the escalation ladder. One page at a time, on the same host, its median halved and its peak memory fell to a seventh.
+Supacrawl is the one reader that both keeps the content and drops the boilerplate, and the one with web search; it pays in time and memory where a page forces the escalation ladder. One page at a time, on the same host, its median was less than half the concurrent figure and its peak memory about half. Peak MB is the process tree's proportional set size; the benchmark page says how each figure was taken.
 
 ## Features
 

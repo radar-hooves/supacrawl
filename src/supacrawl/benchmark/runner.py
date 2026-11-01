@@ -55,7 +55,7 @@ from supacrawl.quality import (
     tokenize,
     word_spacing,
 )
-from supacrawl.services.renderers import process_tree_rss_bytes
+from supacrawl.services.renderers import process_tree_pss_bytes
 
 LOGGER = logging.getLogger(__name__)
 
@@ -501,7 +501,7 @@ def _build_aggregate(results: list[CaseResult], searches: list[SearchResult] | N
 async def _sample_peak_rss(peak: list[int]) -> None:
     """Keep ``peak[0]`` at the largest process-tree RSS seen, until cancelled."""
     while True:
-        rss = process_tree_rss_bytes()
+        rss = process_tree_pss_bytes()
         if rss is not None and rss > peak[0]:
             peak[0] = rss
         await asyncio.sleep(_RSS_SAMPLE_S)
@@ -566,7 +566,7 @@ async def run_benchmark(
 
     reader = make_provider(provider)
     search_reader = make_search_provider(provider) if searches and suite.queries else None
-    peak = [process_tree_rss_bytes() or 0]
+    peak = [process_tree_pss_bytes() or 0]
     sampler = asyncio.ensure_future(_sample_peak_rss(peak))
     search_results: list[SearchResult] = []
     try:
@@ -615,7 +615,7 @@ async def run_benchmark(
         provider_version=supacrawl_version if provider == "supacrawl" else _provider_version(provider),
         judge_enabled=judge,
         reference_enabled=reference,
-        peak_rss_mb=round(peak[0] / 1_048_576, 1) if peak[0] else None,
+        peak_pss_mb=round(peak[0] / 1_048_576, 1) if peak[0] else None,
         platform=_platform(),
         load_1m_start=load_start,
         load_1m_end=load_end,
