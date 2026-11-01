@@ -499,6 +499,16 @@ class ImageDetail(BaseModel):
     icon: bool = False  # A site icon or sprite rather than content
 
 
+class PageLink(BaseModel):
+    """One link on a page, with what says what it is."""
+
+    url: str  # Resolved absolute http(s) address, fragment dropped
+    text: str  # Anchor text (an image's alt or the title attribute when there is none)
+    context: str  # Text of the largest element holding this link and no other: a date or year printed beside it
+    heading: str | None = None  # Nearest heading or label (h1-h6, button, summary, caption...) before it
+    chrome: bool = False  # In navigation, banner, search, aside, or a header/footer outside any article
+
+
 class ScrapeData(BaseModel):
     """Scraped content from a page."""
 
@@ -512,6 +522,7 @@ class ScrapeData(BaseModel):
     summary: str | None = None  # LLM-generated summary of page content
     metadata: ScrapeMetadata
     links: list[str] | None = None
+    link_details: list[PageLink] | None = None  # Every link with its text, context, heading and chrome flag
     images: list[str] | None = None  # Image URLs extracted from page
     image_details: list[ImageDetail] | None = None  # Measured sizes, largest first, icons last
     branding: BrandingProfile | None = None  # Brand identity information

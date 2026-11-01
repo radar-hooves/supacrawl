@@ -20,6 +20,7 @@ type _Format = Literal[
     "html",
     "rawHtml",
     "links",
+    "linkDetails",
     "screenshot",
     "pdf",
     "json",

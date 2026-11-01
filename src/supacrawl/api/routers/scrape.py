@@ -125,6 +125,7 @@ def _scrape_result_to_response(result: ScrapeResult) -> ScrapeResponse:
         html=data.html,
         raw_html=data.raw_html,
         links=data.links,
+        link_details=[d.model_dump() for d in data.link_details] if data.link_details is not None else None,
         screenshot=data.screenshot,
         images=data.images,
         image_details=[d.model_dump() for d in data.image_details] if data.image_details else None,
