@@ -45,6 +45,9 @@ Every setting is a standing default; a per-request flag or API argument still ov
 | browser | `user_agent` | `SUPACRAWL_USER_AGENT` | _(engine default)_ | Override the User-Agent string. |
 | browser | _(env only)_ | `SUPACRAWL_DISABLE_DEV_SHM` | _(auto: on in a container)_ | Pass `--disable-dev-shm-usage` to Chromium so it uses disk instead of the container's small `/dev/shm`, avoiding crashes on heavy pages. Auto-detected inside a container; set `1`/`0` to force on/off. Chromium engines only (playwright/patchright); Camoufox is Firefox. |
 | browser | _(env only)_ | `SUPACRAWL_BROWSER_CLOSE_TIMEOUT` | `3` | Seconds to allow a graceful browser close before the driver reaps the process instead. Teardown happens after the content is already extracted, and Chromium's own close regularly stalls on a page with live connections until an internal 30s timeout releases it — pure dead time on the caller's clock. Raise it for a politer close; `0` reaps immediately. |
+| browser | _(env only)_ | `SUPACRAWL_RENDERER_BUDGET` | `15` | Seconds a Chromium renderer may keep spinning after its page closed before it is killed. Once no page is open in the process, renderers descended from it are sampled for two seconds and any still burning half a core is reaped, with the URL, pid and budget logged. `0` disables the reaper. Linux only. |
+| browser | _(env only)_ | `SUPACRAWL_CAMOUFOX_LIBS` | _(unset)_ | A colon-separated `LD_LIBRARY_PATH` handed to Camoufox's Firefox alone: on NixOS the GTK libraries it needs are off the default path, and putting them on the process-wide path crashes the Chromium engines. |
+| browser | _(env only)_ | `SUPACRAWL_HEADLESS` | _(auto)_ | Patchright prefers a headed window where a display exists (`DISPLAY` or `WAYLAND_DISPLAY` on Linux; always on macOS and Windows) and runs headless where none does, so the escalation ladder works on a server. Set `true` or `false` to decide for every engine. |
 | locale | `locale` | `SUPACRAWL_LOCALE` | `en-US` | Maps to Accept-Language. |
 | locale | `timezone` | `SUPACRAWL_TIMEZONE` | `UTC` | e.g. `Australia/Brisbane`. |
 | anti_bot | `engine` | `SUPACRAWL_ENGINE` | _(auto)_ | `playwright` / `patchright` / `camoufox`. Leave unset to auto-escalate. |
@@ -62,6 +65,17 @@ Every setting is a standing default; a per-request flag or API argument still ov
 | telemetry | `metrics` | `SUPACRAWL_METRICS` | `true` | Record one quality/usage event per scrape/search. |
 | telemetry | `metrics_full_url` | `SUPACRAWL_METRICS_FULL_URL` | `false` | Log full URLs, not just the domain. Off for privacy. |
 | cache | `cache_dir` | `SUPACRAWL_CACHE_DIR` | _(default location)_ | Where cached content lives. |
+
+## LLM provider
+
+`llm-extract`, `agent`, the `json` and `summary` formats, and the MCP `supacrawl_extract` and `supacrawl_summary` tools need a model:
+
+| Env var | Notes |
+| --- | --- |
+| `SUPACRAWL_LLM_PROVIDER` | `ollama`, `openai` or `anthropic`. |
+| `SUPACRAWL_LLM_MODEL` | The model name, e.g. `qwen3:8b`, `gpt-4o-mini`, `claude-sonnet-4-20250514`. |
+| `SUPACRAWL_LLM_BASE_URL` | The endpoint, for every provider. Point `openai` at any OpenAI-compatible gateway (LiteLLM, vLLM, a remote Ollama's `/v1`) and put the gateway's bearer key in `OPENAI_API_KEY`; a trailing `/v1` is accepted. Below it, `OLLAMA_HOST` and `OPENAI_BASE_URL` are honoured. |
+| `OPENAI_API_KEY`, `ANTHROPIC_API_KEY` | The provider's key. |
 
 ## Secrets
 
@@ -99,7 +113,7 @@ A quieter failure exists: SearXNG's upstream engines get CAPTCHA-walled and retu
 
 supacrawl always writes telemetry to the local `events.jsonl` (the durable record). Each event is **also** emitted as one structured log record on the `supacrawl.telemetry` logger, so a standard log/trace collector can pick it up without supacrawl pushing to any log store's own API or holding a credential for one.
 
-Every entry point (the CLI, `supacrawl serve`, and `supacrawl-mcp`) configures its logging once at startup from the standard OpenTelemetry environment:
+Shipping those records over OTLP needs the `api-common` library, which is installed in the server's container image and is not on PyPI; a plain `pip install supacrawl` logs through the standard library. Where it is present, every entry point (the CLI, `supacrawl serve`, and `supacrawl-mcp`) configures its logging once at startup from the standard OpenTelemetry environment:
 
 ```bash
 OTEL_EXPORTER_OTLP_ENDPOINT=https://collector.example.invalid   # ship over OTLP

@@ -1,201 +1,44 @@
-# Testing Strategies
+# Testing
 
-This document explains testing strategies for supacrawl.
+pytest, with `asyncio_mode = "auto"`. Tests live flat under `tests/` and carry markers:
 
-## Testing Overview
+| Marker | Meaning |
+| --- | --- |
+| `unit` | Pure logic, no I/O |
+| `integration` | Filesystem, a local HTTP server, mocks at the wire |
+| `browser` | Drives a real Chromium; skipped where Playwright's Chromium is not installed |
+| `e2e` | Live network |
+| `stealth_smoke` | Launches each stealth engine headless; the publish workflow's own job |
+| `mcp` | Needs `mcp-common`, which only the `mcp-dev` dependency group installs |
 
-Supacrawl uses pytest for testing with patterns for:
-
-- **Unit Tests**: Test individual components in isolation
-- **Integration Tests**: Test component interactions
-- **E2E Tests**: Test real browser/network operations
-
-## Test Categories
-
-Tests are organised into directories with automatic marker assignment:
-
-- **`tests/unit/`**: Pure logic tests, no I/O or browser (marker: `unit`)
-- **`tests/integration/`**: Filesystem operations, mocks (marker: `integration`)
-- **`tests/e2e/`**: Real Playwright browser tests, slow (marker: `e2e`)
-
-Run specific categories:
+## The gate
 
 ```bash
-# Fast tests only (unit + integration, excludes e2e)
-pytest -q -m "not e2e"
-
-# End-to-end tests only
-pytest -q -m "e2e"
-
-# All tests
-pytest -q
+ruff check src tests && mypy src
+pytest -q                      # the configured default: everything but e2e and stealth_smoke
+pytest -q -m e2e               # live network
+pytest -m stealth_smoke        # once `patchright install chromium` and `camoufox fetch` have run
 ```
 
-## Unit Testing Patterns
+Run the tests that cover what you changed; CI runs the whole suite on every push. CI installs `uv sync --frozen --all-extras` with the default `dev` group only, so the `mcp` and `bench` tests skip there; run them locally after `uv sync --all-groups --all-extras`.
 
-### Testing Service Classes
+## Browsers on NixOS
 
-Test service initialisation:
-
-```python
-def test_scrape_service_initialisation():
-    """Test scrape service initialisation."""
-    from supacrawl.services import ScrapeService
-    service = ScrapeService()
-    assert service is not None
-```
-
-### Testing Pure Logic
-
-Test URL pattern matching:
-
-```python
-def test_matches_patterns():
-    """Test URL pattern matching."""
-    from supacrawl.services.crawl import CrawlService
-    service = CrawlService()
-    assert service._matches_patterns("https://example.com/api/v1", ["*/api/*"])
-    assert not service._matches_patterns("https://example.com/docs", ["*/api/*"])
-```
-
-## Service Testing Patterns
-
-### Mocking Browser Clients
-
-Use dependency injection for testability:
-
-```python
-@pytest.fixture
-def mock_browser_context():
-    """Mock browser context for testing."""
-    context = AsyncMock()
-    page = AsyncMock()
-    page.content = AsyncMock(return_value="<html><body>Test</body></html>")
-    page.goto = AsyncMock()
-    context.new_page = AsyncMock(return_value=page)
-    return context
-
-
-async def test_scrape_service_success(mock_browser_context):
-    """Test scrape service successfully scrapes page."""
-    from supacrawl.services import ScrapeService
-
-    service = ScrapeService(browser=mock_browser_context)
-    result = await service.scrape("https://example.com")
-    assert result.success
-    assert result.data.markdown is not None
-```
-
-### Testing Service Error Handling
-
-Test error wrapping:
-
-```python
-async def test_scrape_service_error_handling():
-    """Test scrape service error handling."""
-    from supacrawl.services import ScrapeService
-
-    service = ScrapeService()
-    result = await service.scrape("https://invalid-domain-12345.com")
-
-    assert not result.success
-    assert result.error is not None
-```
-
-## CLI Testing Patterns
-
-### Testing CLI Commands
-
-Use subprocess for E2E CLI tests:
-
-```python
-def test_scrape_command():
-    """Test scrape command returns markdown."""
-    result = subprocess.run(
-        ["python", "-m", "supacrawl", "scrape", "https://example.com"],
-        capture_output=True,
-        text=True,
-        timeout=60,
-    )
-    assert result.returncode == 0
-    assert len(result.stdout) > 100
-```
-
-### Testing CLI with Output Files
-
-```python
-def test_scrape_with_output(tmp_path):
-    """Test scrape saves to file."""
-    output_file = tmp_path / "page.md"
-    result = subprocess.run(
-        ["python", "-m", "supacrawl", "scrape", "https://example.com", "--output", str(output_file)],
-        capture_output=True,
-        text=True,
-        timeout=60,
-    )
-    assert result.returncode == 0
-    assert output_file.exists()
-```
-
-## Test Fixtures
-
-### Common Fixtures
-
-Create reusable test fixtures:
-
-```python
-@pytest.fixture
-def sample_scrape_result():
-    """Sample scrape result for testing."""
-    from supacrawl.models import ScrapeResult, ScrapeData, PageMetadata
-
-    return ScrapeResult(
-        success=True,
-        data=ScrapeData(
-            markdown="# Test Page\n\nContent here.",
-            metadata=PageMetadata(
-                title="Test Page",
-                source_url="https://example.com",
-            ),
-        ),
-    )
-```
-
-## Best Practices
-
-1. **Isolation**: Each test should be independent
-2. **Fixtures**: Use fixtures for common test data
-3. **Mocking**: Mock external dependencies (browser, network)
-4. **Coverage**: Test error paths, not just happy paths
-5. **Markers**: Use `@pytest.mark.e2e` for slow network tests
-6. **Cleanup**: Clean up test artifacts (temp files, directories)
-
-## Running Tests
-
-### Run All Tests
+A downloaded Chromium does not run on NixOS, and the Nix-provided Playwright browsers are usually at a different revision from the one the locked Playwright expects. Present the Nix build under the expected revision, as `publish.yaml` does:
 
 ```bash
-pytest -q
+rev=$(uv run python -c "import json,playwright,pathlib;j=json.loads((pathlib.Path(playwright.__file__).parent/'driver/package/browsers.json').read_text());print(next(b['revision'] for b in j['browsers'] if b['name']=='chromium'))")
+scratch=/tmp/pw-browsers; nix_browsers=$PLAYWRIGHT_BROWSERS_PATH   # the Nix store path
+mkdir -p $scratch/chromium_headless_shell-$rev/chrome-headless-shell-linux64 $scratch/chromium-$rev/chrome-linux64
+cp -rs $nix_browsers/chromium_headless_shell-*/*/. $scratch/chromium_headless_shell-$rev/chrome-headless-shell-linux64/
+cp -rs $nix_browsers/chromium-*/*/. $scratch/chromium-$rev/chrome-linux64/
+export PLAYWRIGHT_BROWSERS_PATH=$scratch
 ```
 
-### Run Fast Tests Only
+Camoufox's Firefox needs the host's GTK libraries; hand them to that engine alone with `SUPACRAWL_CAMOUFOX_LIBS` (a colon-separated library path), never through `LD_LIBRARY_PATH`, which crashes the Chromium engines.
 
-```bash
-pytest -q -m "not e2e"
-```
+## Patterns
 
-### Run Specific Test File
-
-```bash
-pytest tests/unit/test_converter.py -q
-```
-
-### Run with Coverage
-
-```bash
-pytest --cov=supacrawl --cov-report=html
-```
-
-## References
-
-- `docs/development/error-handling.md` - Error handling patterns
+- Mock at the wire (an `httpx` transport, `fetch_static`, a subprocess), never a library's own objects.
+- A scrape or browser behaviour change is smoke-tested against a live URL after the unit tests pass (`.claude/rules/scraper-patterns.md`).
+- A fixture that stands for a real failure is driven by forcing that failure (a 403, a dead engine), so an empty state cannot pass for an error state.

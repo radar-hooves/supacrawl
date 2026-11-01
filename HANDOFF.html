@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>supacrawl handoff</title>
+<style>body{font:15px/1.5 system-ui,sans-serif;max-width:52rem;margin:2rem auto;padding:0 1rem}code{background:#f3f3f3;padding:0 .2em}</style>
+</head>
+<body>
+<h1>supacrawl handoff</h1>
+<p>Rewritten in place as work lands. One section per live thread; each open item names its next step and an issue or the reason it has none.</p>
+
+<h2>Release 2026.11.0 (radar-hooves/supacrawl#180)</h2>
+<ul>
+<li><strong>Infinite scroll</strong>: <code>quotes.toscrape.com/scroll</code> returns 34 characters from every reader except Crawl4AI's <code>scan_full_page</code>. Next step: decide whether a scroll-until-stable pass belongs in <code>BrowserManager.fetch_page</code>; tracked on #180's close-out comment, no issue until a real page needs it.</li>
+<li><strong>Firecrawl self-hosted column</strong>: the stack's API needs <code>USE_DB_AUTHENTICATION=false</code> and a database URL to start; <code>docs/benchmark.md</code> records the outcome of the attempt on 01/11/2026. Re-run with <code>supacrawl bench run --provider firecrawl</code> once a Firecrawl API answers on <code>FIRECRAWL_API_URL</code>; no issue, a hosted account is out of scope.</li>
+<li><strong>Timings under load</strong>: every figure in <code>docs/benchmark.md</code> was measured on a 20-core host at load average about 30. Next step: re-run <code>supacrawl bench run --provider &lt;each&gt; --no-reference</code> on a quiet host and refresh the two tables; no issue, it is one command per reader.</li>
+</ul>
+</body>
+</html>

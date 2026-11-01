@@ -234,6 +234,11 @@ class RunResult(BaseModel):
     peak_rss_mb: float | None = None
     # The machine, without its name: enough to say what the timings were measured on.
     platform: str | None = None
+    # The host's one-minute load average when the run started and when it ended.
+    # A timing means nothing without it: a reader measured on a quiet host and used
+    # on a busy one is a speed claim that fails. Compare readers within one run.
+    load_1m_start: float | None = None
+    load_1m_end: float | None = None
     suite_name: str
     cases: list[CaseResult]
     searches: list[SearchResult] = Field(default_factory=list)

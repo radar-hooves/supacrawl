@@ -100,6 +100,14 @@ def _provider_version(name: str) -> str | None:
         return None
 
 
+def _load_1m() -> float | None:
+    """The host's one-minute load average, or None where the platform has none."""
+    try:
+        return round(os.getloadavg()[0], 1)
+    except AttributeError, OSError:
+        return None
+
+
 def _platform() -> str:
     """The machine without its name: OS, architecture and core count."""
     return f"{platform.system()} {platform.machine()}, {os.cpu_count()} cores"
@@ -535,6 +543,7 @@ async def run_benchmark(
         ``RunResult`` with all case results and the run aggregate.
     """
     started_at = datetime.now(UTC).isoformat()
+    load_start = _load_1m()
     sha = _git_sha()
     run_id = _run_id(sha, provider)
 
@@ -594,6 +603,7 @@ async def run_benchmark(
     aggregate = _build_aggregate(results, search_results)
 
     finished_at = datetime.now(UTC).isoformat()
+    load_end = _load_1m()
 
     return RunResult(
         run_id=run_id,
@@ -607,6 +617,8 @@ async def run_benchmark(
         reference_enabled=reference,
         peak_rss_mb=round(peak[0] / 1_048_576, 1) if peak[0] else None,
         platform=_platform(),
+        load_1m_start=load_start,
+        load_1m_end=load_end,
         suite_name=suite.name,
         cases=results,
         searches=search_results,

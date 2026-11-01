@@ -8,7 +8,7 @@ description: >-
 
 Supacrawl turns web pages into clean markdown (or JSON) for LLMs and pipelines. It is a single CLI — `supacrawl` — with no server or database. Every command prints to stdout or writes a file, so it composes in shell pipelines.
 
-Install: `pip install supacrawl` (add `[stealth]` for anti-bot, `[api]` for the REST server). The first run downloads a browser; if scraping fails with a Playwright/browser error, run `playwright install chromium`.
+Install: `pip install supacrawl` then `playwright install chromium` (add `[stealth]` and `[camoufox]` for the anti-bot engines, `[api]` for the REST server). If scraping fails with a Playwright/browser error, run `playwright install chromium`.
 
 ## Choosing a command
 
@@ -84,4 +84,6 @@ supacrawl agent "Find the pricing tiers for the top 3 note-taking apps"
 
 ## REST and MCP
 
-`pip install supacrawl[api]` then `supacrawl serve` exposes a Firecrawl v2-compatible REST API (POST `/scrape`, `/search`, `/map`, `/crawl`). An MCP server (`supacrawl-mcp`) exposes the same tools to MCP-capable agents.
+`pip install supacrawl[api]` then `supacrawl serve` exposes a Firecrawl v2-compatible REST API (POST `/scrape`, `/search`, `/map`, `/crawl`). An MCP server (`supacrawl-mcp`) exposes the same tools to MCP-capable agents; it is built on a framework that is not on PyPI and is deployed as a container image (see `docs/mcp-server.md`).
+
+Long pages: `--query "<what you need>"` keeps only the sections about it, and a section whose heading the query names (an option's identifier on a reference page) comes first and whole.

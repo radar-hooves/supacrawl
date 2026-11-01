@@ -1,27 +1,30 @@
 # Supacrawl
 
-> Zero-infrastructure CLI web scraper for LLMs and agents. Turns web pages into
-> clean markdown (or JSON) and searches the web — no server, no database. One
-> command, `supacrawl`, that prints to stdout or writes files so it drops into
+> Clean markdown from the web for LLMs and agents: a CLI, a Python library, a
+> Firecrawl-compatible REST API and an MCP server over one engine. No server,
+> no database. `supacrawl` prints to stdout or writes files so it drops into
 > shell pipelines.
 
-Install with `pip install supacrawl` (`[stealth]` adds anti-bot engines, `[api]`
-adds the REST server). For the full agent onboarding guide — command selection,
-flags, failure recovery — read SKILL.md, or run `supacrawl install-skill` to
-register Supacrawl as a discoverable skill in your agent runtime.
+Install with `pip install supacrawl` then `playwright install chromium`
+(`[stealth]` and `[camoufox]` add anti-bot engines, `[api]` the REST server).
+For the full agent onboarding guide read SKILL.md, or run
+`supacrawl install-skill` to register Supacrawl as a skill in your agent runtime.
 
 ## Pick a command
 
-- scrape: a known URL → markdown/JSON. `supacrawl scrape <url> [-f markdown|json|structuredData|...]`
+- scrape: a known URL → markdown/JSON. `supacrawl scrape <url> [-f markdown|json|structuredData|...] [--query "<what you need>"]`
 - search: a query → web results, optionally scraped. `supacrawl search "<q>" [--time-range week] [--topic news]`
 - map: a site → its URLs only. `supacrawl map <url>`
 - crawl: a site → scrape many pages to a folder (robots-aware). `supacrawl crawl <url> --output dir/`
 - llm-extract: URLs → schema-shaped JSON via an LLM. `supacrawl llm-extract <url...> --schema s.json`
 - agent: open-ended gathering. `supacrawl agent "<task>"`
+- bench: measure supacrawl against the field. `supacrawl bench run [--provider trafilatura|jina|crawl4ai|firecrawl]`
 
 ## Things an agent should know
 
-- HTTP-first is automatic: static pages skip the browser (fast); JS/bot-protected pages auto-escalate. `--no-http-first` forces the browser.
+- HTTP-first is automatic: static pages and plain text skip the browser; JS and bot-protected pages escalate through Playwright, Patchright and Camoufox. `--no-http-first` forces the browser.
+- Read `quality.verdict` before using a result; `quality.tried` lists every strategy that ran and how it failed.
+- `--query` keeps only the sections relevant to a question; a section whose heading the query names comes first and whole, which is how to read one option of a long reference page.
 - `-f structuredData` extracts schema.org JSON-LD, `__NEXT_DATA__`, microdata, and OpenGraph deterministically — cheaper and more exact than LLM `json` for published facts.
 - `--expect "<css|text|N words>"` makes "the data is actually present" a retryable condition instead of returning a half-loaded page.
 - Errors are remediation-shaped: a failure ends with `[HINT: ...]`. Apply the hint and retry; never retry the same command unchanged.
@@ -30,6 +33,9 @@ register Supacrawl as a discoverable skill in your agent runtime.
 ## Docs
 
 - [SKILL.md](src/supacrawl/resources/SKILL.md): concise agent onboarding — command selection, flags, failure modes.
-- [README.md](README.md): overview, installation, links.
+- [README.md](README.md): what it is and how it compares.
 - [CLI reference](docs/cli-reference.md): every command and option.
+- [Configuration](docs/configuration.md): settings, LLM and search providers.
+- [MCP server](docs/mcp-server.md): the tool surface for MCP-capable agents.
 - [API reference](docs/api-reference.md): the optional Firecrawl v2-compatible REST API.
+- [Benchmark](docs/benchmark.md): the measured comparison and how to re-run it.

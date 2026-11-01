@@ -48,6 +48,12 @@ def render_run(run: RunResult) -> str:
     con.print(f"[bold]supacrawl:[/bold] {run.supacrawl_version}   [bold]SHA:[/bold] {run.git_sha or 'n/a'}")
     con.print(f"[bold]Started:[/bold] {run.started_at[:19].replace('T', ' ')} UTC   {run.platform or ''}")
     con.print(f"[bold]Reference renderer:[/bold] {'on' if run.reference_enabled else 'off'}")
+    if run.load_1m_start is not None:
+        con.print(
+            f"[bold]Host load (1 min):[/bold] {run.load_1m_start:.1f} at start, "
+            f"{run.load_1m_end if run.load_1m_end is not None else float('nan'):.1f} at end; timings compare "
+            "within this run only"
+        )
     con.print()
 
     # Headline numbers
@@ -133,8 +139,8 @@ def render_table(runs: list[RunResult]) -> str:
     process tree peaked at. Every run states its reader version.
     """
     header = (
-        "| Reader | Pages | Content kept | Boilerplate gone | Median s | Mean s | Tokens/page | Peak MB | Search |\n"
-        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |"
+        "| Reader | Pages | Content kept | Boilerplate gone | Median s | Mean s | Tokens/page | Peak MB | Search | Load |\n"
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |"
     )
     rows = []
     for run in runs:
@@ -145,11 +151,16 @@ def render_table(runs: list[RunResult]) -> str:
             if agg.search_queries and agg.search_expect_hit is not None
             else ("failed" if agg.search_queries else "none")
         )
+        load = (
+            f"{run.load_1m_start:.0f} to {run.load_1m_end:.0f}"
+            if run.load_1m_start is not None and run.load_1m_end is not None
+            else "n/a"
+        )
         rows.append(
             f"| {reader} | {_pct(agg.success_rate)} of {agg.total_cases} | {_pct(agg.expect_hit)} | "
             f"{_pct(agg.expect_absent_ok)} | "
             f"{(agg.median_latency_ms or 0) / 1000:.1f} | {(agg.mean_latency_ms or 0) / 1000:.1f} | "
-            f"{agg.mean_approx_tokens or 0:,.0f} | {run.peak_rss_mb or 0:,.0f} | {search} |"
+            f"{agg.mean_approx_tokens or 0:,.0f} | {run.peak_rss_mb or 0:,.0f} | {search} | {load} |"
         )
     return "\n".join([header, *rows])
 

@@ -6,11 +6,37 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
-## [2026.10.2] - 31/10/2026
+## [2026.11.0] - 01/11/2026
+
+The first release on PyPI since 2026.7.0, and the first whose dependency set resolves from PyPI alone. 2026.7.0's `mcp` extra named `mcp-common`, which on PyPI is an unrelated third party's project, so `pip install supacrawl[mcp]` installed a stranger's library; that extra and the version behind it are superseded by this release. 2026.10.0 to 2026.10.2 were never published.
+
+### Changed
+
+- **Every dependency, base and extra, is a PyPI name.** `redactyl-core` leaves the base dependencies, the `telemetry` extra is gone (its one package is private; OTLP shipping now needs the server's container image), and the `mcp` extra keeps only its PyPI names. The MCP server is built on `mcp-common`, a framework that is not on PyPI; `supacrawl-mcp` on an install without it exits with one sentence saying so instead of a traceback. See `docs/mcp-server.md`.
+- **Patchright starts headless where there is no display** (`DISPLAY` or `WAYLAND_DISPLAY` on Linux). A headed Chromium dies at launch on a server, and the escalation ladder died with it at its first rung, so every bot-walled page ended on its HTTP 403 and Camoufox was never reached. `SUPACRAWL_HEADLESS` still decides for every engine.
+- **A REST job past its TTL is dropped when the next job is created**, so `SUPACRAWL_API_JOB_TTL` is true of the running server; before, jobs accumulated until restart (#169).
+- **README, `docs/` and `llms.txt` say what supacrawl is now and how it compares**, quoting the benchmark's dated figures with their configuration; the MCP server has its own page (`docs/mcp-server.md`) and the benchmark its own (`docs/benchmark.md`).
 
 ### Added
 
+- **A benchmark against the field** (`supacrawl bench run --provider trafilatura|jina|crawl4ai|firecrawl`, `bench table`): the same 33-page corpus and five search queries through each reader, recording pages returned, content kept, boilerplate gone, latency, output tokens and the process tree's peak memory; `--no-reference` scores on anchors alone so a run's time and memory are the reader's own, and every run records the host's one-minute load at start and end, since a timing taken on a busy host compares only within its own run. The corpus gains a 300,000-character reference page, news, MDN, package registries, forums and app shells. Measured 01/11/2026, documented in `docs/benchmark.md`.
+- **`SUPACRAWL_LLM_BASE_URL`** (#176): the LLM endpoint for every provider, so `openai` can point at any OpenAI-compatible gateway with the gateway's bearer in `OPENAI_API_KEY`; `OPENAI_BASE_URL` is honoured below it, and a trailing `/v1` is accepted. `supacrawl_health` reports the effective `base_url`. Asked by the fleet repository's one-door ruling of 10/10/2026.
+- **A renderer that outlives its page and keeps spinning is reaped** (#170): once no page is open in the process, Chromium renderers descended from it are sampled over two seconds after `SUPACRAWL_RENDERER_BUDGET` seconds (15), and any still burning half a core is killed, with the URL, pid and budget logged. Only this process's descendants are ever touched. One such renderer held a core for 1h42m on 07/09/2026.
+- **`SUPACRAWL_CAMOUFOX_LIBS`**: an `LD_LIBRARY_PATH` handed to Camoufox's Firefox alone, for a NixOS host whose GTK libraries are off the default path.
 - **`quality.tried` on every scrape result**: each strategy that ran (`http`, `playwright`, `patchright`, `camoufox`, `camoufox (HTTP/1.1)`), in order, with its verdict, HTTP status and first reason. A scrape that ends on a bot wall now says which engines ran and how each failed, so the caller can tell an exhausted ladder from a single failure and take another route (a real-browser session) instead of retrying. Same field in the library, MCP and REST results. No new escalation and no CAPTCHA solving. Asked by caspo (radar-hooves/caspo), 31/10/2026.
+
+### Fixed
+
+- **A section the query names by heading ranks first and whole.** On a long reference page the answer sits under the option's own name while hundreds of sibling sections share the query's ordinary words. The excerpt ranker behind `extract` and `summary` gives every block of a split section its heading as context and puts a heading the query names (an identifier, however the heading cases or spaces it) ahead of everything else; the scrape `query` filter keeps a named section and raises the floor for the rest to half the best score. On Renovate's configuration options (183 sections) the sentence-shaped query kept 179 sections before and 56 after, the named one among them. Asked by the operator's MCP sessions, 30/10 and 31/10/2026.
+- **Prose about CAPTCHAs no longer sends a page to a browser.** The fast path escalated on the words `captcha`, `blocked` and `please wait` wherever they appeared, so Wikipedia's web-scraping article and Renovate's reference page each took a browser (5.9 s and 12.1 s where the fast path takes under a second). Only a challenge widget in the markup escalates now; prose markers are judged with the word count.
+- **A catalogue page is served from the fast path.** A product grid pruned to 22 words under `only_main_content` read as a bot block and launched a browser that recovered the identical HTML; the fast path now runs the same full-page recovery as the browser path (books.toscrape.com 5.3 s to 1.4 s).
+- **Plain text is its own markdown.** A `.txt`, an `llms.txt` or a raw source file went to a browser because only markup was fast-pathable; a 438 KB Project Gutenberg text went from 6.0 s to 1.9 s.
+
+Every time in this entry was measured on a busy 20-core host (one-minute load 29 to 65) and compares only with its own before figure, taken minutes earlier on the same host; none is a speed claim for a quiet machine.
+
+### Removed
+
+- Code nothing reached, each verified at HEAD (#169): `discovery/sitemap.py` (map has its own), `map_io.py`, the empty `prep` package, `utils.url_path`, the two CAPTCHA status helpers, `JobStore.max_jobs` and `.ttl`, `LLMClient.check_health`, `SupacrawlServices.test_connection`, `SupacrawlSettings.get_locale_config`, the never-imported `aiofiles` dependency, and `QualityAssessment.is_scraper_fault`, which was never serialised into any result: `quality.verdict == "infrastructure"` is the signal and is unchanged.
 
 ## [2026.10.1] - 30/10/2026
 
@@ -54,7 +80,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
-- **A scrape with `query` now says whether the filter ran** (asked by godswood, 18/10/2026): the result carries `query_filter` (`applied`, `reason` when not, `sections_kept` of `sections_total`). Reasons: `rank_bm25_not_installed`, `flat_page`, `include_tags_set`, `only_main_content_false`, `no_html_extraction` (PDF, or a path that never ran the cascade). The cache key now includes the query, so a filtered page is never served to an unfiltered request or the reverse.
+- **A scrape with `query` now says whether the filter ran** (asked by a consumer project, 18/10/2026): the result carries `query_filter` (`applied`, `reason` when not, `sections_kept` of `sections_total`). Reasons: `rank_bm25_not_installed`, `flat_page`, `include_tags_set`, `only_main_content_false`, `no_html_extraction` (PDF, or a path that never ran the cascade). The cache key now includes the query, so a filtered page is never served to an unfiltered request or the reverse.
 - **MCP `supacrawl_scrape` takes `max_chars`**: caps markdown/html/rawHtml and returns `truncation` with each cut field's full length and strategy. With `query` set, markdown keeps the passages that best match it (`query_ranked`: BM25 over paragraphs and table rows, a table's header repeated on each chunk) instead of the head, so one fact deep in a large table survives the cut. Without `max_chars`, nothing changes except a warning when markdown exceeds 100,000 characters.
 - **`supacrawl_health` reports `components.extraction`**: whether `readability_lxml` and `rank_bm25` are installed, and `query_filter`, so a caller can tell a server that cannot filter from one that did not.
 

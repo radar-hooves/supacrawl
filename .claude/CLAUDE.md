@@ -25,5 +25,6 @@ Zero-infrastructure CLI web scraper with LLM extraction, for developers working 
 
 ## CI deviations from the household standard
 
-- **No `auto-label-issues` caller.** supacrawl is public and `radar-hooves/master-project` is private, so the reusable is unresolvable here; labels are applied at creation time by the `/git-issue` skill instead.
-- **Carries a checked copy of the change pipeline** (`change-pipeline.yaml`, `.github/actions/change/`, `actions/setup-uv/`), because a public repo cannot call master's private workflow; master's weekly `security.yaml` copies check keeps it equal. Re-copy from master on a red; never hand-edit. Wheels ship from that pipeline's leg (`[tool.change] publish`); `publish.yaml` is the one public PyPI release.
+- **No `auto-label-issues` caller.** supacrawl is public and the governance repository that owns the reusable workflow is private, so it is unresolvable here; labels are applied at creation time by the `/git-issue` skill instead.
+- **Carries a checked copy of the change pipeline** (`change-pipeline.yaml`, `.github/actions/change/`, `actions/setup-uv/`), because a public repo cannot call a private workflow; the governance repo's weekly copies check keeps it equal. Re-copy on a red; never hand-edit. Wheels ship from that pipeline's leg (`[tool.change] publish`); `publish.yaml` is the one public PyPI release, run by a GitHub release.
+- **The published dependency set is PyPI-only.** `mcp-common` and its private dependencies live in the `mcp-dev` group alone; a name that exists only on the private index must never enter `[project]` or an extra. Prove a release with a wheel installed into a scratch venv against `https://pypi.org/simple` with every extra.
