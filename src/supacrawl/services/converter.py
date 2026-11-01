@@ -27,7 +27,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from urllib.parse import urljoin, urlparse
 
-from bs4 import BeautifulSoup, Tag
+from bs4 import BeautifulSoup, NavigableString, Tag
 from markdownify import MarkdownConverter as BaseMarkdownConverter
 
 from supacrawl.models import QueryFilter
@@ -530,6 +530,94 @@ def apply_site_preprocessors(soup: BeautifulSoup) -> list[str]:
     return applied
 
 
+# A layout table's text cell must hold this share of the page's words, and at least this many.
+_LAYOUT_CELL_SHARE = 0.7
+_LAYOUT_CELL_MIN_WORDS = 40
+_LAYOUT_MAX_NESTING = 3
+
+
+def _words(element: Tag) -> int:
+    return len(element.get_text(" ").split())
+
+
+def _layout_text_cell(table: Tag, page_words: int) -> Tag | None:
+    """The cell of a table used for page layout that holds the page's text, else None.
+
+    Pages laid out as one table (a navigation column of image links, a logo, a title image, spacer
+    cells, then a cell with the text) have no data table in them: no header cells, no caption, and
+    one cell holding nearly all of the page's words. A data table has many cells of similar size.
+    """
+    if table.find(["th", "caption", "thead"]) is not None:
+        return None
+    cells = [cell for cell in table.find_all("td") if cell.find_parent("table") is table]
+    if len(cells) < 2:
+        return None
+    best = max(cells, key=_words)
+    words = _words(best)
+    if words < _LAYOUT_CELL_MIN_WORDS or words < _LAYOUT_CELL_SHARE * page_words:
+        return None
+    return best
+
+
+def _title_heading(soup: BeautifulSoup, content: Tag) -> None:
+    """Give the unwrapped text a heading where the page states its title.
+
+    A title set as an image before the text becomes a heading from the image's alt; failing that, the
+    page's ``<title>`` heads the text unless the text already opens with a heading or that title.
+    """
+    for node in content.descendants:
+        if isinstance(node, NavigableString):
+            if node.strip():
+                break
+        elif isinstance(node, Tag) and node.name == "img":
+            alt = " ".join(str(node.get("alt") or "").split())
+            if alt and node.find_parent("a") is None:
+                heading = soup.new_tag("h1")
+                heading.string = alt
+                node.replace_with(heading)
+                return
+            break
+    if content.find(["h1", "h2", "h3"]) is not None or soup.title is None:
+        return
+    title = " ".join(soup.title.get_text(" ").split())
+    if title and title.casefold() not in " ".join(content.get_text(" ").split())[: len(title) + 40].casefold():
+        heading = soup.new_tag("h1")
+        heading.string = title
+        content.insert(0, heading)
+
+
+def unwrap_layout_table(soup: BeautifulSoup) -> int:
+    """Replace a page-layout table with its text cell, dropping the navigation, logo and spacer cells.
+
+    Returns how many layout tables were unwrapped. Pages whose text is not in one dominant cell of a
+    header-less table are left exactly as they are.
+    """
+    unwrapped = 0
+    for _ in range(_LAYOUT_MAX_NESTING):
+        body = soup.find("body") or soup
+        page_words = _words(body)
+        table = next(
+            (
+                t
+                for t in body.find_all("table")
+                if t.find_parent("table") is None and _layout_text_cell(t, page_words) is not None
+            ),
+            None,
+        )
+        if table is None:
+            break
+        cell = _layout_text_cell(table, page_words)
+        assert cell is not None
+        content = soup.new_tag("div")
+        for child in list(cell.contents):
+            content.append(child.extract())
+        if not unwrapped:
+            _title_heading(soup, content)
+        table.replace_with(content)
+        unwrapped += 1
+    return unwrapped
+
+
 _MARKUP_ATTR = re.compile(r"\s*<[a-zA-Z][^>]*>")
 _MAX_EXPANSION_PASSES = 4
 
@@ -860,6 +948,10 @@ class MarkdownConverter:
                     QUERY_OUTCOME.set(QueryFilter(applied=False, reason="include_tags_set"))
             elif only_main_content:
                 from supacrawl.services.content_filter import extract as cf_extract
+
+                if unwrap_layout_table(soup):
+                    # Readability re-parses the HTML string, so it must see the unwrapped page.
+                    html = str(soup)
 
                 content_element = cf_extract(
                     soup=soup,

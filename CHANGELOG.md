@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## [2026.11.3] - 01/11/2026
+
+### Fixed
+
+- **A page laid out as one table gives its text, not its layout.** When a header-less table holds the page's words in one cell (at least 40 words and 70% of the page), the markdown is that cell: the navigation column of image links, the logo, spacer cells and the row of translation links are gone, and the title comes back as a heading, from the title image's alt or else the page's `<title>`. Data tables (header cells, a caption, cells of similar size) and modern layouts are untouched; `only_main_content=false` keeps the whole table. Before, the filed copy opened with the navigation, so a search for an essay's first sentence missed it. Asked by the household library (radar-hooves/library).
+
 ## [2026.11.2] - 01/11/2026
 
 ### Added
