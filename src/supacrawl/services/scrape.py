@@ -37,6 +37,7 @@ from bs4 import BeautifulSoup
 
 from supacrawl.cache import CacheManager
 from supacrawl.exceptions import ProviderError, ValidationError, generate_correlation_id
+from supacrawl.link_index import extract_page_links
 from supacrawl.llm.schema import schema_validator
 from supacrawl.models import (
     ActionsOutput,
@@ -824,6 +825,7 @@ class ScrapeService:
                 "html",
                 "rawHtml",
                 "links",
+                "linkDetails",
                 "screenshot",
                 "pdf",
                 "json",
@@ -2144,6 +2146,7 @@ class ScrapeService:
         html = None
         raw_html = None
         links = None
+        link_details = None
         images = None
         image_details = None
         branding = None
@@ -2164,6 +2167,9 @@ class ScrapeService:
 
         if "links" in formats:
             links = self._extract_links_from_html(page_content.html, url)
+
+        if "linkDetails" in formats:
+            link_details = extract_page_links(page_content.html, url)
 
         if "images" in formats:
             images = await browser.extract_images(page_content.html, url)
@@ -2285,6 +2291,7 @@ class ScrapeService:
                     word_count=word_count,
                 ),
                 links=links,
+                link_details=link_details,
                 images=images,
                 image_details=image_details,
                 branding=branding,

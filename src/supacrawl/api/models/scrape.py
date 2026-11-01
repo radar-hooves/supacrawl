@@ -80,6 +80,7 @@ class ScrapeDataResponse(BaseModel):
     html: str | None = None
     raw_html: str | None = Field(None, serialization_alias="rawHtml")
     links: list[str] | None = None
+    link_details: list[dict[str, Any]] | None = Field(None, serialization_alias="linkDetails")
     screenshot: str | None = None
     images: list[str] | None = None
     image_details: list[dict[str, Any]] | None = None

@@ -18,6 +18,7 @@ from __future__ import annotations
 import re
 from urllib.parse import unquote, urljoin, urlparse
 
+from supacrawl.link_index import extract_page_links, is_link_index
 from supacrawl.models import HARD_FAIL_VERDICTS, QualityAssessment, QualityVerdict
 
 # ``supacrawl.services.detection`` holds the pure CDN/framework/bot heuristics
@@ -382,7 +383,7 @@ _VERDICT_SCORE_CEILING: dict[QualityVerdict, int] = {
 }
 
 
-def _reference_free_score(*, word_count: int, link_count: int, spacing: float | None) -> int:
+def _reference_free_score(*, word_count: int, link_count: int, spacing: float | None, link_index: bool = False) -> int:
     """Grade a usable page 0-100 from signals that need no reference capture.
 
     Blends completeness (does the page carry enough prose?), spacing fidelity
@@ -393,6 +394,8 @@ def _reference_free_score(*, word_count: int, link_count: int, spacing: float | 
         word_count: Visible word count of the extracted content.
         link_count: Number of links in the extracted markdown.
         spacing: ``word_spacing`` value, or None when there is too little prose.
+        link_index: True for a page of links, whose value is its links, not its prose: it is neither
+            short of words nor cluttered by links.
 
     Returns:
         Integer score in ``[0, 100]``.
@@ -401,6 +404,8 @@ def _reference_free_score(*, word_count: int, link_count: int, spacing: float | 
     spacing_component = spacing if spacing is not None else 1.0
     ld = link_density(link_count, word_count)
     link_component = max(0.0, 1.0 - ld / _LINK_DENSITY_FLOOR)
+    if link_index:
+        density = link_component = 1.0
 
     blended = 0.55 * density + 0.30 * spacing_component + 0.15 * link_component
     return round(100 * blended)
@@ -482,10 +487,19 @@ def _classify(
     if challenge and word_count < _THIN_WORD_FLOOR:
         return QualityVerdict.BOT_CHALLENGE, ["anti-bot challenge fingerprint with no usable content"]
 
-    if word_count == 0:
+    # A page whose content is a set of links (a letters page, a memo archive) is short of words by
+    # nature. Past the challenge checks above, it is a page: only the tarpit check below can still
+    # condemn it. A JS shell with no content links in its HTML is not one, and is judged as before.
+    index_links = 0
+    if word_count < _THIN_WORD_FLOOR:
+        links = extract_page_links(html, page_url or "http://unknown.invalid/")
+        if is_link_index(links):
+            index_links = sum(1 for link in links if not link.chrome and link.text)
+
+    if word_count == 0 and not index_links:
         return QualityVerdict.EMPTY, ["no text content extracted"]
 
-    if word_count < _THIN_WORD_FLOOR:
+    if word_count < _THIN_WORD_FLOOR and not index_links:
         # Distinguish a JS shell (real content is rendered client-side and never
         # arrived) from a genuinely thin page, and a paywall from both. A short
         # body alone is not enough to call "shell" — require a real client-side
@@ -510,6 +524,8 @@ def _classify(
                 "of this page's own URL (Nepenthes/iocaine-style crawler tarpit)"
             ]
 
+    if index_links:
+        reasons.append(f"link index: {index_links} content links, {word_count} words")
     return QualityVerdict.OK, reasons
 
 
@@ -559,7 +575,12 @@ def assess_quality(
     )
 
     link_count = count_structure(text)["links"] if text else 0
-    score = _reference_free_score(word_count=word_count, link_count=link_count, spacing=spacing)
+    score = _reference_free_score(
+        word_count=word_count,
+        link_count=link_count,
+        spacing=spacing,
+        link_index=verdict is QualityVerdict.OK and any(r.startswith("link index:") for r in reasons),
+    )
 
     if verdict in _VERDICT_SCORE_CEILING:
         score = min(score, _VERDICT_SCORE_CEILING[verdict])

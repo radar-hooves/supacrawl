@@ -22,6 +22,7 @@ from supacrawl.models import DEFAULT_MOBILE_DEVICE, QualityVerdict
             "html",
             "rawHtml",
             "links",
+            "linkDetails",
             "images",
             "screenshot",
             "pdf",

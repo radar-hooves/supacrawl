@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## [2026.11.1] - 01/11/2026
+
+### Added
+
+- **`linkDetails`, a scrape format for a page that exists to link to documents** (a company's shareholder letters, a memo archive, a docs index). `data.link_details` is every link once, in page order, with its resolved `url`, anchor `text` (an image's alt or the title attribute when there is none), `context` (the text of the largest element holding it and no other link, where a printed date or year shows), `heading` (the nearest heading or label before it, such as a year tab) and `chrome` (navigation, banner, search, an aside, or a header or footer outside any article). `javascript:openPDF('/x.pdf')` links keep the URL they quote. Python: `supacrawl.link_index.extract_page_links(html, page_url)`; REST and MCP: `formats: ["linkDetails"]`; CLI: `-f linkDetails`. Nothing fetches the links. Asked by the household library (radar-hooves/library#297).
+- **The quality gate knows a page of links is a page.** With at least five distinct content links that have anchor text (chrome links do not count), a page under 50 words is graded `ok` with the reason `link index: N content links`, instead of `thin`, `paywall` or `empty`, and scored as a page rather than as a short article. Bot walls, HTTP errors, CAPTCHAs, tarpits and a script's shell with no content links in its HTML are judged as before. `assess_quality` gets this from the `html` it is already given; pass `url=` so relative links resolve (without it they are still counted).
+- **`image_details` on scrape and `image_url` on search rows** (radar-hooves/supacrawl#180): each image sized from its file's first bytes, largest first, icons flagged.
+
 ## [2026.11.0] - 01/11/2026
 
 The first release on PyPI since 2026.7.0, and the first whose dependency set resolves from PyPI alone. 2026.7.0's `mcp` extra named `mcp-common`, which on PyPI is an unrelated third party's project, so `pip install supacrawl[mcp]` installed a stranger's library; that extra and the version behind it are superseded by this release. 2026.10.0 to 2026.10.2 were never published.

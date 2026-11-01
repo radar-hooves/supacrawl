@@ -99,6 +99,8 @@ Scrape a single URL synchronously. Returns scraped content in the requested form
 
 Fields not listed here (e.g. `skipTlsVerification`, `blockAds`, `removeBase64Images`) are accepted silently and ignored.
 
+`linkDetails` (a format, like `links`) returns every link once with its anchor `text`, `context` (the text of the largest element holding it and no other link, where a date or year printed beside it shows), the nearest `heading` or label before it, and `chrome` (true in navigation, banner, search, an aside, or a header/footer outside any article). A page whose content is a set of at least five such content links with anchor text is a link index (a letters page, a memo archive): its `quality.verdict` is `ok` however few words it has. A bot wall, an empty page, or a script's shell with no content links is still judged as such.
+
 **Response body:**
 
 ```json
@@ -109,6 +111,15 @@ Fields not listed here (e.g. `skipTlsVerification`, `blockAds`, `removeBase64Ima
     "html": "<h1>Example Domain</h1>...",
     "rawHtml": "<!doctype html>...",
     "links": ["https://www.iana.org/domains/example"],
+    "linkDetails": [
+      {
+        "url": "https://www.iana.org/domains/example",
+        "text": "More information...",
+        "context": "More information...",
+        "heading": null,
+        "chrome": false
+      }
+    ],
     "screenshot": null,
     "metadata": {
       "title": "Example Domain",
