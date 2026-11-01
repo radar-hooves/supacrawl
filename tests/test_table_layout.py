@@ -85,3 +85,22 @@ def test_data_table_inside_the_nested_text_cell_still_renders_as_a_table() -> No
     assert "| Plant | Depth |" in md
     assert "| Bean | 5 cm |" in md
     assert md.startswith("# On Slow Gardens")
+
+
+CHROME_ESSAY = (Path(__file__).parent / "fixtures" / "table_layout" / "essay_chrome.html").read_text(encoding="utf-8")
+STUB = (
+    "<html><head><title>X</title></head><body><nav class='site-nav'>{c}</nav><div id='cookie-banner'>{c}</div>"
+    "<main><p>This page has moved.</p></main><footer>{c}</footer></body></html>"
+).format(c="navigation " * 200)
+
+
+def test_essay_with_logo_promo_and_translation_links_comes_out_as_its_article() -> None:
+    md = _md(CHROME_ESSAY, only_main_content=True, content_mode=0.5)
+    assert "The first thing to understand about gardens" in md
+    assert "None of this is complicated" in md
+    for chrome in ("logo.gif", "Example Garden Site", "Want to plant", "Translation", "flag-"):
+        assert chrome not in md, chrome
+
+
+def test_a_stub_main_is_not_replaced_by_the_cookie_banner() -> None:
+    assert _md(STUB, only_main_content=True, content_mode=0.5) == "This page has moved."
