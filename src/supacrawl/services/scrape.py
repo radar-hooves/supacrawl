@@ -66,6 +66,7 @@ from supacrawl.services.detection import (
     estimate_js_requirement,
 )
 from supacrawl.services.http_fetch import fetch_static
+from supacrawl.services.image_details import measure_images
 from supacrawl.services.platform import detect_platform
 from supacrawl.services.remediation import remediation_hint, thin_content_hint
 from supacrawl.services.structured_data import extract_structured_data
@@ -2144,6 +2145,7 @@ class ScrapeService:
         raw_html = None
         links = None
         images = None
+        image_details = None
         branding = None
         structured_data = None
         summary = None
@@ -2165,6 +2167,7 @@ class ScrapeService:
 
         if "images" in formats:
             images = await browser.extract_images(page_content.html, url)
+            image_details = await measure_images(page_content.html, url)
 
         if "branding" in formats:
             # Extract branding information
@@ -2283,6 +2286,7 @@ class ScrapeService:
                 ),
                 links=links,
                 images=images,
+                image_details=image_details,
                 branding=branding,
                 actions=actions_output,
                 change_tracking=change_tracking,

@@ -82,6 +82,7 @@ class ScrapeDataResponse(BaseModel):
     links: list[str] | None = None
     screenshot: str | None = None
     images: list[str] | None = None
+    image_details: list[dict[str, Any]] | None = None
     pdf: str | None = None
     summary: str | None = None
     llm_extraction: dict[str, Any] | None = Field(

@@ -203,6 +203,7 @@ class TestSerperProvider:
         "images": [
             {
                 "imageUrl": "https://example.com/photo.jpg",
+                "link": "https://example.com/page",
                 "title": "A Photo",
                 "source": "example.com",
                 "thumbnailUrl": "https://example.com/thumb.jpg",
@@ -256,7 +257,8 @@ class TestSerperProvider:
 
             assert len(results) == 1
             item = results[0]
-            assert item.url == "https://example.com/photo.jpg"
+            assert item.url == "https://example.com/page"
+            assert item.image_url == "https://example.com/photo.jpg"
             assert item.title == "A Photo"
             assert item.source_type == SearchSourceType.IMAGES
             assert item.thumbnail == "https://example.com/thumb.jpg"
@@ -336,6 +338,7 @@ class TestSerpAPIProvider:
         "images_results": [
             {
                 "original": "https://example.com/img.jpg",
+                "link": "https://example.com/img-page",
                 "title": "An Image",
                 "source": "example.com",
                 "thumbnail": "https://example.com/thumb.jpg",
@@ -389,7 +392,8 @@ class TestSerpAPIProvider:
 
             assert len(results) == 1
             item = results[0]
-            assert item.url == "https://example.com/img.jpg"
+            assert item.url == "https://example.com/img-page"
+            assert item.image_url == "https://example.com/img.jpg"
             assert item.source_type == SearchSourceType.IMAGES
             assert item.thumbnail == "https://example.com/thumb.jpg"
             assert item.image_width == 800

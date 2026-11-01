@@ -145,7 +145,8 @@ class DuckDuckGoProvider:
                     continue
                 results.append(
                     SearchResultItem(
-                        url=image_url,
+                        url=item.get("url", ""),
+                        image_url=image_url,
                         title=item.get("title", ""),
                         description=item.get("source", ""),
                         source_type=SearchSourceType.IMAGES,

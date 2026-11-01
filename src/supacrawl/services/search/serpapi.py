@@ -107,7 +107,8 @@ class SerpAPIProvider:
         for item in data.get("images_results", [])[:limit]:
             results.append(
                 SearchResultItem(
-                    url=item.get("original", ""),
+                    url=item.get("link", ""),
+                    image_url=item.get("original") or None,
                     title=item.get("title", ""),
                     description=item.get("source", ""),
                     source_type=SearchSourceType.IMAGES,

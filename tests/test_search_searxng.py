@@ -88,11 +88,12 @@ WEB_RESPONSE = {
 IMAGE_RESPONSE = {
     "results": [
         {
-            "url": "https://example.com/photo.jpg",
+            "url": "https://example.com/gallery/photo",
             "img_src": "https://example.com/photo-full.jpg",
             "title": "A Photo",
             "thumbnail_src": "https://example.com/thumb.jpg",
-            "img_format": {"width": 800, "height": 600},
+            "resolution": "800\u00d7600",
+            "img_format": "JPG",
         }
     ]
 }
@@ -186,12 +187,32 @@ class TestSearXNGProvider:
 
             assert len(results) == 1
             item = results[0]
-            assert item.url == "https://example.com/photo.jpg"
+            assert item.url == "https://example.com/gallery/photo"
+            assert item.image_url == "https://example.com/photo-full.jpg"
             assert item.source_type == SearchSourceType.IMAGES
             assert item.thumbnail == "https://example.com/thumb.jpg"
             assert item.image_width == 800
             assert item.image_height == 600
             assert fake.last["params"]["categories"] == "images"
+        finally:
+            await provider.close()
+
+    @pytest.mark.asyncio
+    async def test_search_images_ascii_resolution_and_missing_resolution(self) -> None:
+        provider = SearXNGProvider(url="http://searxng.invalid")
+        try:
+            body = {
+                "results": [
+                    {"img_src": "https://a.test/a.jpg", "url": "https://a.test/p", "resolution": "1920x1080"},
+                    {"img_src": "https://b.test/b.jpg", "url": "https://b.test/p", "img_format": "PNG"},
+                ]
+            }
+            provider._http_client = _FakeClient(body)  # type: ignore[assignment]
+
+            first, second = await provider.search_images("q", 5, CORRELATION_ID)
+
+            assert (first.image_width, first.image_height) == (1920, 1080)
+            assert (second.image_width, second.image_height) == (None, None)
         finally:
             await provider.close()
 
@@ -205,7 +226,7 @@ class TestSearXNGProvider:
 
             results = await provider.search_images("q", 5, CORRELATION_ID)
 
-            assert results[0].url == "https://example.com/only-img.jpg"
+            assert results[0].image_url == "https://example.com/only-img.jpg"
             assert results[0].thumbnail == "https://example.com/only-img.jpg"
         finally:
             await provider.close()

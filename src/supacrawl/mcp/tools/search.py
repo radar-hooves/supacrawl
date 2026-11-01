@@ -132,7 +132,7 @@ async def supacrawl_search(
     sources: Annotated[
         list[Literal["web", "images", "news"]] | None,
         Field(
-            description='Source types to search. Defaults to ["web"]. - "web": Standard web pages - "images": Image search results - "news": News articles'
+            description='Source types to search. Defaults to ["web"]. - "web": Standard web pages - "images": Photographs: each row has the page (url), the image file itself (image_url) and its pixel size (image_width/image_height) when the engine reports it - "news": News articles'
         ),
     ] = None,
     scrape_results: Annotated[bool, Field(description="Whether to scrape content from web result pages")] = False,
@@ -209,7 +209,8 @@ async def supacrawl_search(
         limit: Maximum number of results per source type (1-10, default 5)
         sources: Source types to search. Defaults to ["web"].
             - "web": Standard web pages
-            - "images": Image search results
+            - "images": Image search results; ``image_url`` is the image file itself (download
+              this), ``url`` the page it sits on, ``image_width``/``image_height`` its size when known
             - "news": News articles
         scrape_results: Whether to scrape content from web result pages
         formats: Output formats when scraping (markdown, html)
@@ -245,6 +246,7 @@ async def supacrawl_search(
                         "last_modified": "Sat, 01 Jan 2025 00:00:00 GMT"
                     },
                     // Image-specific:
+                    "image_url": "https://.../full.jpg",  // the image itself; url is its page
                     "thumbnail": "...",
                     "image_width": 1920,
                     "image_height": 1080,

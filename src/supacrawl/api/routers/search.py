@@ -68,7 +68,7 @@ def _search_result_to_response(result: SearchResult) -> SearchResponse:
                 ImageResultItem(
                     title=item.title,
                     url=item.url,
-                    image_url=item.thumbnail,
+                    image_url=item.image_url or item.thumbnail,
                 )
             )
         elif item.source_type == SearchSourceType.NEWS:

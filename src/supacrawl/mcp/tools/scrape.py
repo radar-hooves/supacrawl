@@ -88,7 +88,7 @@ async def supacrawl_scrape(
         ]
         | None,
         Field(
-            description="Output formats to return. Options: - markdown: Clean markdown with resolved URLs (default) - html: Cleaned HTML with boilerplate removed - rawHtml: Full unprocessed HTML - links: All extracted links (parsed from rendered HTML) - images: All image URLs - screenshot: Base64-encoded PNG - pdf: Base64-encoded PDF document - json: LLM-extracted structured data (requires json_schema or json_prompt) - branding: Brand identity (colours, fonts, logo) - structuredData: deterministic, no-LLM extraction of the page's own embedded data (schema.org JSON-LD, Next.js __NEXT_DATA__, microdata, OpenGraph) — cheaper and more reliable than json for facts the site already publishes (prices, ratings, authors, dates) - summary: LLM-generated 2-3 sentence summary"
+            description="Output formats to return. Options: - markdown: Clean markdown with resolved URLs (default) - html: Cleaned HTML with boilerplate removed - rawHtml: Full unprocessed HTML - links: All extracted links (parsed from rendered HTML) - images: All image URLs, plus image_details: each image's measured pixel size, largest first, site icons last (flagged icon) - screenshot: Base64-encoded PNG - pdf: Base64-encoded PDF document - json: LLM-extracted structured data (requires json_schema or json_prompt) - branding: Brand identity (colours, fonts, logo) - structuredData: deterministic, no-LLM extraction of the page's own embedded data (schema.org JSON-LD, Next.js __NEXT_DATA__, microdata, OpenGraph) — cheaper and more reliable than json for facts the site already publishes (prices, ratings, authors, dates) - summary: LLM-generated 2-3 sentence summary"
         ),
     ] = None,
     only_main_content: Annotated[
@@ -287,7 +287,10 @@ async def supacrawl_scrape(
             - html: Cleaned HTML with boilerplate removed
             - rawHtml: Full unprocessed HTML
             - links: All extracted links (parsed from rendered HTML)
-            - images: All image URLs
+            - images: All image URLs, plus ``image_details``: every image with its measured
+              width/height/bytes, largest first and site icons flagged ``icon`` last. Use it
+              to find a page's full-size photograph (including links to its original file)
+              without fetching each image yourself.
             - screenshot: Base64-encoded PNG
             - pdf: Base64-encoded PDF document
             - json: LLM-extracted structured data (requires json_schema or json_prompt)
@@ -397,7 +400,8 @@ async def supacrawl_scrape(
                     "og_image": "..."
                 },
                 "links": [...],
-                "images": [...]
+                "images": [...],
+                "image_details": [{"url": "...", "width": 6035, "height": 4023, "bytes": 5000000, "icon": false}]
             },
             "query_filter": {...},   // Only when query was passed: applied, reason, sections_kept/total
             "truncation": {...},     // Only when max_chars was passed: per-field total_chars/returned_chars

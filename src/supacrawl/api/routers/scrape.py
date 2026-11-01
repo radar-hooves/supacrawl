@@ -127,6 +127,7 @@ def _scrape_result_to_response(result: ScrapeResult) -> ScrapeResponse:
         links=data.links,
         screenshot=data.screenshot,
         images=data.images,
+        image_details=[d.model_dump() for d in data.image_details] if data.image_details else None,
         pdf=data.pdf,
         summary=data.summary,
         llm_extraction=data.llm_extraction,

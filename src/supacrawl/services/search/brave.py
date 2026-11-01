@@ -143,6 +143,7 @@ class BraveProvider:
                     title=item.get("title", ""),
                     description=item.get("source", ""),
                     source_type=SearchSourceType.IMAGES,
+                    image_url=item.get("properties", {}).get("url") or None,
                     thumbnail=item.get("thumbnail", {}).get("src", ""),
                     image_width=item.get("properties", {}).get("width"),
                     image_height=item.get("properties", {}).get("height"),

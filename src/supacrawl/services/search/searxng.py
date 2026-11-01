@@ -24,6 +24,7 @@ Prefer SEARXNG_USERNAME / SEARXNG_PASSWORD, which win when both are set.
 
 import logging
 import os
+import re
 from typing import Any
 from urllib.parse import unquote, urlsplit, urlunsplit
 
@@ -64,6 +65,12 @@ def _parse_unresponsive_engines(raw: Any) -> list[dict[str, str]]:
 def _format_unresponsive(engines: list[dict[str, str]]) -> str:
     """Render engine failures as ``brave (timeout), wikibooks (error)`` for a message."""
     return ", ".join(f"{e['engine']} ({e['reason']})" for e in engines)
+
+
+def _parse_resolution(raw: Any) -> tuple[int | None, int | None]:
+    """Read SearXNG's ``resolution`` string ("1920x1080" or "1920×1080") into (width, height)."""
+    match = re.fullmatch(r"\s*(\d+)\s*[x×X]\s*(\d+)\s*", raw) if isinstance(raw, str) else None
+    return (int(match.group(1)), int(match.group(2))) if match else (None, None)
 
 
 def _split_url_credentials(url: str) -> tuple[str, httpx.BasicAuth | None]:
@@ -263,19 +270,17 @@ class SearXNGProvider:
         raw_results, unresponsive = await self._search(query, limit, "images", correlation_id)
         results: list[SearchResultItem] = []
         for item in raw_results:
+            width, height = _parse_resolution(item.get("resolution"))
             results.append(
                 SearchResultItem(
-                    url=item.get("url", item.get("img_src", "")),
+                    url=item.get("url", ""),
                     title=item.get("title", ""),
                     description=item.get("content", item.get("source", "")),
                     source_type=SearchSourceType.IMAGES,
+                    image_url=item.get("img_src") or None,
                     thumbnail=item.get("thumbnail_src", item.get("img_src", "")),
-                    image_width=item.get("img_format", {}).get("width")
-                    if isinstance(item.get("img_format"), dict)
-                    else None,
-                    image_height=item.get("img_format", {}).get("height")
-                    if isinstance(item.get("img_format"), dict)
-                    else None,
+                    image_width=width,
+                    image_height=height,
                 )
             )
 

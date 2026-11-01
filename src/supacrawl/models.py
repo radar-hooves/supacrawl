@@ -489,6 +489,16 @@ class QualityAssessment(BaseModel):
         return self.verdict not in HARD_FAIL_VERDICTS
 
 
+class ImageDetail(BaseModel):
+    """An image on a page with its measured pixel size (None when it could not be read)."""
+
+    url: str
+    width: int | None = None
+    height: int | None = None
+    bytes: int | None = None  # File size, when the server states it
+    icon: bool = False  # A site icon or sprite rather than content
+
+
 class ScrapeData(BaseModel):
     """Scraped content from a page."""
 
@@ -503,6 +513,7 @@ class ScrapeData(BaseModel):
     metadata: ScrapeMetadata
     links: list[str] | None = None
     images: list[str] | None = None  # Image URLs extracted from page
+    image_details: list[ImageDetail] | None = None  # Measured sizes, largest first, icons last
     branding: BrandingProfile | None = None  # Brand identity information
     actions: ActionsOutput | None = None  # Results from action sequence
     change_tracking: ChangeTrackingData | None = None  # Change detection vs previous scrape
@@ -613,7 +624,8 @@ class SearchResultItem(BaseModel):
     description: str | None = None
     source_type: SearchSourceType = SearchSourceType.WEB
 
-    # Image-specific fields
+    # Image-specific fields: ``url`` is the page the image sits on, ``image_url`` the image itself
+    image_url: str | None = None
     thumbnail: str | None = None
     image_width: int | None = None
     image_height: int | None = None

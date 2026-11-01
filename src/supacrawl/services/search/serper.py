@@ -115,7 +115,8 @@ class SerperProvider:
         for item in data.get("images", [])[:limit]:
             results.append(
                 SearchResultItem(
-                    url=item.get("imageUrl", ""),
+                    url=item.get("link", ""),
+                    image_url=item.get("imageUrl") or None,
                     title=item.get("title", ""),
                     description=item.get("source", ""),
                     source_type=SearchSourceType.IMAGES,
