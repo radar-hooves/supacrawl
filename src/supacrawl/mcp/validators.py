@@ -333,7 +333,8 @@ def validate_limit(
         )
 
     try:
-        return _validate_positive_int(value, field_name, allow_none=False, max_value=max_value)
+        validated: int | None = _validate_positive_int(value, field_name, allow_none=False, max_value=max_value)
+        return validated
     except MCPValidationError as e:
         raise SupacrawlValidationError(str(e), field=field_name, value=value) from e
 

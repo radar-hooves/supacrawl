@@ -176,11 +176,13 @@ class SupacrawlServer(BaseMCPServer):
 
     def get_allowed_origins(self) -> list[str]:
         """Return allowed CORS origins from config."""
-        return ALLOWED_ORIGINS
+        origins: list[str] = ALLOWED_ORIGINS
+        return origins
 
     def get_allowed_hosts(self) -> list[str]:
         """Return allowed host headers from config."""
-        return ALLOWED_HOSTS
+        hosts: list[str] = ALLOWED_HOSTS
+        return hosts
 
     async def cleanup(self) -> None:
         """Cleanup resources on shutdown."""
