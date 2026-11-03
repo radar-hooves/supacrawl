@@ -3,7 +3,114 @@
 <head>
 <meta charset="utf-8">
 <title>supacrawl handoff</title>
-<style>body{font:15px/1.5 system-ui,sans-serif;max-width:52rem;margin:2rem auto;padding:0 1rem}code{background:#f3f3f3;padding:0 .2em}</style>
+<style>
+/* A shift-handover sheet: what waits on him, by when, in columns that fill the width; then each thread folded to its state line. */
+:root {
+  color-scheme: light;
+  --paper: #f2f4f7;
+  --sheet: #ffffff;
+  --ink: #18202b;
+  --ink-2: #546072;
+  --rule: #d6dce4;
+  --accent: #2747c7;
+  --accent-wash: #e5eafb;
+  --flag: #8f5400;
+  --flag-wash: #fbefd9;
+  --f-display: ui-serif, "Iowan Old Style", Charter, "Bitstream Charter", Georgia, serif;
+  --f-text: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", sans-serif;
+  --f-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --paper: #0f1318; --sheet: #171c24; --ink: #e2e7ee; --ink-2: #98a4b4; --rule: #29323e;
+    --accent: #95a9ff; --accent-wash: #1d2541; --flag: #e8ad4b; --flag-wash: #2d2313;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --paper: #0f1318; --sheet: #171c24; --ink: #e2e7ee; --ink-2: #98a4b4; --rule: #29323e;
+  --accent: #95a9ff; --accent-wash: #1d2541; --flag: #e8ad4b; --flag-wash: #2d2313;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--paper); color: var(--ink); font: 15px/1.55 var(--f-text);
+  padding: 2rem max(16px, env(safe-area-inset-right, 0px)) 4rem max(16px, env(safe-area-inset-left, 0px)); }
+main { max-width: 90rem; margin: 0 auto; display: grid; gap: 2.5rem; }
+h1, h2, h3, h4, p { margin: 0; }
+h1, h2 { font-family: var(--f-display); font-weight: 600; letter-spacing: -0.01em; text-wrap: balance; }
+h1 { font-size: 2.1rem; line-height: 1.1; }
+h2 { font-size: 1.35rem; padding-bottom: .5rem; border-bottom: 2px solid var(--ink); }
+h3 { font-size: 1rem; font-weight: 650; text-wrap: balance; }
+h4 { font-size: .98rem; font-weight: 650; }
+code { font: .86em var(--f-mono); background: var(--accent-wash); padding: 0 .25em; border-radius: 3px; overflow-wrap: anywhere; }
+a { color: var(--accent); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.masthead { display: flex; flex-wrap: wrap; align-items: baseline; gap: .25rem 1.5rem; }
+.masthead .eyebrow { flex-basis: 100%; font: 600 .75rem var(--f-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-2); }
+.masthead .updated { margin-left: auto; font: .85rem var(--f-mono); color: var(--ink-2); }
+
+.operator, .threads { display: grid; gap: 0; }
+.when { display: grid; gap: .75rem; padding-block: 1.25rem; border-bottom: 1px solid var(--rule); }
+.when > h3 { font: 600 .78rem/1.4 var(--f-mono); letter-spacing: .06em; text-transform: uppercase; color: var(--ink-2); }
+.when > h3 span { margin-left: .6rem; font: .82rem/1.4 var(--f-text); letter-spacing: 0; text-transform: none; }
+.when.today > h3 { color: var(--flag); }
+.asks { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 24rem), 1fr)); gap: .75rem; min-width: 0; }
+.asks > .table, .asks > .detail { grid-column: 1 / -1; }
+
+.ask { display: grid; gap: .3rem; padding: .85rem 1rem .8rem; background: var(--sheet); border: 1px solid var(--rule); border-radius: 6px; }
+.ask p { max-width: 68ch; }
+.ask::before, .table::before { justify-self: start; font: 600 .68rem/1 var(--f-mono); letter-spacing: .08em; text-transform: uppercase; padding: .3em .5em; border-radius: 3px; }
+[data-kind="decide"]::before { content: "Decide"; color: var(--flag); background: var(--flag-wash); }
+[data-kind="do"]::before { content: "Your act"; color: var(--accent); background: var(--accent-wash); }
+
+.ask::after { font: .78rem var(--f-mono); color: var(--ink-2); }
+.ask[data-track]::after { content: attr(data-track); }
+.ask[data-untracked]::after { content: attr(data-untracked); font-style: italic; }
+
+.table { display: grid; gap: 0; margin-top: .25rem; }
+.table::before { margin-bottom: .5rem; }
+.table-label { display: none; }
+.row { display: grid; grid-template-columns: minmax(8rem, 12rem) minmax(0, 1fr) minmax(6rem, 11rem); gap: .2rem 1.1rem; padding-block: .6rem; border-top: 1px solid var(--rule); }
+.row.head { font: 600 .7rem var(--f-mono); letter-spacing: .07em; text-transform: uppercase; color: var(--ink-2); border-top: 0; padding-block: .2rem .4rem; }
+.row b { font-weight: 600; }
+.row::after { font: .76rem/1.45 var(--f-mono); color: var(--ink-2); overflow-wrap: anywhere; }
+.row[data-track]::after { content: attr(data-track); color: var(--accent); }
+.row[data-untracked]::after { content: attr(data-untracked); font-style: italic; }
+
+.thread { border-bottom: 1px solid var(--rule); }
+.thread > summary { list-style: none; cursor: pointer; display: grid; grid-template-columns: 1.25rem minmax(0, 1fr); gap: .15rem .5rem; padding-block: 1rem; }
+.thread > summary::-webkit-details-marker { display: none; }
+.thread > summary::before { content: "›"; grid-row: span 2; font: 600 1.15rem/1.2 var(--f-mono); color: var(--ink-2); transition: transform .15s; }
+.thread[open] > summary::before { transform: rotate(90deg); }
+.thread > summary:hover h3 { color: var(--accent); }
+.state { grid-column: 2; color: var(--ink-2); max-width: 72ch; }
+.next, .items { margin-left: 1.75rem; }
+.next { max-width: 72ch; padding: .7rem .9rem; background: var(--sheet); border: 1px solid var(--rule); border-radius: 6px; }
+.next::before { content: "Next"; margin-right: .6em; font: 600 .68rem var(--f-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--accent); }
+.items { list-style: none; padding: .5rem 0 1.25rem; display: grid; gap: 0; max-width: 90ch; }
+.items li { padding: .5rem 0 .5rem 1rem; border-top: 1px dashed var(--rule); position: relative; }
+.items li:first-child { border-top: 0; }
+.items li::before { content: ""; position: absolute; left: 0; top: 1.05rem; width: .35rem; height: 1px; background: var(--ink-2); }
+.next::after, .items li::after { margin-left: .5em; font: .76rem var(--f-mono); white-space: nowrap; }
+.next[data-track]::after, .items li[data-track]::after { content: attr(data-track); color: var(--accent); background: var(--accent-wash); padding: .05em .4em; border-radius: 3px; }
+.next[data-untracked]::after, .items li[data-untracked]::after { content: attr(data-untracked); color: var(--ink-2); font-style: italic; white-space: normal; }
+
+.detail { max-width: 72ch; color: var(--ink-2); }
+table.detail { border-collapse: collapse; font-size: .9rem; margin-top: .5rem; max-width: 100%; display: block; overflow-x: auto; }
+table.detail th { font: 600 .7rem var(--f-mono); letter-spacing: .06em; text-transform: uppercase; color: var(--ink-2); text-align: left; }
+table.detail th, table.detail td { padding: .35rem .9rem .35rem 0; border-bottom: 1px solid var(--rule); vertical-align: top; color: var(--ink); }
+.thread > .detail { margin: 0 0 1rem 1.75rem; }
+
+@media (max-width: 700px) {
+  body { padding-top: 1.25rem; }
+  .row { grid-template-columns: minmax(0, 1fr); }
+  .row.head { display: none; }
+  .next, .items { margin-left: 0; }
+}
+[data-done] { opacity: .5; text-decoration: line-through; }
+@media (prefers-reduced-motion: reduce) { .thread > summary::before { transition: none; } }
+</style>
 </head>
 <body>
 <h1>supacrawl handoff</h1>
@@ -12,11 +119,11 @@
 <h2>Release 2026.11.0 (radar-hooves/supacrawl#180)</h2>
 <p>Released 01/11/2026: tag <code>v2026.11.0</code> at 083566a, on PyPI, wheel <code>2026.11.1103324</code> on the household index, mcp-servers' lock pinned to it (mcp-servers 18d7660).</p>
 <ul>
-<li><strong>supacrawl-mcp still serves 2026.10.30215256</strong>: mcp-servers' <code>change</code> runs on main were cancelled three times in a row on 01/11 by newer landings (41258347187, 41258661170, 41258879192), so the image carrying the new lock has not deployed. Next step: once a <code>change</code> run on mcp-servers main completes green, call <code>supacrawl_health</code> and expect <code>version.supacrawl_lib == 2026.11.1103324</code>, then one scrape through it; tracked on #180.</li>
-<li><strong>Image URLs and sizes (caspo request, 01/11/2026)</strong>: branch <code>foreman/wt-5ea830aa</code> carries search image rows with <code>image_url</code> + width/height and scrape <code>image_details</code>. Not released or live. Next step: merge, release, bump the mcp-servers lock, redeploy supacrawl-mcp, then repeat the MQ-28 image search and the Commons scrape on the gate; tracked on #180.</li>
-<li><strong>Infinite scroll</strong>: <code>quotes.toscrape.com/scroll</code> returns 34 characters from every reader except Crawl4AI's <code>scan_full_page</code>. Next step: decide whether a scroll-until-stable pass belongs in <code>BrowserManager.fetch_page</code>; [no-track: a synthetic page; an issue is filed when a real page needs it].</li>
-<li><strong>Firecrawl self-hosted column</strong>: the stack's API needs <code>USE_DB_AUTHENTICATION=false</code> and a database URL to start; <code>docs/benchmark.md</code> records the outcome of the attempt on 01/11/2026. Re-run with <code>supacrawl bench run --provider firecrawl</code> once a Firecrawl API answers on <code>FIRECRAWL_API_URL</code>; [no-track: a hosted account is out of scope; the self-hosted row is in the table].</li>
-<li><strong>Timings under load</strong>: every figure in <code>docs/benchmark.md</code> was measured on a 20-core host at load average about 30. Next step: re-run <code>supacrawl bench run --provider &lt;each&gt; --no-reference</code> on a quiet host and refresh the two tables; [no-track: one command per reader on a quiet host].</li>
+<li data-id="mcp-image-deploy-lag" data-track="#180"><strong>supacrawl-mcp still serves 2026.10.30215256</strong>: mcp-servers' <code>change</code> runs on main were cancelled three times in a row on 01/11 by newer landings (41258347187, 41258661170, 41258879192), so the image carrying the new lock has not deployed. Next step: once a <code>change</code> run on mcp-servers main completes green, call <code>supacrawl_health</code> and expect <code>version.supacrawl_lib == 2026.11.1103324</code>, then one scrape through it;</li>
+<li data-id="image-urls-release" data-track="#180"><strong>Image URLs and sizes (caspo request, 01/11/2026)</strong>: branch <code>foreman/wt-5ea830aa</code> carries search image rows with <code>image_url</code> + width/height and scrape <code>image_details</code>. Not released or live. Next step: merge, release, bump the mcp-servers lock, redeploy supacrawl-mcp, then repeat the MQ-28 image search and the Commons scrape on the gate;</li>
+<li data-id="infinite-scroll" data-untracked="a synthetic page; an issue is filed when a real page needs it"><strong>Infinite scroll</strong>: <code>quotes.toscrape.com/scroll</code> returns 34 characters from every reader except Crawl4AI's <code>scan_full_page</code>. Next step: decide whether a scroll-until-stable pass belongs in <code>BrowserManager.fetch_page</code>..</li>
+<li data-id="firecrawl-column" data-untracked="a hosted account is out of scope; the self-hosted row is in the table"><strong>Firecrawl self-hosted column</strong>: the stack's API needs <code>USE_DB_AUTHENTICATION=false</code> and a database URL to start; <code>docs/benchmark.md</code> records the outcome of the attempt on 01/11/2026. Re-run with <code>supacrawl bench run --provider firecrawl</code> once a Firecrawl API answers on <code>FIRECRAWL_API_URL</code>..</li>
+<li data-id="timings-quiet-host" data-untracked="one command per reader on a quiet host"><strong>Timings under load</strong>: every figure in <code>docs/benchmark.md</code> was measured on a 20-core host at load average about 30. Next step: re-run <code>supacrawl bench run --provider &lt;each&gt; --no-reference</code> on a quiet host and refresh the two tables..</li>
 </ul>
 </body>
 </html>

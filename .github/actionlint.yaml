@@ -1,0 +1,3 @@
+# The household self-hosted runner labels, so actionlint accepts runs-on: [self-hosted, household].
+self-hosted-runner:
+  labels: [household, light, macos]

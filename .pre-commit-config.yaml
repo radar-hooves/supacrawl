@@ -11,6 +11,12 @@ default_language_version:
 default_install_hook_types: [pre-commit, pre-merge-commit, commit-msg]
 
 repos:
+  - repo: https://github.com/rhysd/actionlint
+    rev: v1.7.12
+    hooks:
+      - id: actionlint
+        name: 'ci - Lint GitHub Actions workflows'
+
   # ---------------------------------------------------------------------------- #
   #                              🔒 Security Scanning                            #
   # ---------------------------------------------------------------------------- #
@@ -19,12 +25,12 @@ repos:
     rev: v8.30.0
     hooks:
       - id: gitleaks
-        name: '🔒 security · Detect hardcoded secrets'
+        name: 'security - Detect hardcoded secrets'
 
   - repo: local
     hooks:
       - id: check-pii
-        name: '🔒 security · Detect PII (names, mobiles, personal emails)'
+        name: 'security - Detect PII (names, mobiles, personal emails)'
         entry: household-precommit-pii
         language: system
         types: [text]
@@ -35,6 +41,7 @@ repos:
         language: system
         pass_filenames: true
         files: '^\.claude/rules/.*\.md$'
+        always_run: true
 
       - id: check-history
         name: 'governance - A file states what is, not what was'
@@ -46,11 +53,11 @@ repos:
         name: 'governance - Handoff open items are tracked'
         entry: household-precommit-handoff-tracking
         language: system
-        files: '^HANDOFF\.md$'
+        files: '^HANDOFF\.html$'
         pass_filenames: true
 
       - id: check-handoff-closed-trailer
-        name: 'governance - Handoff removals are counted'
+        name: 'governance - Handoff removals name their ids'
         entry: household-precommit-handoff-tracking --commit-msg
         language: system
         stages: [commit-msg]
@@ -66,32 +73,32 @@ repos:
     hooks:
       # File content fixes
       - id: end-of-file-fixer
-        name: '📁 files · Fix end of files'
+        name: 'files - Fix end of files'
       - id: trailing-whitespace
-        name: '📁 files · Trim trailing whitespace'
+        name: 'files - Trim trailing whitespace'
         args: [--markdown-linebreak-ext=md]
 
       # File format validation
       - id: check-yaml
-        name: '📁 yaml · Validate YAML syntax'
+        name: 'yaml - Validate YAML syntax'
         args: [--unsafe]
       - id: check-toml
-        name: '📁 toml · Validate TOML syntax'
+        name: 'toml - Validate TOML syntax'
       - id: check-json
-        name: '📁 json · Validate JSON syntax'
+        name: 'json - Validate JSON syntax'
 
       # Git quality
       - id: check-merge-conflict
-        name: '🌳 git · Detect conflict markers'
+        name: 'git - Detect conflict markers'
       - id: check-added-large-files
-        name: '🌳 git · Block large file commits'
+        name: 'git - Block large file commits'
         args: ['--maxkb=5000']
 
       # Filesystem safety
       - id: check-case-conflict
-        name: '📁 filesystem · Check case sensitivity'
+        name: 'filesystem - Check case sensitivity'
       - id: detect-private-key
-        name: '🔒 security · Detect private keys'
+        name: 'security - Detect private keys'
 
   # ---------------------------------------------------------------------------- #
   #                              🐍 Python Tools                                 #
@@ -99,27 +106,17 @@ repos:
 
   # Code formatting and linting (Ruff replaces black, isort, flake8, etc.)
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.15.16
+    rev: v0.15.21
     hooks:
       - id: ruff-format
-        name: '🐍 python · Format with Ruff'
+        name: 'python - Format with ruff'
         files: ^.*\.py$
         exclude: ^\.github/
       - id: ruff
-        name: '🐍 python · Lint with Ruff'
-        args: ['--fix', '--exit-non-zero-on-fix']
+        name: 'python - Lint with ruff'
+        args: [--fix]
         files: ^.*\.py$
         exclude: ^\.github/
-
-  # Type checking
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v2.1.0
-    hooks:
-      - id: mypy
-        name: '🐍 python · Type check with mypy'
-        additional_dependencies: [types-pytz, types-aiofiles, types-PyYAML, 'pydantic>=2.12.5,<3']
-        files: ^.*\.py$
-        exclude: ^(\.github/|.*/migrations/|.*/__pycache__/|.*/cache/)
 
   # ---------------------------------------------------------------------------- #
   #                              📦 uv Lockfile                                  #
@@ -128,8 +125,15 @@ repos:
   - repo: local
     hooks:
       - id: uv-lock-check
-        name: '📦 uv · lockfile in sync'
+        name: 'uv - lockfile in sync'
         entry: uv lock --check
         language: system
         pass_filenames: false
         files: ^(pyproject\.toml|uv\.lock)$
+
+      - id: mypy
+        name: 'python - Type-check with mypy'
+        entry: uv run mypy src
+        language: system
+        pass_filenames: false
+        files: ^(src/.*\.py|pyproject\.toml|uv\.lock)$

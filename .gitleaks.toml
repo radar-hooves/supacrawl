@@ -1,0 +1,5 @@
+title = "supacrawl gitleaks config"
+
+[extend]
+  # Load gitleaks' built-in rules; without this the ruleset is empty and nothing is scanned.
+  useDefault = true
