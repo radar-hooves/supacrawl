@@ -57,9 +57,7 @@ class PdfExtractionResult:
     metadata: PdfMetadata = field(default_factory=PdfMetadata)
 
 
-# ---------------------------------------------------------------------------
 # Detection helpers
-# ---------------------------------------------------------------------------
 
 
 # Common web page extensions that are definitely NOT PDFs.
@@ -128,10 +126,7 @@ def _has_non_pdf_extension(url: str) -> bool:
     """
     path = urlparse(url).path.lower()
     # Check if path ends with a known non-PDF extension
-    for ext in _NON_PDF_EXTENSIONS:
-        if path.endswith(ext):
-            return True
-    return False
+    return any(path.endswith(ext) for ext in _NON_PDF_EXTENSIONS)
 
 
 def needs_content_type_check(url: str) -> bool:
@@ -142,9 +137,8 @@ def needs_content_type_check(url: str) -> bool:
     """
     if is_pdf_url(url):
         return False  # Already detected as PDF
-    if _has_non_pdf_extension(url):
-        return False  # Known non-PDF extension
-    return True  # Ambiguous — needs HEAD request
+    # A known non-PDF extension skips the check; anything ambiguous needs a HEAD request
+    return not _has_non_pdf_extension(url)
 
 
 async def detect_pdf_content_type(url: str, timeout: float = 10.0) -> bool:
@@ -183,9 +177,7 @@ async def detect_pdf_content_type(url: str, timeout: float = 10.0) -> bool:
         return False
 
 
-# ---------------------------------------------------------------------------
 # Download
-# ---------------------------------------------------------------------------
 
 
 async def download_pdf(url: str, timeout: float = 120.0, max_size: int = MAX_PDF_SIZE) -> bytes:
@@ -218,9 +210,7 @@ async def download_pdf(url: str, timeout: float = 120.0, max_size: int = MAX_PDF
         return response.content
 
 
-# ---------------------------------------------------------------------------
 # Availability checks
-# ---------------------------------------------------------------------------
 
 
 def _is_pdfplumber_available() -> bool:
@@ -242,12 +232,10 @@ def _is_ocr_available() -> bool:
         return False
 
 
-# ---------------------------------------------------------------------------
 # Text extraction (pdfplumber)
-# ---------------------------------------------------------------------------
 
 
-def _extract_pdf_metadata(pdf: "pdfplumber.PDF") -> PdfMetadata:  # type: ignore[name-defined]  # noqa: F821
+def _extract_pdf_metadata(pdf: pdfplumber.PDF) -> PdfMetadata:  # type: ignore[name-defined]  # noqa: F821
     """Extract metadata from an open pdfplumber PDF object."""
     meta = pdf.metadata or {}
 
@@ -324,7 +312,7 @@ def _clean_cell(cell: str | None) -> str:
     return text
 
 
-def _detect_headings(page: "pdfplumber.Page") -> dict[int, int]:  # type: ignore[name-defined]  # noqa: F821
+def _detect_headings(page: pdfplumber.Page) -> dict[int, int]:  # type: ignore[name-defined]  # noqa: F821
     """Detect heading lines based on font size heuristics.
 
     Examines character-level data to find lines with notably larger font sizes.
@@ -373,7 +361,7 @@ def _detect_headings(page: "pdfplumber.Page") -> dict[int, int]:  # type: ignore
     return headings
 
 
-def _apply_headings_to_text(text: str, page: "pdfplumber.Page") -> str:  # type: ignore[name-defined]  # noqa: F821
+def _apply_headings_to_text(text: str, page: pdfplumber.Page) -> str:  # type: ignore[name-defined]  # noqa: F821
     """Apply heading markers to extracted text based on font size analysis.
 
     This is best-effort: if heading detection fails, the original text is returned.
@@ -482,9 +470,7 @@ def extract_text(pdf_bytes: bytes) -> PdfExtractionResult:
     return PdfExtractionResult(markdown=markdown, metadata=metadata)
 
 
-# ---------------------------------------------------------------------------
 # OCR extraction (pytesseract + pdf2image)
-# ---------------------------------------------------------------------------
 
 
 def extract_ocr(pdf_bytes: bytes) -> PdfExtractionResult:
@@ -511,10 +497,7 @@ def extract_ocr(pdf_bytes: bytes) -> PdfExtractionResult:
         if text.strip():
             pages_text.append(text.strip())
 
-    if len(pages_text) > 1:
-        markdown = "\n\n---\n\n".join(pages_text)
-    else:
-        markdown = pages_text[0] if pages_text else ""
+    markdown = "\n\n---\n\n".join(pages_text) if len(pages_text) > 1 else pages_text[0] if pages_text else ""
 
     # Try to get metadata from text extraction (OCR doesn't provide it)
     metadata = PdfMetadata(page_count=page_count)
@@ -530,9 +513,7 @@ def extract_ocr(pdf_bytes: bytes) -> PdfExtractionResult:
     return PdfExtractionResult(markdown=markdown, metadata=metadata)
 
 
-# ---------------------------------------------------------------------------
 # Main parse orchestrator
-# ---------------------------------------------------------------------------
 
 
 async def parse_pdf(

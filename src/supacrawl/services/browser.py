@@ -37,6 +37,7 @@ OTHER FEATURES:
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import hashlib
 import importlib.util
 import json
@@ -996,7 +997,7 @@ class BrowserManager:
         await self.start()
         return self
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
+    async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         """Close browser (async context manager exit)."""
         await self.stop()
 
@@ -1131,7 +1132,7 @@ class BrowserManager:
             camoufox_options["env"] = {**os.environ, "LD_LIBRARY_PATH": libs}
 
         # Camoufox returns a context manager; we enter it and store the browser
-        self._camoufox_cm = AsyncCamoufox(**camoufox_options)
+        self._camoufox_cm = AsyncCamoufox(**camoufox_options)  # type: ignore[no-untyped-call]
         self._browser = await self._camoufox_cm.__aenter__()
 
         LOGGER.debug(
@@ -1434,10 +1435,8 @@ class BrowserManager:
                 LOGGER.debug("Injected %d stealth scripts at context level", len(STEALTH_SCRIPTS))
             page = await context.new_page()
         except Exception:
-            try:
+            with contextlib.suppress(Exception):
                 await context.close()
-            except Exception:
-                pass
             raise
         return context, page
 
@@ -1659,15 +1658,11 @@ class BrowserManager:
 
         finally:
             if page:
-                try:
+                with contextlib.suppress(Exception):
                     await page.close()
-                except Exception:
-                    pass
             if owns_context and context:
-                try:
+                with contextlib.suppress(Exception):
                     await context.close()
-                except Exception:
-                    pass
             if page:
                 page_closed()
                 schedule_reap(url)
@@ -1922,7 +1917,7 @@ class BrowserManager:
             """
             )
 
-            return links
+            return cast("list[str]", links)
 
         except Exception as e:
             relabelled = self._as_engine_failure(e, engine_in_use)
@@ -1932,15 +1927,11 @@ class BrowserManager:
 
         finally:
             if page:
-                try:
+                with contextlib.suppress(Exception):
                     await page.close()
-                except Exception:
-                    pass
             if owns_context and context:
-                try:
+                with contextlib.suppress(Exception):
                     await context.close()
-                except Exception:
-                    pass
             if page:
                 page_closed()
                 schedule_reap(url)
@@ -2169,7 +2160,7 @@ class BrowserManager:
                 continue
 
             # Check for timezone-related meta names
-            if "timezone" in name or "tz" == name:
+            if "timezone" in name or name == "tz":
                 match = iana_tz_pattern.search(content)
                 if match:
                     return match.group(0)
@@ -2197,11 +2188,9 @@ class BrowserManager:
         max_wait = timeout_ms / 1000
 
         # Wait for at least one heading to appear
-        try:
+        # If no heading found, continue anyway
+        with contextlib.suppress(Exception):
             await page.wait_for_selector("h1, h2, main, article", timeout=timeout_ms)
-        except Exception:
-            # If no heading found, continue anyway
-            pass
 
         # Wait for content stability (DOM not changing)
         last_content_hash = ""

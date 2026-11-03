@@ -18,18 +18,18 @@ into modules by functionality:
 # Import all command modules to register them with the app
 # The order doesn't matter - Click handles command registration
 from supacrawl.cli import (
-    agent,  # noqa: F401
-    batch,  # noqa: F401
-    bench,  # noqa: F401
-    cache,  # noqa: F401
-    config,  # noqa: F401
-    crawl,  # noqa: F401
-    map,  # noqa: F401
-    metrics,  # noqa: F401
-    scrape,  # noqa: F401
-    serve,  # noqa: F401
-    skill,  # noqa: F401
-    strategy,  # noqa: F401
+    agent,
+    batch,
+    bench,
+    cache,
+    config,
+    crawl,
+    map,
+    metrics,
+    scrape,
+    serve,
+    skill,
+    strategy,
 )
 from supacrawl.cli._common import app
 

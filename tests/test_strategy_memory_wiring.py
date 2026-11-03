@@ -11,7 +11,8 @@ wiring assertion, not a network test.
 
 from __future__ import annotations
 
-from typing import AsyncGenerator, cast
+from collections.abc import AsyncGenerator
+from typing import cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -52,7 +53,7 @@ def _async_cm(instance: MagicMock) -> MagicMock:
 async def test_crawl_owns_browser_threads_store_and_telemetry() -> None:
     """A crawl that owns its browser passes the store + telemetry to ScrapeService."""
 
-    async def fake_map(**_: object) -> AsyncGenerator[MapEvent, None]:
+    async def fake_map(**_: object) -> AsyncGenerator[MapEvent]:
         # No URLs discovered: the crawl finishes immediately after construction,
         # which is all this wiring test needs to exercise.
         yield MapEvent(type="complete", discovered=0, result=MapResult(success=True, links=[]))
@@ -80,7 +81,7 @@ async def test_crawl_owns_browser_threads_store_and_telemetry() -> None:
 async def test_crawl_without_store_passes_none() -> None:
     """Default crawl construction threads None through (memory off, identical to before)."""
 
-    async def fake_map(**_: object) -> AsyncGenerator[MapEvent, None]:
+    async def fake_map(**_: object) -> AsyncGenerator[MapEvent]:
         yield MapEvent(type="complete", discovered=0, result=MapResult(success=True, links=[]))
 
     with (
@@ -117,7 +118,7 @@ def _camoufox_champion_store(tmp_path, domain: str) -> StrategyStore:
 async def test_crawl_seeds_shared_browser_from_champion(tmp_path) -> None:
     """A hard-site (camoufox champion) crawl builds ONE shared camoufox browser (#139)."""
 
-    async def fake_map(**_: object) -> AsyncGenerator[MapEvent, None]:
+    async def fake_map(**_: object) -> AsyncGenerator[MapEvent]:
         yield MapEvent(type="complete", discovered=0, result=MapResult(success=True, links=[]))
 
     store = _camoufox_champion_store(tmp_path, "hard.example")
@@ -146,7 +147,7 @@ async def test_crawl_seeds_shared_browser_from_champion(tmp_path) -> None:
 async def test_crawl_user_pinned_engine_bypasses_champion_seed(tmp_path) -> None:
     """A user-pinned engine wins over a camoufox champion (#139)."""
 
-    async def fake_map(**_: object) -> AsyncGenerator[MapEvent, None]:
+    async def fake_map(**_: object) -> AsyncGenerator[MapEvent]:
         yield MapEvent(type="complete", discovered=0, result=MapResult(success=True, links=[]))
 
     store = _camoufox_champion_store(tmp_path, "hard.example")
@@ -175,7 +176,7 @@ async def test_crawl_user_pinned_engine_bypasses_champion_seed(tmp_path) -> None
 async def test_crawl_soft_site_unchanged_no_champion(tmp_path) -> None:
     """A crawl with no champion for the start domain builds the default browser (#139)."""
 
-    async def fake_map(**_: object) -> AsyncGenerator[MapEvent, None]:
+    async def fake_map(**_: object) -> AsyncGenerator[MapEvent]:
         yield MapEvent(type="complete", discovered=0, result=MapResult(success=True, links=[]))
 
     store = StrategyStore(strategy_dir=tmp_path, explore_rate=0.0)  # empty: no champion

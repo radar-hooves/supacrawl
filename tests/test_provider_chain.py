@@ -20,9 +20,7 @@ from supacrawl.services.search.providers import (
 )
 from supacrawl.services.search.registry import SUPPORTED_PROVIDERS, build_provider_chain
 
-# ---------------------------------------------------------------------------
 # Helpers: mock providers
-# ---------------------------------------------------------------------------
 
 
 class MockProvider:
@@ -81,9 +79,7 @@ class MockProvider:
         pass
 
 
-# ---------------------------------------------------------------------------
 # Provider health tracking
-# ---------------------------------------------------------------------------
 
 
 class TestProviderHealth:
@@ -122,9 +118,7 @@ class TestProviderHealth:
         assert d["consecutive_failures"] == 0
 
 
-# ---------------------------------------------------------------------------
 # Fallback error detection
-# ---------------------------------------------------------------------------
 
 
 class TestFallbackErrorDetection:
@@ -226,9 +220,7 @@ class TestFallbackErrorDetection:
         assert not is_fallback_error(error)
 
 
-# ---------------------------------------------------------------------------
 # Auth/billing error classification
-# ---------------------------------------------------------------------------
 
 
 class TestAuthBillingErrorDetection:
@@ -277,9 +269,7 @@ class TestAuthBillingErrorDetection:
         assert not is_auth_billing_error(RuntimeError("something went wrong"))
 
 
-# ---------------------------------------------------------------------------
 # ProviderHealth alert debouncing
-# ---------------------------------------------------------------------------
 
 
 class TestProviderHealthAlertDebouncing:
@@ -305,9 +295,7 @@ class TestProviderHealthAlertDebouncing:
         assert ALERT_DEBOUNCE_SECONDS == 300.0
 
 
-# ---------------------------------------------------------------------------
 # Provider chain: auth/billing alert integration
-# ---------------------------------------------------------------------------
 
 
 class TestProviderChainAuthBillingAlert:
@@ -365,9 +353,7 @@ class TestProviderChainAuthBillingAlert:
         assert second_warning_count == 0
 
 
-# ---------------------------------------------------------------------------
 # Provider chain: search delegation
-# ---------------------------------------------------------------------------
 
 
 class TestProviderChain:
@@ -502,9 +488,7 @@ class TestProviderChain:
         p2.close.assert_called_once()
 
 
-# ---------------------------------------------------------------------------
 # Registry: provider chain builder
-# ---------------------------------------------------------------------------
 
 
 class TestProviderRegistry:
@@ -557,9 +541,7 @@ class TestProviderRegistry:
             assert names == ["tavily", "serper"]
 
 
-# ---------------------------------------------------------------------------
 # Provider selection when the self-hosted backend URL is absent
-# ---------------------------------------------------------------------------
 
 
 class TestSearXNGBackendAbsent:
@@ -637,9 +619,7 @@ class TestSearXNGBackendAbsent:
         assert "SEARXNG_URL" in result.error, f"the failure does not name the missing variable: {result.error}"
 
 
-# ---------------------------------------------------------------------------
 # SearchService: multi-provider integration
-# ---------------------------------------------------------------------------
 
 
 class TestSearchServiceMultiProvider:

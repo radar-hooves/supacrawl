@@ -25,9 +25,11 @@ import logging
 import re
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Any, ClassVar
 from urllib.parse import urljoin, urlparse
 
-from bs4 import BeautifulSoup, NavigableString, Tag
+from bs4 import BeautifulSoup, Tag
+from bs4.element import NavigableString
 from markdownify import MarkdownConverter as BaseMarkdownConverter
 
 from supacrawl.models import QueryFilter
@@ -36,9 +38,7 @@ from supacrawl.services.content_filter import QUERY_OUTCOME
 LOGGER = logging.getLogger(__name__)
 
 
-# =============================================================================
 # Site-Specific Preprocessor Registry
-# =============================================================================
 
 
 @dataclass
@@ -129,7 +129,7 @@ def _preprocess_css_counter_lists(soup: BeautifulSoup) -> None:
             i += 1
 
 
-def _is_within_proximity(elem1, elem2, max_distance: int = 10) -> bool:
+def _is_within_proximity(elem1: Any, elem2: Any, max_distance: int = 10) -> bool:
     """Check if two elements are within proximity in the DOM.
 
     Args:
@@ -196,7 +196,7 @@ def _build_nested_list(soup: BeautifulSoup, items: list[Tag]) -> None:
         if level not in lists_by_level:
             # Need to create a nested list
             # Find the parent level (highest level less than current)
-            parent_level = max(lvl for lvl in lists_by_level.keys() if lvl < level)
+            parent_level = max(lvl for lvl in lists_by_level if lvl < level)
             parent_li = last_li_by_level.get(parent_level)
 
             # Create new nested list
@@ -213,8 +213,7 @@ def _build_nested_list(soup: BeautifulSoup, items: list[Tag]) -> None:
             for lvl in list(lists_by_level.keys()):
                 if lvl > level:
                     del lists_by_level[lvl]
-                    if lvl in last_li_by_level:
-                        del last_li_by_level[lvl]
+                    last_li_by_level.pop(lvl, None)
 
         # Create the list item
         li = soup.new_tag("li")
@@ -231,8 +230,7 @@ def _build_nested_list(soup: BeautifulSoup, items: list[Tag]) -> None:
         for lvl in list(lists_by_level.keys()):
             if lvl > level:
                 del lists_by_level[lvl]
-                if lvl in last_li_by_level:
-                    del last_li_by_level[lvl]
+                last_li_by_level.pop(lvl, None)
 
     # Replace the first item with the complete list structure
     anchor.replace_with(root_list)
@@ -266,10 +264,7 @@ def _detect_wordpress(soup: BeautifulSoup) -> bool:
 
     # Check for WordPress meta generator
     meta_gen = soup.find("meta", attrs={"name": "generator"})
-    if meta_gen and "wordpress" in str(meta_gen.get("content") or "").lower():
-        return True
-
-    return False
+    return bool(meta_gen and "wordpress" in str(meta_gen.get("content") or "").lower())
 
 
 def _preprocess_wordpress(soup: BeautifulSoup) -> None:
@@ -450,9 +445,7 @@ def _preprocess_mkdocs_material(soup: BeautifulSoup) -> None:
         tabbed_set.replace_with(container)
 
 
-# =============================================================================
 # Preprocessor Registry
-# =============================================================================
 
 SITE_PREPROCESSORS: list[SitePreprocessor] = [
     SitePreprocessor(
@@ -707,12 +700,12 @@ class AbsoluteUrlConverter(BaseMarkdownConverter):
     - Handles links inside table cells correctly
     """
 
-    def __init__(self, base_url: str | None = None, **kwargs):
+    def __init__(self, base_url: str | None = None, **kwargs: Any) -> None:
         """Initialize with base URL for resolving relative links."""
         super().__init__(**kwargs)
         self.base_url = base_url
 
-    def convert_a(self, el, text, parent_tags):
+    def convert_a(self, el: Any, text: str, parent_tags: Any) -> str:
         """Convert anchor tags, resolving relative URLs.
 
         Strips javascript: pseudo-protocol links (UI interactions with no semantic meaning).
@@ -741,7 +734,7 @@ class AbsoluteUrlConverter(BaseMarkdownConverter):
             return f'[{text}]({href} "{title}")'
         return f"[{text}]({href})"
 
-    def convert_img(self, el, text, parent_tags):
+    def convert_img(self, el: Any, text: str, parent_tags: Any) -> str:
         """Convert image tags, resolving relative URLs."""
         src = el.get("src", "")
         alt = el.get("alt", "")
@@ -776,7 +769,7 @@ class MarkdownConverter:
     """
 
     # Tags to remove completely
-    REMOVE_TAGS = [
+    REMOVE_TAGS: ClassVar = [
         "script",
         "style",
         "noscript",
@@ -795,7 +788,7 @@ class MarkdownConverter:
     ]
 
     # Tags to remove only when cleaning for main content
-    BOILERPLATE_TAGS = [
+    BOILERPLATE_TAGS: ClassVar = [
         "nav",
         "footer",
         "header",
@@ -803,7 +796,7 @@ class MarkdownConverter:
     ]
 
     # CSS selectors for boilerplate removal
-    BOILERPLATE_SELECTORS = [
+    BOILERPLATE_SELECTORS: ClassVar = [
         # Navigation patterns
         "[role='navigation']",
         "[role='banner']",
@@ -858,7 +851,7 @@ class MarkdownConverter:
     ]
 
     # Main content selectors (in priority order)
-    MAIN_CONTENT_SELECTORS = [
+    MAIN_CONTENT_SELECTORS: ClassVar = [
         # Framework-specific
         "#mw-content-text",  # Wikipedia
         ".mw-parser-output",
@@ -1107,7 +1100,7 @@ class MarkdownConverter:
             except Exception:
                 pass
 
-    def _is_main_content(self, element) -> bool:
+    def _is_main_content(self, element: Any) -> bool:
         """Check if element is likely main content."""
         if element is None or not isinstance(element, Tag):
             return False

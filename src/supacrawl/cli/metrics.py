@@ -9,6 +9,7 @@ by the process's own ``api_common.telemetry.configure()`` call.
 """
 
 import json
+from datetime import UTC
 
 import click
 
@@ -45,9 +46,9 @@ def metrics_path() -> None:
 def metrics_summary(days: int | None) -> None:
     """Show a headline rollup: scrape/search counts, success and escalation rates,
     verdict mix, and the busiest domains."""
-    from datetime import datetime, timedelta, timezone
+    from datetime import datetime, timedelta
 
-    since = datetime.now(timezone.utc) - timedelta(days=days) if days else None
+    since = datetime.now(UTC) - timedelta(days=days) if days else None
     s = MetricsReader().summary(since=since)
     if not s["scrapes"] and not s["searches"]:
         click.echo("No telemetry recorded yet. Scrape or search and supacrawl will start tracking quality over time.")

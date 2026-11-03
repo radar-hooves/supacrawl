@@ -16,9 +16,7 @@ import pytest
 
 from supacrawl.benchmark.reference import ReferenceRenderer, _settle_content
 
-# ---------------------------------------------------------------------------
 # Helpers
-# ---------------------------------------------------------------------------
 
 
 class _FakePage:
@@ -61,9 +59,7 @@ class _FakePage:
         return self._text
 
 
-# ---------------------------------------------------------------------------
 # Unit tests for _settle_content
-# ---------------------------------------------------------------------------
 
 
 @pytest.mark.unit
@@ -124,9 +120,7 @@ async def test_settle_content_does_not_raise_on_evaluate_error() -> None:
     await _settle_content(page)
 
 
-# ---------------------------------------------------------------------------
 # Integration test using a real Playwright browser (marked e2e)
-# ---------------------------------------------------------------------------
 
 
 @pytest.mark.e2e

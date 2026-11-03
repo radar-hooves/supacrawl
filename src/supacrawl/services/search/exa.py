@@ -2,6 +2,7 @@
 
 import logging
 import os
+from typing import ClassVar
 
 import httpx
 
@@ -49,7 +50,7 @@ class ExaProvider:
             "Content-Type": "application/json",
         }
 
-    _TOPIC_CATEGORY: dict[str, str] = {"news": "news", "finance": "financial report"}
+    _TOPIC_CATEGORY: ClassVar[dict[str, str]] = {"news": "news", "finance": "financial report"}
 
     def _apply_exa_filters(self, payload: dict[str, object], filters: SearchFilters) -> None:
         """Apply domain, date, and topic filters to an Exa payload dict."""

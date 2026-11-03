@@ -323,7 +323,7 @@ class SupacrawlSecrets(BaseModel):
     proxy: str | None = None
 
     @classmethod
-    def from_env(cls) -> "SupacrawlSecrets":
+    def from_env(cls) -> SupacrawlSecrets:
         """Build from the process environment."""
         return cls(**{field: os.environ.get(env) or None for field, env in _SECRET_ENV.items()})
 

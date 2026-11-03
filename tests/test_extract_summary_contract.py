@@ -8,7 +8,6 @@ import json
 from typing import Any, cast
 
 import pytest
-from conftest import LLMWire, wire_llm
 
 from supacrawl.exceptions import ValidationError
 from supacrawl.llm import LLMNotConfiguredError
@@ -17,6 +16,7 @@ from supacrawl.services.extract import ExtractService
 from supacrawl.services.registry import SupacrawlServices
 from supacrawl.services.scrape import ScrapeService
 from supacrawl.services.summary import supacrawl_summary
+from tests.helpers import LLMWire, wire_llm
 
 URL = "https://shop.example.com/widget"
 SCHEMA: dict[str, Any] = {

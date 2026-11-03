@@ -69,10 +69,9 @@ def cache_clear(url: str | None, cache_dir: Path | None, yes: bool) -> None:
     """Clear cached entries."""
     from supacrawl.cache import CacheManager
 
-    if not yes and not url:
-        if not click.confirm("Are you sure you want to clear all cache entries?"):
-            click.echo("Aborted.")
-            return
+    if not yes and not url and not click.confirm("Are you sure you want to clear all cache entries?"):
+        click.echo("Aborted.")
+        return
 
     cache_manager = CacheManager(cache_dir)
     cleared = cache_manager.clear(url)

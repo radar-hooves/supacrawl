@@ -9,9 +9,7 @@ from pydantic.alias_generators import to_camel
 
 from supacrawl.api.models.scrape import ScrapeRequest
 
-# ---------------------------------------------------------------------------
 # Request
-# ---------------------------------------------------------------------------
 
 
 class CrawlScrapeOptions(ScrapeRequest):
@@ -21,7 +19,7 @@ class CrawlScrapeOptions(ScrapeRequest):
     (the crawl endpoint discovers URLs itself).
     """
 
-    url: str = ""  # type: ignore[assignment]
+    url: str = ""
 
 
 class CrawlRequest(BaseModel):
@@ -52,9 +50,7 @@ class CrawlRequest(BaseModel):
     scrape_options: CrawlScrapeOptions | None = Field(None, alias="scrapeOptions")
 
 
-# ---------------------------------------------------------------------------
 # Response
-# ---------------------------------------------------------------------------
 
 
 class CrawlCreateResponse(BaseModel):

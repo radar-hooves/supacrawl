@@ -20,6 +20,7 @@ CAPTCHA Solving (optional, requires third-party service):
 """
 
 import base64
+import contextlib
 import hashlib
 import logging
 import os
@@ -195,11 +196,10 @@ def _looks_like_bot_block(status_code: int, html: str, markdown: str | None) -> 
 
     # Check for very short content (likely a challenge page)
     content_length = len(html) if html else 0
-    if content_length < 500:
-        # Very short page - might be a redirect or challenge
-        if BOT_DETECTION_REGEX.search(html):
-            LOGGER.debug("Bot detection suspected: short page with blocking patterns")
-            return True
+    # Very short page - might be a redirect or challenge
+    if content_length < 500 and BOT_DETECTION_REGEX.search(html):
+        LOGGER.debug("Bot detection suspected: short page with blocking patterns")
+        return True
 
     # Check for bot detection patterns in HTML
     if BOT_DETECTION_REGEX.search(html):
@@ -1036,9 +1036,12 @@ class ScrapeService:
             # needs_content_type_check() limits this to ambiguous/extensionless
             # URLs, so obvious non-PDF URLs (e.g. .html, .js) never trigger a
             # HEAD request.
-            if not is_pdf and not (http_first and self._http_first_eligible(formats, actions, engine, device)):
-                if needs_content_type_check(url):
-                    is_pdf = await detect_pdf_content_type(url)
+            if (
+                not is_pdf
+                and not (http_first and self._http_first_eligible(formats, actions, engine, device))
+                and needs_content_type_check(url)
+            ):
+                is_pdf = await detect_pdf_content_type(url)
 
             if is_pdf:
                 pdf_result = await self._scrape_pdf(
@@ -1594,7 +1597,7 @@ class ScrapeService:
                 success=False,
                 error=error_msg,
                 quality=quality,
-                data=ScrapeData(  # type: ignore[call-arg]
+                data=ScrapeData(
                     metadata=ScrapeMetadata(source_url=url),
                     change_tracking=ChangeTrackingData(
                         previous_scrape_at=previous_entry.cached_at,
@@ -2259,7 +2262,7 @@ class ScrapeService:
             error=quality_error,
             warnings=content_quality_warnings,
             quality=quality,
-            data=ScrapeData(  # type: ignore[call-arg]
+            data=ScrapeData(
                 markdown=markdown,
                 html=html,
                 raw_html=raw_html,
@@ -2414,7 +2417,7 @@ class ScrapeService:
             success=quality.is_usable,
             error=_quality_error(quality),
             quality=quality,
-            data=ScrapeData(  # type: ignore[call-arg]
+            data=ScrapeData(
                 markdown=markdown if "markdown" in formats or "json" in formats or "summary" in formats else None,
                 metadata=ScrapeMetadata(
                     title=pdf_meta.title,
@@ -2516,16 +2519,14 @@ class ScrapeService:
         if include_tags:
             matched_elements: list[Any] = []
             for selector in include_tags:
-                try:
+                with contextlib.suppress(Exception):  # Invalid selector, skip
                     matched_elements.extend(soup.select(selector))
-                except Exception:
-                    pass  # Invalid selector, skip
 
             if matched_elements:
                 # Create wrapper with matched elements
                 wrapper = soup.new_tag("div")
                 for element in matched_elements:
-                    if element not in [wrapper] + list(wrapper.descendants):
+                    if element not in [wrapper, *list(wrapper.descendants)]:
                         wrapper.append(element.extract())
                 return str(wrapper)
 
@@ -2575,12 +2576,12 @@ class ScrapeService:
         class NoOpScrapeService:
             """Wrapper that returns markdown directly without scraping."""
 
-            async def scrape(self, url: str, **kwargs):
+            async def scrape(self, url: str, **kwargs: Any) -> Any:
                 from supacrawl.models import ScrapeData, ScrapeMetadata, ScrapeResult
 
                 return ScrapeResult(
                     success=True,
-                    data=ScrapeData(  # type: ignore[call-arg]
+                    data=ScrapeData(
                         markdown=markdown,
                         metadata=ScrapeMetadata(),
                     ),
@@ -2681,10 +2682,7 @@ class ScrapeService:
             if len(summary) > 500:
                 # Truncate to last complete sentence
                 sentences = summary[:500].rsplit(".", 1)
-                if len(sentences) > 1:
-                    summary = sentences[0] + "."
-                else:
-                    summary = summary[:497] + "..."
+                summary = sentences[0] + "." if len(sentences) > 1 else summary[:497] + "..."
 
             return summary
 
@@ -2850,10 +2848,7 @@ class ScrapeService:
 
         import re
 
-        for pattern in captcha_patterns:
-            if re.search(pattern, html, re.IGNORECASE):
-                return True
-        return False
+        return any(re.search(pattern, html, re.IGNORECASE) for pattern in captcha_patterns)
 
     async def _scrape_with_captcha_solving(
         self,
@@ -2931,7 +2926,7 @@ class ScrapeService:
             # the closed-engine detection and in-process relaunch rather than
             # hand-rolling context creation that would silently drift from it.
             # Camoufox's browser IS the context, so it owns no separate one.
-            context, page = await browser._open_page(owns_context=browser.engine != "camoufox")
+            _context, page = await browser._open_page(owns_context=browser.engine != "camoufox")
 
             try:
                 # The pre-flight above only checks the original URL; a hostile
@@ -2977,7 +2972,7 @@ class ScrapeService:
 
                         return ScrapeResult(
                             success=True,
-                            data=ScrapeData(  # type: ignore[call-arg]
+                            data=ScrapeData(
                                 markdown=markdown if "markdown" in formats else None,
                                 html=self._get_clean_html(html, only_main_content, include_tags, exclude_tags)
                                 if "html" in formats

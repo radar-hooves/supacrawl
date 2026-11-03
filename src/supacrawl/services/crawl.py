@@ -3,8 +3,9 @@
 import hashlib
 import json
 import logging
+from collections.abc import AsyncGenerator
 from pathlib import Path
-from typing import TYPE_CHECKING, AsyncGenerator, Literal
+from typing import TYPE_CHECKING, Literal
 from urllib.parse import urlparse
 
 from supacrawl.discovery.robots import RobotsConfig, fetch_robots, is_url_allowed
@@ -141,7 +142,7 @@ class CrawlService:
         headers: dict[str, str] | None = None,
         respect_robots: bool = False,
         request_delay: float = 0.0,
-    ) -> AsyncGenerator[CrawlEvent, None]:
+    ) -> AsyncGenerator[CrawlEvent]:
         """Crawl a website, yielding events as pages complete.
 
         Args:
@@ -342,7 +343,7 @@ class CrawlService:
         headers: dict[str, str] | None = None,
         respect_robots: bool = False,
         request_delay: float = 0.0,
-    ) -> AsyncGenerator[CrawlEvent, None]:
+    ) -> AsyncGenerator[CrawlEvent]:
         """Core crawl logic. Assumes _browser, _map_service, _scrape_service are set."""
         assert self._map_service is not None
         assert self._scrape_service is not None
@@ -536,7 +537,7 @@ class CrawlService:
                     )
 
             except Exception as e:
-                errors.append(f"{url_to_scrape}: {str(e)}")
+                errors.append(f"{url_to_scrape}: {e!s}")
                 LOGGER.error(f"Scrape failed for {url_to_scrape}: {e}")
                 yield CrawlEvent(
                     type="error",

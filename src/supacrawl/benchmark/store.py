@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 from pydantic import BaseModel
 
@@ -94,7 +95,7 @@ def write_run(run: RunResult, base_dir: Path) -> Path:
     return run_path
 
 
-def _case_row(run: RunResult, case: CaseResult) -> dict:
+def _case_row(run: RunResult, case: CaseResult) -> dict[str, Any]:
     """Build the flat metrics row for a single case in a run.
 
     Args:

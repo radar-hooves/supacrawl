@@ -338,7 +338,7 @@ def parse_actions(actions_json: list[dict[str, Any]]) -> list[Action]:
             continue
 
         action = Action(
-            type=action_type,  # type: ignore[arg-type]
+            type=action_type,
             selector=item.get("selector"),
             milliseconds=item.get("milliseconds"),
             text=item.get("text"),

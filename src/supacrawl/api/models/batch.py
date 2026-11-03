@@ -7,9 +7,7 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
 
-# ---------------------------------------------------------------------------
 # Request
-# ---------------------------------------------------------------------------
 
 
 class BatchScrapeRequest(BaseModel):
@@ -44,9 +42,7 @@ class BatchScrapeRequest(BaseModel):
     query: str | None = None
 
 
-# ---------------------------------------------------------------------------
 # Response
-# ---------------------------------------------------------------------------
 
 
 class BatchScrapeCreateResponse(BaseModel):

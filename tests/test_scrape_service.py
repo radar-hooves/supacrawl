@@ -1,6 +1,7 @@
 """Tests for scrape service."""
 
 import inspect
+from typing import ClassVar
 
 import pytest
 
@@ -98,7 +99,7 @@ class TestJsonFormatRefusal:
             def __init__(self, **_kwargs: object) -> None:
                 pass
 
-            async def __aenter__(self) -> "FakeBrowser":
+            async def __aenter__(self) -> FakeBrowser:
                 return self
 
             async def __aexit__(self, *_args: object) -> bool:
@@ -367,7 +368,7 @@ class TestCaptchaSolvingInstallsNavigationGuard:
         and just creates a page — the minimum surface needed to reach page.goto.
         """
 
-        instances: "list[TestCaptchaSolvingInstallsNavigationGuard._FakeBrowserManager]" = []
+        instances: ClassVar[list[TestCaptchaSolvingInstallsNavigationGuard._FakeBrowserManager]] = []
 
         def __init__(self, **_kwargs: object) -> None:
             self.engine = "camoufox"

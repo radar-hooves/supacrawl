@@ -123,9 +123,8 @@ class BrandingExtractor:
             elif any(p in var_lower for p in bg_patterns) and "color" in var_lower:
                 if not colors.background:
                     colors.background = var_value
-            elif any(p in var_lower for p in text_patterns) and "color" in var_lower:
-                if not colors.text_primary:
-                    colors.text_primary = var_value
+            elif any(p in var_lower for p in text_patterns) and "color" in var_lower and not colors.text_primary:
+                colors.text_primary = var_value
 
         # Fallback: extract meta theme-color
         theme_color = soup.find("meta", attrs={"name": "theme-color"})

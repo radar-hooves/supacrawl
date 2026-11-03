@@ -92,9 +92,7 @@ class _StubServices:
         return {"scrape": True, "crawl": True, "map": True, "search": True}
 
 
-# ---------------------------------------------------------------------------
 # Registry: when the fallback is appended, and when it is refused
-# ---------------------------------------------------------------------------
 
 
 class TestPublicFallbackAppend:
@@ -125,9 +123,7 @@ class TestPublicFallbackAppend:
         assert [p.name for p in chain.providers] == ["searxng", "duckduckgo"]
 
 
-# ---------------------------------------------------------------------------
 # The fallback actually engages, end to end
-# ---------------------------------------------------------------------------
 
 
 class TestFallbackEngages:
@@ -169,9 +165,7 @@ class TestFallbackHealthSurface:
             await client.aclose()
 
 
-# ---------------------------------------------------------------------------
 # fallback_serving vs unconfigured_fallback_active
-# ---------------------------------------------------------------------------
 
 
 class _StubProvider:

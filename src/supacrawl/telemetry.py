@@ -33,7 +33,7 @@ import json
 import logging
 import os
 from collections.abc import Iterator
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
@@ -63,7 +63,7 @@ def _registrable_domain(url: str) -> str | None:
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def _query_hash(query: str) -> str:
@@ -271,7 +271,7 @@ class MetricsReader:
         kept: list[dict[str, Any]] = list(self.events())
         original = len(kept)
         if keep_days is not None:
-            cutoff = datetime.now(timezone.utc) - timedelta(days=keep_days)
+            cutoff = datetime.now(UTC) - timedelta(days=keep_days)
             kept = [e for e in kept if e.get("ts") and _parse_ts(e["ts"]) >= cutoff]
         if keep_last is not None and len(kept) > keep_last:
             kept = kept[-keep_last:]
@@ -288,4 +288,4 @@ def _parse_ts(ts: str) -> datetime:
     try:
         return datetime.fromisoformat(ts)
     except ValueError:
-        return datetime.fromtimestamp(0, tz=timezone.utc)
+        return datetime.fromtimestamp(0, tz=UTC)

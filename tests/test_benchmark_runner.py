@@ -11,16 +11,14 @@ from types import TracebackType
 from unittest.mock import patch
 
 import pytest
-from conftest import make_case_result as _make_case
 
 from supacrawl.benchmark.models import BenchCase, BenchSuite, RunResult
 from supacrawl.benchmark.providers.base import ProviderOutput
 from supacrawl.benchmark.reference import ReferenceCapture
 from supacrawl.benchmark.runner import _build_aggregate, run_benchmark
+from tests.helpers import make_case_result as _make_case
 
-# ---------------------------------------------------------------------------
 # Fake provider
-# ---------------------------------------------------------------------------
 
 
 class FakeProvider:
@@ -62,15 +60,13 @@ class FakeProvider:
         """
 
 
-# ---------------------------------------------------------------------------
 # Fake ReferenceRenderer
-# ---------------------------------------------------------------------------
 
 
 class FakeReferenceRenderer:
     """Fake ReferenceRenderer that returns canned captures without a browser."""
 
-    async def __aenter__(self) -> "FakeReferenceRenderer":
+    async def __aenter__(self) -> FakeReferenceRenderer:
         """Enter the context without launching any browser.
 
         Returns:
@@ -110,9 +106,7 @@ class FakeReferenceRenderer:
         )
 
 
-# ---------------------------------------------------------------------------
 # Test suite fixture
-# ---------------------------------------------------------------------------
 
 
 def _make_suite() -> BenchSuite:
@@ -152,9 +146,7 @@ def _make_suite() -> BenchSuite:
     )
 
 
-# ---------------------------------------------------------------------------
 # Tests
-# ---------------------------------------------------------------------------
 
 
 @pytest.mark.unit
@@ -301,9 +293,7 @@ async def test_run_benchmark_artifacts_written(tmp_path: Path) -> None:
     assert artifact_path.exists()
 
 
-# ---------------------------------------------------------------------------
 # _build_aggregate — unit tests for aggregation correctness
-# ---------------------------------------------------------------------------
 
 
 @pytest.mark.unit

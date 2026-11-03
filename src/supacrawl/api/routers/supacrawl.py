@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+from datetime import UTC
 from importlib.metadata import version
 from typing import Any
 
@@ -102,11 +103,11 @@ async def metrics_summary(
     and escalation rates, verdict mix, and the top domains. A separate GUI
     plane can consume this endpoint without touching the raw JSONL.
     """
-    from datetime import datetime, timedelta, timezone
+    from datetime import datetime, timedelta
 
     from supacrawl.telemetry import MetricsReader
 
-    since = datetime.now(timezone.utc) - timedelta(days=days)
+    since = datetime.now(UTC) - timedelta(days=days)
     return MetricsReader().summary(since=since)
 
 

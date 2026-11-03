@@ -176,7 +176,7 @@ class SearXNGProvider:
         categories: str,
         correlation_id: str,
         filters: SearchFilters | None = None,
-    ) -> tuple[list[dict], list[dict[str, str]]]:
+    ) -> tuple[list[dict[str, Any]], list[dict[str, str]]]:
         """Execute a search against the SearXNG JSON API.
 
         Returns the (limited) result list AND the engines SearXNG reported as

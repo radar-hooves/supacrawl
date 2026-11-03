@@ -4,6 +4,7 @@ This module provides functionality to fetch, parse, and enforce
 robots.txt rules during web crawling.
 """
 
+import contextlib
 import logging
 import re
 from dataclasses import dataclass, field
@@ -168,19 +169,14 @@ def parse_robots_txt(content: str, user_agent: str = "*") -> RobotsConfig:
                 config.allow_patterns.append(value)
 
             elif directive == "crawl-delay":
-                try:
+                with contextlib.suppress(ValueError):
                     config.crawl_delay = float(value)
-                except ValueError:
-                    pass
 
-            elif directive == "request-rate":
-                # Format: requests/seconds (e.g., "1/10" means 1 request per 10 seconds)
-                if "/" in value:
-                    try:
-                        requests, seconds = value.split("/")
-                        config.request_rate = float(requests) / float(seconds)
-                    except ValueError:
-                        pass
+            # Format: requests/seconds (e.g., "1/10" means 1 request per 10 seconds)
+            elif directive == "request-rate" and "/" in value:
+                with contextlib.suppress(ValueError):
+                    requests, seconds = value.split("/")
+                    config.request_rate = float(requests) / float(seconds)
 
     return config
 

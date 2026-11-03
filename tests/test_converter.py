@@ -1165,7 +1165,7 @@ class TestWordPressPreprocessor:
         assert "Page Title from Header" in h1_in_main.get_text()
 
         # Should be the first element in main
-        first_child = list(main.children)[0]
+        first_child = next(iter(main.children))
         assert isinstance(first_child, Tag)
         assert first_child.name == "h1"
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 from typing import Any
 
@@ -29,7 +30,8 @@ router = APIRouter()
 
 def _get_job_store(request: Request) -> JobStore:
     """Retrieve the ``JobStore`` from application state."""
-    return request.app.state.job_store
+    store: JobStore = request.app.state.job_store
+    return store
 
 
 def _batch_request_to_scrape_request(req: BatchScrapeRequest, url: str) -> ScrapeRequest:
@@ -129,10 +131,8 @@ async def _run_batch_scrape(
     finally:
         cancelled.set()
         watcher.cancel()
-        try:
+        with contextlib.suppress(asyncio.CancelledError):
             await watcher
-        except asyncio.CancelledError:
-            pass
 
 
 @router.post("/batch/scrape")

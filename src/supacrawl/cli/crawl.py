@@ -1,6 +1,7 @@
 """Crawl commands for website scraping."""
 
 from pathlib import Path
+from typing import Any
 
 import click
 
@@ -236,7 +237,7 @@ def crawl_cmd(
 
         resolved_cache_dir = CacheManager.DEFAULT_CACHE_DIR
 
-    async def run():
+    async def run() -> Any:
         from urllib.parse import urlparse
 
         from supacrawl.services.strategy_memory import StrategyStore

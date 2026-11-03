@@ -7,6 +7,7 @@ test_search_service.py / test_provider_chain.py.
 
 import json
 import os
+from typing import ClassVar
 from unittest.mock import AsyncMock, patch
 
 import httpx
@@ -19,9 +20,7 @@ from supacrawl.services.search.serpapi import SerpAPIProvider
 from supacrawl.services.search.serper import SerperProvider
 from supacrawl.services.search.tavily import TavilyProvider
 
-# ---------------------------------------------------------------------------
 # Helpers
-# ---------------------------------------------------------------------------
 
 CORRELATION_ID = "test-1234"
 
@@ -48,15 +47,13 @@ def _mock_get_response(status: int, body: dict, url: str = "https://example.inva
     )
 
 
-# ---------------------------------------------------------------------------
 # TavilyProvider
-# ---------------------------------------------------------------------------
 
 
 class TestTavilyProvider:
     """Tests for TavilyProvider response parsing and error handling."""
 
-    SEARCH_RESPONSE = {
+    SEARCH_RESPONSE: ClassVar = {
         "results": [
             {
                 "url": "https://example.com/page",
@@ -73,7 +70,7 @@ class TestTavilyProvider:
         ]
     }
 
-    NEWS_RESPONSE = {
+    NEWS_RESPONSE: ClassVar = {
         "results": [
             {
                 "url": "https://news.example.com/story",
@@ -184,22 +181,20 @@ class TestTavilyProvider:
         assert provider.is_available()
 
 
-# ---------------------------------------------------------------------------
 # SerperProvider
-# ---------------------------------------------------------------------------
 
 
 class TestSerperProvider:
     """Tests for SerperProvider response parsing and error handling."""
 
-    WEB_RESPONSE = {
+    WEB_RESPONSE: ClassVar = {
         "organic": [
             {"link": "https://example.com/1", "title": "Result One", "snippet": "First snippet."},
             {"link": "https://example.com/2", "title": "Result Two", "snippet": "Second snippet."},
         ]
     }
 
-    IMAGE_RESPONSE = {
+    IMAGE_RESPONSE: ClassVar = {
         "images": [
             {
                 "imageUrl": "https://example.com/photo.jpg",
@@ -213,7 +208,7 @@ class TestSerperProvider:
         ]
     }
 
-    NEWS_RESPONSE = {
+    NEWS_RESPONSE: ClassVar = {
         "news": [
             {
                 "link": "https://news.example.com/story",
@@ -320,21 +315,19 @@ class TestSerperProvider:
         assert provider.is_available()
 
 
-# ---------------------------------------------------------------------------
 # SerpAPIProvider
-# ---------------------------------------------------------------------------
 
 
 class TestSerpAPIProvider:
     """Tests for SerpAPIProvider response parsing and error handling."""
 
-    WEB_RESPONSE = {
+    WEB_RESPONSE: ClassVar = {
         "organic_results": [
             {"link": "https://example.com/1", "title": "SerpAPI Result", "snippet": "A snippet."},
         ]
     }
 
-    IMAGE_RESPONSE = {
+    IMAGE_RESPONSE: ClassVar = {
         "images_results": [
             {
                 "original": "https://example.com/img.jpg",
@@ -348,7 +341,7 @@ class TestSerpAPIProvider:
         ]
     }
 
-    NEWS_RESPONSE = {
+    NEWS_RESPONSE: ClassVar = {
         "news_results": [
             {
                 "link": "https://news.example.com/article",
@@ -452,15 +445,13 @@ class TestSerpAPIProvider:
         assert provider.is_available()
 
 
-# ---------------------------------------------------------------------------
 # ExaProvider
-# ---------------------------------------------------------------------------
 
 
 class TestExaProvider:
     """Tests for ExaProvider response parsing and error handling."""
 
-    WEB_RESPONSE = {
+    WEB_RESPONSE: ClassVar = {
         "results": [
             {
                 "url": "https://example.com/page",
@@ -477,7 +468,7 @@ class TestExaProvider:
         ]
     }
 
-    NEWS_RESPONSE = {
+    NEWS_RESPONSE: ClassVar = {
         "results": [
             {
                 "url": "https://news.example.com/story",

@@ -34,9 +34,7 @@ from supacrawl.models import QueryFilter
 
 LOGGER = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
 # Tuning constants (adjust here, never inline)
-# ---------------------------------------------------------------------------
 
 # Minimum word count for Strategy 1.  Only applied when content_mode > 0.5:
 #     if content_mode <= 0.5: threshold = _S1_MIN_WORDS_FLOOR (near-empty guard only)
@@ -70,9 +68,7 @@ _BM25_DROP_THRESHOLD_BASE = 0.20
 _SECTION_SPLIT_TAGS = frozenset({"h2", "h3", "section", "article"})
 
 
-# ---------------------------------------------------------------------------
 # Availability guards
-# ---------------------------------------------------------------------------
 
 
 def _is_readability_available() -> bool:
@@ -111,9 +107,7 @@ def available_extras() -> dict[str, bool]:
 QUERY_OUTCOME: ContextVar[QueryFilter | None] = ContextVar("query_outcome", default=None)
 
 
-# ---------------------------------------------------------------------------
 # Density helpers
-# ---------------------------------------------------------------------------
 
 
 def _word_count(element: Tag) -> int:
@@ -166,9 +160,7 @@ def _is_dense_enough(element: Tag, content_mode: float) -> bool:
     return True
 
 
-# ---------------------------------------------------------------------------
 # Section splitting for BM25
-# ---------------------------------------------------------------------------
 
 
 _HEADING_TAGS = frozenset({"h2", "h3"})
@@ -261,9 +253,7 @@ def _heading_text(section: Tag) -> str:
 _NAMED_SECTION_FLOOR = 0.5
 
 
-# ---------------------------------------------------------------------------
 # BM25 pruning
-# ---------------------------------------------------------------------------
 
 
 def _bm25_prune_sections(sections: list[Tag], content_mode: float, query: str | None) -> list[Tag]:
@@ -376,9 +366,7 @@ def _bm25_prune_sections(sections: list[Tag], content_mode: float, query: str | 
     return kept
 
 
-# ---------------------------------------------------------------------------
 # Strategy implementations
-# ---------------------------------------------------------------------------
 
 
 def _strategy1(soup: BeautifulSoup, main_content_selectors: list[str], content_mode: float) -> Tag | None:
@@ -491,7 +479,7 @@ def _strategy3_body_fallback(soup: BeautifulSoup, content_mode: float) -> Tag:
         A Tag (never None); callers can always use this result.
     """
     body = soup.find("body")
-    root: Tag = body if isinstance(body, Tag) else soup  # type: ignore[assignment]
+    root: Tag = body if isinstance(body, Tag) else soup
 
     if not _is_rank_bm25_available():
         LOGGER.debug("Strategy 3: rank_bm25 unavailable, returning body as-is")
@@ -516,9 +504,7 @@ def _strategy3_body_fallback(soup: BeautifulSoup, content_mode: float) -> Tag:
     return new_body
 
 
-# ---------------------------------------------------------------------------
 # Optional query-relevance filter (post-cascade)
-# ---------------------------------------------------------------------------
 
 
 def _apply_query_filter(root: Tag, content_mode: float, query: str) -> Tag:
@@ -569,9 +555,7 @@ def _apply_query_filter(root: Tag, content_mode: float, query: str) -> Tag:
     return new_root
 
 
-# ---------------------------------------------------------------------------
 # Public API
-# ---------------------------------------------------------------------------
 
 
 def extract(

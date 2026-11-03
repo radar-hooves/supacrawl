@@ -1,6 +1,7 @@
 """URL mapping and discovery commands."""
 
 from pathlib import Path
+from typing import Any
 
 import click
 
@@ -152,7 +153,7 @@ def map_cmd(
             name, value = parse_header_string(raw)
             resolved_headers[name] = value
 
-    async def run():
+    async def run() -> Any:
         service = MapService(
             stealth=stealth,
             proxy=proxy,

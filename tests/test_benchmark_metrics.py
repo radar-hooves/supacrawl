@@ -23,9 +23,7 @@ from supacrawl.quality import (
     word_spacing,
 )
 
-# ---------------------------------------------------------------------------
 # tokenize / strip_markdown
-# ---------------------------------------------------------------------------
 
 
 @pytest.mark.unit
@@ -61,9 +59,7 @@ def test_strip_markdown_removes_fences() -> None:
     assert "python" not in result
 
 
-# ---------------------------------------------------------------------------
 # token_prf — multiset capping and edge cases
-# ---------------------------------------------------------------------------
 
 
 @pytest.mark.unit
@@ -120,9 +116,7 @@ def test_token_prf_partial_overlap() -> None:
     assert f1 == pytest.approx(4 / 7)
 
 
-# ---------------------------------------------------------------------------
 # rouge_l
-# ---------------------------------------------------------------------------
 
 
 @pytest.mark.unit
@@ -153,9 +147,7 @@ def test_rouge_l_subsequence() -> None:
     assert score == pytest.approx(6 / 7)
 
 
-# ---------------------------------------------------------------------------
 # char_coverage — clamping
-# ---------------------------------------------------------------------------
 
 
 @pytest.mark.unit
@@ -184,9 +176,7 @@ def test_char_coverage_zero_extracted() -> None:
     assert char_coverage(0, 100) == pytest.approx(0.0)
 
 
-# ---------------------------------------------------------------------------
 # reference_is_degenerate — guard against a renderer that under-captured
-# ---------------------------------------------------------------------------
 
 
 @pytest.mark.unit
@@ -253,9 +243,7 @@ def test_reference_degenerate_lifts_composite_to_reference_free_signals() -> Non
     assert recovered > 85.0
 
 
-# ---------------------------------------------------------------------------
 # count_structure
-# ---------------------------------------------------------------------------
 
 
 @pytest.mark.unit
@@ -301,9 +289,7 @@ def test_count_structure_empty() -> None:
     assert counts == {"headings": 0, "code_blocks": 0, "tables": 0, "images": 0, "links": 0}
 
 
-# ---------------------------------------------------------------------------
 # substring_hit_rate / substring_absent_rate — including None when no anchors
-# ---------------------------------------------------------------------------
 
 
 @pytest.mark.unit
@@ -343,9 +329,7 @@ def test_substring_absent_rate_all_present() -> None:
     assert substring_absent_rate("navigation footer sidebar", ["navigation", "footer"]) == pytest.approx(0.0)
 
 
-# ---------------------------------------------------------------------------
 # composite_quality — None-skipping, renormalisation, success=False → 0
-# ---------------------------------------------------------------------------
 
 
 @pytest.mark.unit
@@ -432,9 +416,7 @@ def test_composite_quality_high_link_density_penalised() -> None:
     assert score_high_density < score_low_density
 
 
-# ---------------------------------------------------------------------------
 # word_spacing — fused-PDF guard, CJK exemption, short-body None
-# ---------------------------------------------------------------------------
 
 
 @pytest.mark.unit

@@ -1,7 +1,7 @@
 """Tests for CacheManager."""
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -83,8 +83,8 @@ class TestCacheManager:
         cache_file = cache_dir / "pages" / f"{cache_key}.json"
 
         # Create an expired entry
-        now = datetime.now(timezone.utc)
-        expired_at = datetime.fromtimestamp(now.timestamp() - 3600, tz=timezone.utc)  # 1 hour ago
+        now = datetime.now(UTC)
+        expired_at = datetime.fromtimestamp(now.timestamp() - 3600, tz=UTC)  # 1 hour ago
 
         entry = CacheEntry(
             url=url,
@@ -167,8 +167,8 @@ class TestCacheManager:
         cache_key = cache_manager._cache_key(url)
         cache_file = cache_dir / "pages" / f"{cache_key}.json"
 
-        now = datetime.now(timezone.utc)
-        expired_at = datetime.fromtimestamp(now.timestamp() - 3600, tz=timezone.utc)
+        now = datetime.now(UTC)
+        expired_at = datetime.fromtimestamp(now.timestamp() - 3600, tz=UTC)
 
         entry = CacheEntry(
             url=url,

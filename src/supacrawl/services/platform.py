@@ -54,9 +54,7 @@ class PlatformProfile:
     actions: list[dict[str, Any]] = field(default_factory=list)
 
 
-# =============================================================================
 # Platform Detection Functions
-# =============================================================================
 
 _FOLEON_RE = re.compile(
     r"assets\.foleon\.com|foleon-content|data-foleon|class=\"fl-",
@@ -73,9 +71,7 @@ def _detect_foleon(html: str) -> bool:
     return bool(_FOLEON_RE.search(html))
 
 
-# =============================================================================
 # Platform Profile Registry
-# =============================================================================
 
 PLATFORM_PROFILES: list[PlatformProfile] = [
     PlatformProfile(

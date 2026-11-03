@@ -9,9 +9,7 @@ from fastapi.testclient import TestClient
 from supacrawl.api.models.scrape import ScrapeRequest
 from supacrawl.api.routers.scrape import _build_service_kwargs, _translate_proxy
 
-# ---------------------------------------------------------------------------
 # Proxy translation
-# ---------------------------------------------------------------------------
 
 
 class TestProxyTranslation:
@@ -44,9 +42,7 @@ class TestProxyTranslation:
         assert _translate_proxy(False) is None
 
 
-# ---------------------------------------------------------------------------
 # Unknown fields
-# ---------------------------------------------------------------------------
 
 
 class TestUnknownFieldsIgnored:
@@ -87,9 +83,7 @@ class TestUnknownFieldsIgnored:
         assert req.store_in_cache is False
 
 
-# ---------------------------------------------------------------------------
 # Defaults
-# ---------------------------------------------------------------------------
 
 
 class TestDefaults:
@@ -105,9 +99,7 @@ class TestDefaults:
         assert req.store_in_cache is None
 
 
-# ---------------------------------------------------------------------------
 # maxAge millisecond-to-second conversion
-# ---------------------------------------------------------------------------
 
 
 class TestMaxAgeConversion:
@@ -136,9 +128,7 @@ class TestMaxAgeConversion:
         assert kwargs["max_age"] == 30
 
 
-# ---------------------------------------------------------------------------
 # End-to-end service kwargs via TestClient
-# ---------------------------------------------------------------------------
 
 
 class TestServiceKwargsViaClient:

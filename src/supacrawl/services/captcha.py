@@ -408,15 +408,12 @@ class CaptchaSolver:
                 raise CaptchaSolverError(f"Unsupported CAPTCHA type: {captcha_info.captcha_type}")
 
             # Extract solution code from result
-            if isinstance(result, dict):
-                solution = result.get("code", str(result))
-            else:
-                solution = str(result)
+            solution = result.get("code", str(result)) if isinstance(result, dict) else str(result)
 
             logger.info(f"CAPTCHA solved successfully (token: {solution[:20]}...)")
             return solution
 
-        except asyncio.TimeoutError as err:
+        except TimeoutError as err:
             raise CaptchaSolveTimeoutError(
                 f"CAPTCHA solving timed out after {self.timeout} seconds. "
                 "[HINT: Try increasing CAPTCHA_TIMEOUT environment variable]"

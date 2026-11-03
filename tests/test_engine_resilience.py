@@ -13,7 +13,7 @@ the real-launch backstop (#145) is in ``test_engine_smoke.py``.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, ClassVar
 
 import pytest
 
@@ -25,9 +25,7 @@ from supacrawl.services.browser import (
     chromium_launch_args,
 )
 
-# ---------------------------------------------------------------------------
 # #143 — graceful degradation: lazy start + typed per-engine error
-# ---------------------------------------------------------------------------
 
 
 class TestLazyStart:
@@ -157,7 +155,7 @@ class _Platform:
     wait_for = 8000
     only_main_content = False
     expand_iframes = "all"
-    actions: list[Any] = []
+    actions: ClassVar[list[Any]] = []
 
 
 class TestEscalationAvailabilityGating:
@@ -291,9 +289,7 @@ class TestEscalationAvailabilityGating:
         )
 
 
-# ---------------------------------------------------------------------------
 # #146 — container-gated Chromium launch args
-# ---------------------------------------------------------------------------
 
 
 class TestChromiumLaunchArgs:

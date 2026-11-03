@@ -8,11 +8,11 @@ import json
 from typing import Any
 
 import pytest
-from conftest import LLMWire
 from fastmcp import Client, FastMCP
 from fastmcp.exceptions import ToolError
 
 from supacrawl.mcp.wiring import register_all_tools
+from tests.helpers import LLMWire
 
 pytestmark = pytest.mark.mcp
 

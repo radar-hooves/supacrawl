@@ -1,6 +1,7 @@
 """Tests for crawl service change tracking integration."""
 
-from typing import AsyncGenerator, Literal
+from collections.abc import AsyncGenerator
+from typing import Literal
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -65,7 +66,7 @@ class TestCrawlChangeTracking:
         mock_scrape = AsyncMock()
 
         # Map service returns URLs
-        async def fake_map(**kwargs: object) -> AsyncGenerator[MapEvent, None]:
+        async def fake_map(**kwargs: object) -> AsyncGenerator[MapEvent]:
             for e in map_events:
                 yield e
 
@@ -112,7 +113,7 @@ class TestCrawlChangeTracking:
         mock_map = AsyncMock()
         mock_scrape = AsyncMock()
 
-        async def fake_map(**kwargs: object) -> AsyncGenerator[MapEvent, None]:
+        async def fake_map(**kwargs: object) -> AsyncGenerator[MapEvent]:
             for e in map_events:
                 yield e
 
@@ -150,7 +151,7 @@ class TestCrawlChangeTracking:
         mock_map = AsyncMock()
         mock_scrape = AsyncMock()
 
-        async def fake_map(**kwargs: object) -> AsyncGenerator[MapEvent, None]:
+        async def fake_map(**kwargs: object) -> AsyncGenerator[MapEvent]:
             for e in map_events:
                 yield e
 
@@ -191,7 +192,7 @@ class TestCrawlChangeTracking:
         mock_map = AsyncMock()
         mock_scrape = AsyncMock()
 
-        async def fake_map(**kwargs: object) -> AsyncGenerator[MapEvent, None]:
+        async def fake_map(**kwargs: object) -> AsyncGenerator[MapEvent]:
             for e in map_events:
                 yield e
 
@@ -231,7 +232,7 @@ class TestCrawlChangeTracking:
         mock_map = AsyncMock()
         mock_scrape = AsyncMock()
 
-        async def fake_map(**kwargs: object) -> AsyncGenerator[MapEvent, None]:
+        async def fake_map(**kwargs: object) -> AsyncGenerator[MapEvent]:
             for e in map_events:
                 yield e
 

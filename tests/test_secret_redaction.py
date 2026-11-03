@@ -13,6 +13,7 @@ decision.
 
 from __future__ import annotations
 
+import sys
 from typing import Any, cast
 
 import pytest
@@ -24,9 +25,9 @@ import pytest
 # file was the one MCP-importing module with neither guard.
 pytest.importorskip("fastmcp", reason="supacrawl[mcp] extras not installed")
 
-from supacrawl.mcp.tools import SUPACRAWL_SECRET_KEYS, mask_secrets  # noqa: E402
-from supacrawl.mcp.tools.health import supacrawl_health  # noqa: E402
-from supacrawl.services.registry import SupacrawlServices  # noqa: E402
+from supacrawl.mcp.tools import SUPACRAWL_SECRET_KEYS, mask_secrets
+from supacrawl.mcp.tools.health import supacrawl_health
+from supacrawl.services.registry import SupacrawlServices
 
 pytestmark = pytest.mark.mcp
 
@@ -68,8 +69,11 @@ async def test_health_masks_a_credential_that_reaches_the_envelope(monkeypatch: 
     def _llm_config_carrying_a_secret() -> dict[str, Any]:
         return {"configured": True, "provider": "openai", "api_key": _SECRET}
 
+    # By sys.modules, not a dotted path: test_mcp_launch re-imports supacrawl.mcp.* and leaves the
+    # package attributes pointing at its copies, which a dotted path would resolve through.
     monkeypatch.setattr(
-        "supacrawl.mcp.tools.health._get_llm_config",
+        sys.modules["supacrawl.mcp.tools.health"],
+        "_get_llm_config",
         _llm_config_carrying_a_secret,
     )
 

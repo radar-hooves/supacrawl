@@ -74,7 +74,7 @@ def _patch_ladder(monkeypatch: pytest.MonkeyPatch, respond, *, patchright=True, 
             self.proxy = kwargs.get("proxy")
             created.append(self)
 
-        async def __aenter__(self) -> "FakeBrowser":
+        async def __aenter__(self) -> FakeBrowser:
             return self
 
         async def __aexit__(self, *_: object) -> bool:
@@ -332,7 +332,7 @@ def _patch_faithful_browser(monkeypatch: pytest.MonkeyPatch) -> list:
             self.proxy = kwargs.get("proxy")
             created.append(self)
 
-        async def __aenter__(self) -> "FaithfulBrowser":
+        async def __aenter__(self) -> FaithfulBrowser:
             return self
 
         async def __aexit__(self, *_: object) -> bool:

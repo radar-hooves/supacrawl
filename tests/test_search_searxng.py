@@ -676,9 +676,8 @@ class TestBasicAuth:
             http_client=client,
         )
         try:
-            with caplog.at_level(logging.DEBUG):
-                with pytest.raises(httpx.HTTPStatusError) as excinfo:
-                    await provider.search_web("q", 5, CORRELATION_ID)
+            with caplog.at_level(logging.DEBUG), pytest.raises(httpx.HTTPStatusError) as excinfo:
+                await provider.search_web("q", 5, CORRELATION_ID)
         finally:
             await client.aclose()
 
@@ -701,9 +700,8 @@ class TestBasicAuth:
             password=PLACEHOLDER_PASSWORD,
         )
         try:
-            with caplog.at_level(logging.DEBUG):
-                with pytest.raises(httpx.HTTPStatusError) as excinfo:
-                    await provider.search_web("q", 5, CORRELATION_ID)
+            with caplog.at_level(logging.DEBUG), pytest.raises(httpx.HTTPStatusError) as excinfo:
+                await provider.search_web("q", 5, CORRELATION_ID)
         finally:
             await client.aclose()
 

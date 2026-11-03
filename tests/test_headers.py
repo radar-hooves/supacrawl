@@ -10,6 +10,7 @@ Covers:
 """
 
 import logging
+from typing import ClassVar
 
 import pytest
 
@@ -17,9 +18,7 @@ from supacrawl.cli._common import parse_header_string, parse_headers_env
 from supacrawl.services.crawl import _scope_headers_to_origin, _url_origin
 from supacrawl.services.scrape import _compute_headers_hash
 
-# ---------------------------------------------------------------------------
 # parse_header_string
-# ---------------------------------------------------------------------------
 
 
 class TestParseHeaderString:
@@ -55,9 +54,7 @@ class TestParseHeaderString:
         assert pairs == [("A", "1"), ("B", "2"), ("C", "3")]
 
 
-# ---------------------------------------------------------------------------
 # parse_headers_env
-# ---------------------------------------------------------------------------
 
 
 class TestParseHeadersEnv:
@@ -86,9 +83,7 @@ class TestParseHeadersEnv:
         assert result == {"X-Good": "ok", "X-Also": "fine"}
 
 
-# ---------------------------------------------------------------------------
 # Cache variant hash (_compute_headers_hash)
-# ---------------------------------------------------------------------------
 
 
 class TestComputeHeadersHash:
@@ -124,9 +119,7 @@ class TestComputeHeadersHash:
         assert len(result) == 12
 
 
-# ---------------------------------------------------------------------------
 # Same-origin scoping helpers
-# ---------------------------------------------------------------------------
 
 
 class TestUrlOrigin:
@@ -144,7 +137,7 @@ class TestUrlOrigin:
 
 
 class TestScopeHeadersToOrigin:
-    HEADERS = {"Authorization": "Bearer tok"}
+    HEADERS: ClassVar = {"Authorization": "Bearer tok"}
 
     def test_same_origin_passes_headers(self):
         result = _scope_headers_to_origin(
@@ -188,9 +181,7 @@ class TestScopeHeadersToOrigin:
         assert result is None
 
 
-# ---------------------------------------------------------------------------
 # Security: no header values leak into log output
-# ---------------------------------------------------------------------------
 
 
 class TestHeaderSecurityLogging:

@@ -6,7 +6,7 @@ Wraps mcp_common validators with Supacrawl-specific exception types.
 
 import json
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import urlparse
 
@@ -213,7 +213,7 @@ def enhance_query_with_current_year(query: str) -> str:
         "python frameworks 2027" -> "python frameworks 2027" (future year preserved)
         "python syntax" -> "python syntax" (unchanged, not time-sensitive)
     """
-    current_year = datetime.now(timezone.utc).year
+    current_year = datetime.now(UTC).year
 
     # Check if query contains time-sensitive keywords
     query_lower = query.lower()
@@ -641,15 +641,15 @@ def validate_max_steps(
 
 
 __all__ = [
-    "validate_url",
-    "validate_query",
     "enhance_query_with_current_year",
-    "validate_timeout",
-    "validate_limit",
-    "validate_urls",
-    "validate_json_object",
     "validate_formats",
-    "validate_sources",
-    "validate_prompt",
+    "validate_json_object",
+    "validate_limit",
     "validate_max_steps",
+    "validate_prompt",
+    "validate_query",
+    "validate_sources",
+    "validate_timeout",
+    "validate_url",
+    "validate_urls",
 ]

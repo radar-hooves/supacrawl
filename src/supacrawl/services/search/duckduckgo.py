@@ -2,6 +2,7 @@
 
 import logging
 import re
+from datetime import UTC
 from urllib.parse import parse_qs, urlparse
 
 import httpx
@@ -213,11 +214,11 @@ class DuckDuckGoProvider:
                 published_at = None
                 if "date" in item:
                     try:
-                        from datetime import datetime, timezone
+                        from datetime import datetime
 
                         timestamp = item["date"]
                         if isinstance(timestamp, int):
-                            dt = datetime.fromtimestamp(timestamp, tz=timezone.utc)
+                            dt = datetime.fromtimestamp(timestamp, tz=UTC)
                             published_at = dt.isoformat()
                     except Exception:
                         pass

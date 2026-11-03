@@ -9,9 +9,7 @@ from pydantic.alias_generators import to_camel
 
 from supacrawl.api.models.scrape import ScrapeRequest
 
-# ---------------------------------------------------------------------------
 # Request
-# ---------------------------------------------------------------------------
 
 
 class ExtractScrapeOptions(ScrapeRequest):
@@ -21,7 +19,7 @@ class ExtractScrapeOptions(ScrapeRequest):
     (the extract endpoint receives URLs separately).
     """
 
-    url: str = ""  # type: ignore[assignment]
+    url: str = ""
 
 
 class ExtractRequest(BaseModel):
@@ -43,9 +41,7 @@ class ExtractRequest(BaseModel):
     scrape_options: ExtractScrapeOptions | None = Field(None, alias="scrapeOptions")
 
 
-# ---------------------------------------------------------------------------
 # Response
-# ---------------------------------------------------------------------------
 
 
 class ExtractCreateResponse(BaseModel):

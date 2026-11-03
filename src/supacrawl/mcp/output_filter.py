@@ -17,7 +17,7 @@ import importlib
 import json
 import re
 from collections.abc import Callable
-from typing import Any
+from typing import Any, cast
 
 from fastmcp.exceptions import ToolError
 from fastmcp.server.middleware import Middleware
@@ -59,11 +59,11 @@ def resolve_filter(spec: str | None) -> Callable[[str], str] | None:
         target: Any = importlib.import_module(module_name)
         for attr in attr_path.split("."):
             target = getattr(target, attr)
-    except Exception as exc:  # noqa: BLE001 - any import-time failure is a config failure
+    except Exception as exc:
         raise OutputFilterError(f"{SETTING} could not be imported ({type(exc).__name__})") from exc
     if not callable(target):
         raise OutputFilterError(f"{SETTING} does not name a callable")
-    return target
+    return cast("Callable[[str], str]", target)
 
 
 class OutputFilterMiddleware(Middleware):
@@ -122,7 +122,7 @@ class OutputFilterMiddleware(Middleware):
     async def on_call_tool(self, context: Any, call_next: Any) -> Any:
         try:
             result = await call_next(context)
-        except Exception as exc:  # noqa: BLE001 - every error text may carry page content
+        except Exception as exc:
             raise ToolError(self._apply(str(exc))) from None
         original = result.structured_content
         filtered = self._walk(original) if original is not None else None

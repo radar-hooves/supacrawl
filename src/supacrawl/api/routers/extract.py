@@ -28,7 +28,8 @@ router = APIRouter()
 
 def _get_job_store(request: Request) -> JobStore:
     """Retrieve the ``JobStore`` from application state."""
-    return request.app.state.job_store
+    store: JobStore = request.app.state.job_store
+    return store
 
 
 def _build_extract_kwargs(req: ExtractRequest) -> dict[str, Any]:

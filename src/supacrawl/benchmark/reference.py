@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import contextlib
 import logging
 from types import TracebackType
 from typing import Any
@@ -143,7 +144,7 @@ class ReferenceRenderer:
         self._playwright: Any = None
         self._browser: Any = None
 
-    async def __aenter__(self) -> "ReferenceRenderer":
+    async def __aenter__(self) -> ReferenceRenderer:
         """Launch the headless Chromium browser.
 
         Returns:
@@ -256,9 +257,7 @@ class ReferenceRenderer:
             return ReferenceCapture(error=f"Capture error: {exc}")
         finally:
             if page:
-                try:
+                with contextlib.suppress(Exception):
                     await page.close()
-                except Exception:
-                    pass
                 page_closed()
                 schedule_reap(url)

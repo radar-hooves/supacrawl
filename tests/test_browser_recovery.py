@@ -108,9 +108,7 @@ def _managed(
     return manager, launches
 
 
-# ---------------------------------------------------------------------------
 # Detection
-# ---------------------------------------------------------------------------
 
 
 class TestClosedBrowserDetection:
@@ -156,9 +154,7 @@ class TestClosedBrowserDetection:
         assert manager.is_alive is False
 
 
-# ---------------------------------------------------------------------------
 # Recovery
-# ---------------------------------------------------------------------------
 
 
 class TestRelaunch:
@@ -254,7 +250,7 @@ class TestRelaunch:
         assert manager.is_alive is True
         release.set()
 
-        context, page = await caller_a
+        _context, page = await caller_a
 
         assert page is not None, "caller A did not recover onto the engine B relaunched"
         assert len(launches) == 1, "A relaunched again instead of using B's fresh engine"
@@ -295,9 +291,7 @@ class TestRelaunch:
         assert launches == []
 
 
-# ---------------------------------------------------------------------------
 # Crash-loop guard
-# ---------------------------------------------------------------------------
 
 
 class TestCrashLoopGuard:
@@ -364,9 +358,7 @@ class TestCrashLoopGuard:
             manager._assert_relaunch_allowed()
 
 
-# ---------------------------------------------------------------------------
 # The real thing: a killed Chromium serves pages again
-# ---------------------------------------------------------------------------
 
 
 def _serve_probe_page() -> tuple[http.server.HTTPServer, int]:
@@ -374,7 +366,7 @@ def _serve_probe_page() -> tuple[http.server.HTTPServer, int]:
     body = b"<html><body><h1>recovery-probe</h1><p>still serving</p></body></html>"
 
     class Handler(http.server.BaseHTTPRequestHandler):
-        def do_GET(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler's contract
+        def do_GET(self) -> None:
             self.send_response(200)
             self.send_header("Content-Type", "text/html")
             self.send_header("Content-Length", str(len(body)))

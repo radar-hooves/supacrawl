@@ -50,14 +50,14 @@ def _make_error_event(msg: str = "Something broke") -> CrawlEvent:
     return CrawlEvent(type="error", error=msg)
 
 
-async def _mock_crawl_generator(**kwargs: Any) -> AsyncGenerator[CrawlEvent, None]:
+async def _mock_crawl_generator(**kwargs: Any) -> AsyncGenerator[CrawlEvent]:
     """Yield two page events then a complete event."""
     yield _make_page_event("https://example.com")
     yield _make_page_event("https://example.com/about")
     yield _make_complete_event()
 
 
-async def _mock_crawl_error(**kwargs: Any) -> AsyncGenerator[CrawlEvent, None]:
+async def _mock_crawl_error(**kwargs: Any) -> AsyncGenerator[CrawlEvent]:
     """Yield an error event."""
     yield _make_error_event("Crawl failed")
 

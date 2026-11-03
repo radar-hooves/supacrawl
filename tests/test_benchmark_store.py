@@ -9,7 +9,6 @@ import json
 from pathlib import Path
 
 import pytest
-from conftest import make_case_result as _make_case_result
 
 from supacrawl.benchmark.models import (
     CaseResult,
@@ -23,6 +22,7 @@ from supacrawl.benchmark.store import (
     load_run,
     write_run,
 )
+from tests.helpers import make_case_result as _make_case_result
 
 
 def _make_run(

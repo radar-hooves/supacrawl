@@ -7,7 +7,7 @@ import json
 import sys
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import click
 
@@ -332,9 +332,9 @@ def _emit_json(batch_result: object) -> None:
 
     assert isinstance(batch_result, BatchScrapeResult)
 
-    output: list[dict] = []
+    output: list[dict[str, Any]] = []
     for r in batch_result.results:
-        entry: dict = {"url": r.url, "success": r.success, "attempts": r.attempts}
+        entry: dict[str, Any] = {"url": r.url, "success": r.success, "attempts": r.attempts}
         if r.success and r.data is not None:
             entry["data"] = r.data.model_dump(exclude_none=True)
         if r.error:
@@ -366,10 +366,10 @@ def _write_directory(output_dir: Path, batch_result: object, formats: list[str])
     output_dir.mkdir(parents=True, exist_ok=True)
     existing_slugs: set[str] = set()
 
-    manifest_entries: list[dict] = []
+    manifest_entries: list[dict[str, Any]] = []
 
     for r in batch_result.results:
-        entry: dict = {"url": r.url, "success": r.success, "attempts": r.attempts}
+        entry: dict[str, Any] = {"url": r.url, "success": r.success, "attempts": r.attempts}
         if r.error:
             entry["error"] = r.error
 

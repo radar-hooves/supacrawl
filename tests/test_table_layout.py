@@ -49,7 +49,7 @@ def test_modern_article_with_a_small_data_table_is_unchanged() -> None:
         "</article></body></html>"
     )
     md = _md(html)
-    assert "| Plant | Depth |" in md or "Plant" in md and "Bean" in md
+    assert "| Plant | Depth |" in md or ("Plant" in md and "Bean" in md)
     assert md.startswith("# Post")
 
 

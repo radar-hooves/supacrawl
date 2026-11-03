@@ -29,9 +29,7 @@ def client(app: FastAPI) -> TestClient:
     return TestClient(app)
 
 
-# ---------------------------------------------------------------------------
 # GET /supacrawl/config/schema
-# ---------------------------------------------------------------------------
 
 
 class TestConfigSchema:
@@ -64,9 +62,7 @@ class TestConfigSchema:
         assert props.isdisjoint(secret_fields)
 
 
-# ---------------------------------------------------------------------------
 # GET /supacrawl/config
-# ---------------------------------------------------------------------------
 
 
 class TestConfigEffective:
@@ -107,9 +103,7 @@ class TestConfigEffective:
         assert "metrics" in config
 
 
-# ---------------------------------------------------------------------------
 # GET /supacrawl/metrics/summary
-# ---------------------------------------------------------------------------
 
 
 class TestMetricsSummary:

@@ -72,9 +72,7 @@ async def _scrape_failure(error: BaseException) -> ScrapeResult:
     return await service.scrape("https://support.claude.com/en/", http_first=False, escalate=False)
 
 
-# ---------------------------------------------------------------------------
 # The contract itself, across the whole taxonomy
-# ---------------------------------------------------------------------------
 
 
 class TestSuggestionAlwaysPresent:
@@ -101,9 +99,7 @@ class TestSuggestionAlwaysPresent:
         assert quality.suggestion is not None
 
 
-# ---------------------------------------------------------------------------
 # Infrastructure vs site
-# ---------------------------------------------------------------------------
 
 
 class TestInfrastructureIsDistinguishable:
@@ -152,9 +148,7 @@ class TestInfrastructureIsDistinguishable:
         assert result.quality.suggestion is not None
 
 
-# ---------------------------------------------------------------------------
 # The remaining paths that could reach a caller with nothing to act on
-# ---------------------------------------------------------------------------
 
 
 class TestOtherFailurePaths:

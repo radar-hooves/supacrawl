@@ -264,14 +264,14 @@ def check_llm_available() -> tuple[bool, str]:
 
 
 __all__ = [
-    "SUPPORTED_FORMATS",
     "ACTION_TYPES",
-    "SEARCH_PROVIDERS",
     "LLM_PROVIDERS",
-    "get_formats_resource",
-    "get_action_types_resource",
-    "get_search_providers_resource",
-    "get_llm_config_resource",
-    "get_capabilities_resource",
+    "SEARCH_PROVIDERS",
+    "SUPPORTED_FORMATS",
     "check_llm_available",
+    "get_action_types_resource",
+    "get_capabilities_resource",
+    "get_formats_resource",
+    "get_llm_config_resource",
+    "get_search_providers_resource",
 ]

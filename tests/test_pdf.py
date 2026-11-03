@@ -14,6 +14,7 @@ Tests cover:
 - MCP parse_pdf parameter
 """
 
+import contextlib
 import io
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -31,9 +32,7 @@ from supacrawl.services.pdf import (
     needs_content_type_check,
 )
 
-# ---------------------------------------------------------------------------
 # PDF URL detection
-# ---------------------------------------------------------------------------
 
 
 class TestIsPdfUrl:
@@ -65,9 +64,7 @@ class TestIsPdfUrl:
         assert is_pdf_url("https://example.com/report") is False
 
 
-# ---------------------------------------------------------------------------
 # PDF magic byte detection
-# ---------------------------------------------------------------------------
 
 
 class TestIsPdfBytes:
@@ -144,9 +141,7 @@ class TestIsPdfBytes:
         assert is_pdf_bytes(data) is True
 
 
-# ---------------------------------------------------------------------------
 # Content-Type detection
-# ---------------------------------------------------------------------------
 
 
 class TestDetectPdfContentType:
@@ -255,9 +250,7 @@ class TestDetectPdfContentType:
             assert result is False
 
 
-# ---------------------------------------------------------------------------
 # HEAD request optimisation
-# ---------------------------------------------------------------------------
 
 
 class TestNeedsContentTypeCheck:
@@ -293,9 +286,7 @@ class TestNeedsContentTypeCheck:
         assert needs_content_type_check("https://example.com/file.xyz") is True
 
 
-# ---------------------------------------------------------------------------
 # PDF size limit
-# ---------------------------------------------------------------------------
 
 
 class TestPdfSizeLimit:
@@ -314,14 +305,14 @@ class TestPdfSizeLimit:
         mock_response.content = large_content
         mock_response.raise_for_status = MagicMock()
 
-        with patch("supacrawl.services.pdf.guarded_request", AsyncMock(return_value=mock_response)):
-            with pytest.raises(ValueError, match="too large"):
-                await download_pdf("https://example.com/huge.pdf")
+        with (
+            patch("supacrawl.services.pdf.guarded_request", AsyncMock(return_value=mock_response)),
+            pytest.raises(ValueError, match="too large"),
+        ):
+            await download_pdf("https://example.com/huge.pdf")
 
 
-# ---------------------------------------------------------------------------
 # PDF date normalisation
-# ---------------------------------------------------------------------------
 
 
 class TestNormalisePdfDate:
@@ -344,9 +335,7 @@ class TestNormalisePdfDate:
         assert result == "not-a-date"
 
 
-# ---------------------------------------------------------------------------
 # Table to markdown
-# ---------------------------------------------------------------------------
 
 
 class TestTableToMarkdown:
@@ -387,9 +376,7 @@ class TestTableToMarkdown:
         assert _table_to_markdown([[]]) == ""
 
 
-# ---------------------------------------------------------------------------
 # Clean cell helper
-# ---------------------------------------------------------------------------
 
 
 class TestCleanCell:
@@ -408,9 +395,7 @@ class TestCleanCell:
         assert _clean_cell("  hello  ") == "hello"
 
 
-# ---------------------------------------------------------------------------
 # Text extraction (with real pdfplumber)
-# ---------------------------------------------------------------------------
 
 
 def _make_simple_pdf(text: str = "Hello World. This is a test PDF document.") -> bytes:
@@ -515,9 +500,7 @@ class TestExtractText:
             extract_text(b"not a pdf")
 
 
-# ---------------------------------------------------------------------------
 # OCR availability
-# ---------------------------------------------------------------------------
 
 
 class TestOcrAvailability:
@@ -540,9 +523,7 @@ class TestOcrAvailability:
         assert _is_pdfplumber_available() is True
 
 
-# ---------------------------------------------------------------------------
 # parse_pdf orchestrator
-# ---------------------------------------------------------------------------
 
 
 class TestParsePdf:
@@ -587,14 +568,14 @@ class TestParsePdf:
 
         pdf_bytes = _make_simple_pdf()
 
-        with patch("supacrawl.services.pdf._is_ocr_available", return_value=False):
-            with pytest.raises(ImportError, match="supacrawl\\[pdf-ocr\\]"):
-                await parse_pdf(url="https://example.com/test.pdf", mode="ocr", pdf_bytes=pdf_bytes)
+        with (
+            patch("supacrawl.services.pdf._is_ocr_available", return_value=False),
+            pytest.raises(ImportError, match="supacrawl\\[pdf-ocr\\]"),
+        ):
+            await parse_pdf(url="https://example.com/test.pdf", mode="ocr", pdf_bytes=pdf_bytes)
 
 
-# ---------------------------------------------------------------------------
 # ScrapeService PDF routing
-# ---------------------------------------------------------------------------
 
 
 class TestScrapeServicePdfRouting:
@@ -636,14 +617,12 @@ class TestScrapeServicePdfRouting:
             service = ScrapeService(headless=True)
             # This will fail because we haven't set up a browser, but
             # the important thing is that PDF detection was NOT called
-            try:
+            with contextlib.suppress(Exception):  # Expected to fail (no browser)
                 await service.scrape(
                     url="https://example.com/report.pdf",
                     formats=["markdown"],
                     parse_pdf=None,
                 )
-            except Exception:
-                pass  # Expected to fail (no browser)
 
             mock_detect.assert_not_called()
 
@@ -658,14 +637,12 @@ class TestScrapeServicePdfRouting:
             patch("supacrawl.services.pdf.detect_pdf_content_type") as mock_head,
         ):
             service = ScrapeService(headless=True)
-            try:
+            with contextlib.suppress(Exception):  # Expected to fail (no browser)
                 await service.scrape(
                     url="https://example.com/handbook/document/123",
                     formats=["markdown"],
                     parse_pdf="auto",
                 )
-            except Exception:
-                pass  # Expected to fail (no browser)
 
             mock_url_check.assert_called_once()
             mock_head.assert_not_called()
@@ -877,9 +854,7 @@ class TestScrapeServicePdfRouting:
         assert result is None
 
 
-# ---------------------------------------------------------------------------
 # CLI --parse-pdf option
-# ---------------------------------------------------------------------------
 
 
 class TestCLIParsePdfOption:
@@ -911,9 +886,7 @@ class TestCLIParsePdfOption:
             assert resolved == mode
 
 
-# ---------------------------------------------------------------------------
 # Cache variant for PDF
-# ---------------------------------------------------------------------------
 
 
 class TestPdfCacheVariant:

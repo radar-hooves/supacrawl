@@ -89,9 +89,7 @@ def _item(url: str) -> SearchResultItem:
     return SearchResultItem(url=url, title="r", source_type=SearchSourceType.WEB)
 
 
-# ---------------------------------------------------------------------------
 # ProviderChain: empty advances the chain; all-empty is a genuine empty
-# ---------------------------------------------------------------------------
 
 
 class TestEmptyAdvancesTheChain:
@@ -209,9 +207,7 @@ class TestEmptyAdvancesTheChain:
         assert never.calls == 0, "a non-fallback error must not try later providers"
 
 
-# ---------------------------------------------------------------------------
 # Provider health: answered-with-results vs answered-with-nothing
-# ---------------------------------------------------------------------------
 
 
 class TestEmptyRunIsAHealthSignal:
@@ -283,9 +279,7 @@ class TestEmptyRunIsAHealthSignal:
         assert health["status"] == "degraded"
 
 
-# ---------------------------------------------------------------------------
 # SearchService: the caller can read the difference off the response
-# ---------------------------------------------------------------------------
 
 
 def _service_with_empty_chain() -> SearchService:
@@ -352,9 +346,7 @@ class TestResponseCarriesTheSignal:
             await service.close()
 
 
-# ---------------------------------------------------------------------------
 # The privacy stance holds under empty-fallthrough (#156/#158)
-# ---------------------------------------------------------------------------
 
 
 # 200-with-[] and NO unresponsive engines: the CAPTCHA-walled case the incident

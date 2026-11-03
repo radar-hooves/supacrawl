@@ -8,7 +8,7 @@ import hashlib
 import json
 import logging
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -144,7 +144,8 @@ class CacheManager:
             return {}
 
         try:
-            return json.loads(self.index_path.read_text())
+            index: dict[str, str] = json.loads(self.index_path.read_text())
+            return index
         except (json.JSONDecodeError, OSError) as e:
             LOGGER.warning(f"Failed to load cache index: {e}")
             return {}
@@ -187,7 +188,7 @@ class CacheManager:
 
             # Check if expired
             expires_at = datetime.fromisoformat(entry.expires_at)
-            now = datetime.now(timezone.utc)
+            now = datetime.now(UTC)
 
             if now > expires_at:
                 LOGGER.debug(f"Cache miss (expired): {url}")
@@ -249,8 +250,8 @@ class CacheManager:
         cache_key = self._cache_key(url, variant=variant)
         cache_file = self.pages_dir / f"{cache_key}.json"
 
-        now = datetime.now(timezone.utc)
-        expires_at = datetime.fromtimestamp(now.timestamp() + max_age, tz=timezone.utc)
+        now = datetime.now(UTC)
+        expires_at = datetime.fromtimestamp(now.timestamp() + max_age, tz=UTC)
 
         entry = CacheEntry(
             url=url,
@@ -324,7 +325,7 @@ class CacheManager:
         entries = 0
         total_size = 0
         expired = 0
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         for cache_file in self.pages_dir.glob("*.json"):
             entries += 1
@@ -364,7 +365,7 @@ class CacheManager:
             Number of entries pruned.
         """
         pruned = 0
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         index = self._load_index()
         modified = False
 

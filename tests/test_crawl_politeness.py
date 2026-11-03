@@ -14,7 +14,7 @@ def _map_service(links: list[str]) -> MagicMock:
     """A stand-in MapService whose map() yields a single complete event."""
     result = MapResult(success=True, links=[MapLink(url=u) for u in links])
 
-    async def fake_map(**kwargs: object) -> AsyncGenerator[MapEvent, None]:
+    async def fake_map(**kwargs: object) -> AsyncGenerator[MapEvent]:
         yield MapEvent(type="complete", result=result)
 
     service = MagicMock()

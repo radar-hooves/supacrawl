@@ -38,7 +38,7 @@ def server() -> Iterator[tuple[int, list[str]]]:
     hits: list[str] = []
 
     class Handler(http.server.BaseHTTPRequestHandler):
-        def do_GET(self) -> None:  # noqa: N802
+        def do_GET(self) -> None:
             hits.append(self.path)
             if self.path == "/a":
                 self.send_response(302)
@@ -97,7 +97,7 @@ async def test_strict_refuses_redirect_to_private_with_env_unset(server) -> None
 
     with _resolver({"public.test": PUBLIC_IP}):
         async with httpx.AsyncClient(transport=httpx.MockTransport(public)) as client:
-            with pytest.raises(BlockedAddressError, match="127.0.0.1"):
+            with pytest.raises(BlockedAddressError, match=r"127\.0\.0\.1"):
                 await guarded_request(client, "GET", "http://public.test/x", strict=True)
     assert hits == []
 
@@ -113,15 +113,14 @@ async def test_strict_false_overrides_env(server, monkeypatch: pytest.MonkeyPatc
 
 async def test_hops_history_and_final_url(server) -> None:
     port, _ = server
-    async with httpx.AsyncClient() as client:
-        async with guarded_stream(client, "GET", f"http://127.0.0.1:{port}/a") as resp:
-            assert resp.extensions["supacrawl_hops"] == [
-                f"http://127.0.0.1:{port}/a",
-                f"http://127.0.0.1:{port}/b",
-            ]
-            assert resp.extensions["supacrawl_final_url"] == f"http://127.0.0.1:{port}/b"
-            assert [r.status_code for r in resp.history] == [302]
-            assert resp.history[0].headers["location"] == "/b"
+    async with httpx.AsyncClient() as client, guarded_stream(client, "GET", f"http://127.0.0.1:{port}/a") as resp:
+        assert resp.extensions["supacrawl_hops"] == [
+            f"http://127.0.0.1:{port}/a",
+            f"http://127.0.0.1:{port}/b",
+        ]
+        assert resp.extensions["supacrawl_final_url"] == f"http://127.0.0.1:{port}/b"
+        assert [r.status_code for r in resp.history] == [302]
+        assert resp.history[0].headers["location"] == "/b"
 
 
 async def test_redirect_loop_and_depth_are_typed(server) -> None:

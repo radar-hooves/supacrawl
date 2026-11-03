@@ -7,9 +7,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict
 from pydantic.alias_generators import to_camel
 
-# ---------------------------------------------------------------------------
 # Request
-# ---------------------------------------------------------------------------
 
 
 class MapRequest(BaseModel):
@@ -36,9 +34,7 @@ class MapRequest(BaseModel):
     location: dict[str, Any] | None = None
 
 
-# ---------------------------------------------------------------------------
 # Response
-# ---------------------------------------------------------------------------
 
 
 class MapLinkResponse(BaseModel):

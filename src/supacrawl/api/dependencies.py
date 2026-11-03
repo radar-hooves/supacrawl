@@ -16,7 +16,8 @@ if TYPE_CHECKING:
 
 def get_services(request: Request) -> "SupacrawlServices":
     """Return the shared ``SupacrawlServices`` stored on ``app.state``."""
-    return request.app.state.services
+    services: SupacrawlServices = request.app.state.services
+    return services
 
 
 def get_scrape_service(request: Request) -> "ScrapeService":

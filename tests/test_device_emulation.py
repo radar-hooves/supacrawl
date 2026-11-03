@@ -14,9 +14,7 @@ import pytest
 from supacrawl.services.browser import BrowserManager, PageContent, PageMetadata
 from supacrawl.services.scrape import ScrapeService
 
-# ---------------------------------------------------------------------------
 # BrowserManager — device config resolution
-# ---------------------------------------------------------------------------
 
 
 class TestBrowserManagerDeviceConfig:
@@ -48,7 +46,7 @@ class TestBrowserManagerDeviceConfig:
             "Pixel 7": {},
         }
 
-        with pytest.raises(ValueError, match="Did you mean.*iPhone 14"):
+        with pytest.raises(ValueError, match=r"Did you mean.*iPhone 14"):
             bm._resolve_device_config("iPhone 14 Plus")
 
     def test_resolve_device_config_strips_default_browser_type(self):
@@ -125,9 +123,7 @@ class TestBrowserManagerDeviceConfig:
         assert options["viewport"] == {"width": 390, "height": 844}
 
 
-# ---------------------------------------------------------------------------
 # BrowserManager — fetch_page device validation
-# ---------------------------------------------------------------------------
 
 
 class TestFetchPageDeviceValidation:
@@ -144,9 +140,7 @@ class TestFetchPageDeviceValidation:
             await bm.fetch_page("https://example.com", device="iPhone 14")
 
 
-# ---------------------------------------------------------------------------
 # BrowserManager — list_devices
-# ---------------------------------------------------------------------------
 
 
 class TestListDevices:
@@ -171,9 +165,7 @@ class TestListDevices:
         assert result == ["Pixel 7", "iPad Pro", "iPhone 14"]
 
 
-# ---------------------------------------------------------------------------
 # ScrapeService — device threading
-# ---------------------------------------------------------------------------
 
 
 class TestScrapeServiceDevice:
@@ -228,9 +220,7 @@ class TestScrapeServiceDevice:
         assert result.success
 
 
-# ---------------------------------------------------------------------------
 # ScrapeService — cache variant
-# ---------------------------------------------------------------------------
 
 
 class TestScrapeServiceCacheVariant:
@@ -280,9 +270,7 @@ class TestScrapeServiceCacheVariant:
         assert key_combined != key_device_only
 
 
-# ---------------------------------------------------------------------------
 # CLI — --mobile and --device options
-# ---------------------------------------------------------------------------
 
 
 class TestCLIDeviceOptions:

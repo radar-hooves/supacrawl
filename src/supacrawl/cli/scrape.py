@@ -1,6 +1,7 @@
 """Scraping commands."""
 
 from pathlib import Path
+from typing import Any
 
 import click
 
@@ -357,7 +358,7 @@ def scrape_url(
     # Handle --list-devices: print available devices and exit
     if list_devices:
 
-        async def _list():
+        async def _list() -> list[str]:
             from playwright.async_api import async_playwright
 
             pw = await async_playwright().start()
@@ -411,10 +412,9 @@ def scrape_url(
             parsed_schema = json.load(f)
 
     # Validate json format usage
-    if "json" in formats_list:
-        if not prompt and not parsed_schema:
-            click.echo("Error: --prompt or --schema required when using json format", err=True)
-            raise SystemExit(1)
+    if "json" in formats_list and not prompt and not parsed_schema:
+        click.echo("Error: --prompt or --schema required when using json format", err=True)
+        raise SystemExit(1)
 
     # Build locale config if any location options specified
     locale_config = None
@@ -456,7 +456,7 @@ def scrape_url(
             name, value = parse_header_string(raw)
             resolved_headers[name] = value
 
-    async def run():
+    async def run() -> Any:
         service = ScrapeService(
             locale_config=locale_config,
             cache_dir=resolved_cache_dir,
@@ -504,7 +504,7 @@ def scrape_url(
     except SupacrawlError as e:
         click.echo(f"Error: {e}", err=True)
         raise SystemExit(1) from e
-    except Exception as e:  # noqa: BLE001 — a CLI must never surface a raw traceback
+    except Exception as e:
         click.echo(f"Error: scrape failed: {e}", err=True)
         raise SystemExit(1) from e
 

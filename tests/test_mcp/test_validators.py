@@ -1,6 +1,6 @@
 """Tests for Supacrawl validators module."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import patch
 
 import pytest
@@ -287,7 +287,7 @@ class TestEnhanceQueryWithCurrentYear:
     @patch("supacrawl.mcp.validators.datetime")
     def test_adds_year_to_time_sensitive_query(self, mock_datetime):
         """Should add current year to queries with time-sensitive keywords."""
-        mock_datetime.now.return_value = datetime(2026, 1, 24, tzinfo=timezone.utc)
+        mock_datetime.now.return_value = datetime(2026, 1, 24, tzinfo=UTC)
 
         # Test various time-sensitive keywords
         assert enhance_query_with_current_year("best python frameworks") == "best python frameworks 2026"
@@ -299,7 +299,7 @@ class TestEnhanceQueryWithCurrentYear:
     @patch("supacrawl.mcp.validators.datetime")
     def test_replaces_stale_year_in_time_sensitive_query(self, mock_datetime):
         """Should replace past years with current year in time-sensitive queries."""
-        mock_datetime.now.return_value = datetime(2026, 1, 24, tzinfo=timezone.utc)
+        mock_datetime.now.return_value = datetime(2026, 1, 24, tzinfo=UTC)
 
         # Stale years should be replaced (LLMs often use their training cutoff year)
         assert enhance_query_with_current_year("best python frameworks 2024") == "best python frameworks 2026"
@@ -309,7 +309,7 @@ class TestEnhanceQueryWithCurrentYear:
     @patch("supacrawl.mcp.validators.datetime")
     def test_preserves_current_and_future_years(self, mock_datetime):
         """Should not modify current or future years in time-sensitive queries."""
-        mock_datetime.now.return_value = datetime(2026, 1, 24, tzinfo=timezone.utc)
+        mock_datetime.now.return_value = datetime(2026, 1, 24, tzinfo=UTC)
 
         # Current year should be preserved
         assert enhance_query_with_current_year("best python frameworks 2026") == "best python frameworks 2026"
@@ -319,7 +319,7 @@ class TestEnhanceQueryWithCurrentYear:
     @patch("supacrawl.mcp.validators.datetime")
     def test_preserves_years_in_non_time_sensitive_queries(self, mock_datetime):
         """Should not modify years in non-time-sensitive queries."""
-        mock_datetime.now.return_value = datetime(2026, 1, 24, tzinfo=timezone.utc)
+        mock_datetime.now.return_value = datetime(2026, 1, 24, tzinfo=UTC)
 
         # Non-time-sensitive queries should keep their years unchanged (may be intentional)
         assert enhance_query_with_current_year("python syntax 2024") == "python syntax 2024"
@@ -329,7 +329,7 @@ class TestEnhanceQueryWithCurrentYear:
     @patch("supacrawl.mcp.validators.datetime")
     def test_ignores_non_time_sensitive_queries(self, mock_datetime):
         """Should not modify queries without time-sensitive keywords."""
-        mock_datetime.now.return_value = datetime(2026, 1, 24, tzinfo=timezone.utc)
+        mock_datetime.now.return_value = datetime(2026, 1, 24, tzinfo=UTC)
 
         # Non-time-sensitive queries should be unchanged
         assert enhance_query_with_current_year("python syntax") == "python syntax"
@@ -339,7 +339,7 @@ class TestEnhanceQueryWithCurrentYear:
     @patch("supacrawl.mcp.validators.datetime")
     def test_handles_case_insensitivity(self, mock_datetime):
         """Should detect time-sensitive keywords regardless of case."""
-        mock_datetime.now.return_value = datetime(2026, 1, 24, tzinfo=timezone.utc)
+        mock_datetime.now.return_value = datetime(2026, 1, 24, tzinfo=UTC)
 
         assert enhance_query_with_current_year("BEST python frameworks") == "BEST python frameworks 2026"
         assert enhance_query_with_current_year("Latest React Tutorial") == "Latest React Tutorial 2026"
@@ -347,7 +347,7 @@ class TestEnhanceQueryWithCurrentYear:
     @patch("supacrawl.mcp.validators.datetime")
     def test_various_time_sensitive_keywords(self, mock_datetime):
         """Should recognise all defined time-sensitive keywords."""
-        mock_datetime.now.return_value = datetime(2026, 1, 24, tzinfo=timezone.utc)
+        mock_datetime.now.return_value = datetime(2026, 1, 24, tzinfo=UTC)
 
         # Recency indicators
         assert "2026" in enhance_query_with_current_year("latest news")

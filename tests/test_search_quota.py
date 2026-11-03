@@ -27,9 +27,7 @@ from supacrawl.services.search.providers import (
 CORRELATION_ID = "test-quota-1234"
 
 
-# ---------------------------------------------------------------------------
 # Helpers
-# ---------------------------------------------------------------------------
 
 
 def _brave_response(
@@ -102,9 +100,7 @@ class MockProvider:
         pass
 
 
-# ---------------------------------------------------------------------------
 # BraveProvider: quota header parsing
-# ---------------------------------------------------------------------------
 
 
 class TestBraveProviderQuotaHeader:
@@ -178,9 +174,7 @@ class TestBraveProviderQuotaHeader:
             await provider.close()
 
 
-# ---------------------------------------------------------------------------
 # ProviderChain: quota synced into ProviderHealth after success
-# ---------------------------------------------------------------------------
 
 
 class TestProviderChainQuotaSync:
@@ -251,9 +245,7 @@ class TestProviderChainQuotaSync:
             await brave.close()
 
 
-# ---------------------------------------------------------------------------
 # ProviderChain: out-of-credits error triggers failover
-# ---------------------------------------------------------------------------
 
 
 class TestProviderChainCreditFailover:
@@ -309,9 +301,7 @@ class TestProviderChainCreditFailover:
             await chain.search("web", "test", 5, CORRELATION_ID)
 
 
-# ---------------------------------------------------------------------------
 # ProviderHealth: to_dict includes remaining_credits when populated
-# ---------------------------------------------------------------------------
 
 
 class TestProviderHealthQuotaSerialisation:
@@ -337,9 +327,7 @@ class TestProviderHealthQuotaSerialisation:
         assert health.to_dict()["remaining_credits"] == 499
 
 
-# ---------------------------------------------------------------------------
 # Health tool: low-credit warning surfaced at config level
-# ---------------------------------------------------------------------------
 
 
 @pytest.mark.mcp

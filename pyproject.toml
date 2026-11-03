@@ -135,7 +135,8 @@ markers = [
 ]
 # The documented quality gate; a later -m on the command line overrides it, so
 # `pytest -m e2e` and `pytest -m stealth_smoke` still select theirs.
-addopts = '-m "not e2e and not stealth_smoke"'
+pythonpath = ["."]
+addopts = '--import-mode=importlib -m "not e2e and not stealth_smoke"'
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 filterwarnings = [
@@ -144,21 +145,17 @@ filterwarnings = [
 
 [tool.ruff]
 line-length = 120
+extend-exclude = [".github"]  # checked copy of the change pipeline; never hand-edited
 target-version = "py314"
 
 [tool.ruff.lint]
-select = [
-    "E",   # pycodestyle errors
-    "W",   # pycodestyle warnings
-    "F",   # pyflakes
-    "I",   # isort
-    "B",   # flake8-bugbear
-    "C4",  # flake8-comprehensions
-]
+select = ["B", "C4", "E", "F", "I", "RUF", "SIM", "UP", "W"]
 ignore = [
     "E501",  # line too long (handled by formatter)
     "B008",  # do not perform function calls in argument defaults
+    "UP037",  # quotes are load-bearing: TYPE_CHECKING-only names are evaluated by autospec on 3.14
 ]
+allowed-confusables = ["–", "×", "１", "２", "４", "５", "６", "９"]  # intentional: dash in prose, fullwidth digits in URL-guard test data
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]  # Allow unused imports in __init__.py
@@ -166,7 +163,7 @@ ignore = [
 [tool.mypy]
 python_version = "3.14"
 plugins = ["pydantic.mypy"]
-check_untyped_defs = true
+strict = true
 
 [[tool.mypy.overrides]]
 module = "fpdf.*"

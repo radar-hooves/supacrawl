@@ -7,7 +7,8 @@ Provider configuration is via environment variables (SUPACRAWL_LLM_PROVIDER, SUP
 
 import json
 import logging
-from typing import TYPE_CHECKING, Any, AsyncGenerator
+from collections.abc import AsyncGenerator
+from typing import TYPE_CHECKING, Any
 
 from supacrawl.exceptions import generate_correlation_id
 from supacrawl.llm import LLMClient, load_llm_config
@@ -87,7 +88,7 @@ class AgentService:
         urls: list[str] | None = None,
         schema: dict[str, Any] | None = None,
         max_steps: int = 10,
-    ) -> AsyncGenerator[AgentEvent, None]:
+    ) -> AsyncGenerator[AgentEvent]:
         """
         Run autonomous agent with given objective.
 
@@ -105,7 +106,7 @@ class AgentService:
         """
         correlation_id = generate_correlation_id()
         visited_urls: list[str] = []
-        gathered_data: list[dict] = []
+        gathered_data: list[dict[str, Any]] = []
         step = 0
 
         # Get client early to fail fast if not configured
@@ -346,7 +347,7 @@ Extract relevant information as JSON:
 
     async def _compile_results(
         self,
-        gathered_data: list[dict],
+        gathered_data: list[dict[str, Any]],
         prompt: str,
         schema: dict[str, Any],
         correlation_id: str,

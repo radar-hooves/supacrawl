@@ -7,7 +7,7 @@ converting a relative ``time_range`` to an absolute start date for providers tha
 only accept date bounds.
 """
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 # Relative time_range -> number of days back.
 TIME_RANGE_DAYS: dict[str, int] = {"day": 1, "week": 7, "month": 30, "year": 365}
@@ -57,7 +57,7 @@ def time_range_to_start_date(time_range: str | None, *, now: datetime | None = N
     days = TIME_RANGE_DAYS.get(time_range or "")
     if not days:
         return None
-    reference = now or datetime.now(timezone.utc)
+    reference = now or datetime.now(UTC)
     return (reference - timedelta(days=days)).date().isoformat()
 
 

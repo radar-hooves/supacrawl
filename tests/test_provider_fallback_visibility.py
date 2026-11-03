@@ -93,9 +93,7 @@ class _StubServices:
         return {"scrape": True, "crawl": True, "map": True, "search": True}
 
 
-# ---------------------------------------------------------------------------
 # The fallback is announced when it is applied
-# ---------------------------------------------------------------------------
 
 
 class TestFallbackWarning:
@@ -135,9 +133,7 @@ class TestFallbackWarning:
         assert "BRAVE_API_KEY" in str(excinfo.value)
 
 
-# ---------------------------------------------------------------------------
 # The health verdict itself, driven rather than asserted about
-# ---------------------------------------------------------------------------
 
 
 class TestHealthVerdictUnderFallback:
@@ -198,9 +194,7 @@ class TestHealthVerdictUnderFallback:
             await service.close()
 
 
-# ---------------------------------------------------------------------------
 # A caller can tell which provider actually served the request
-# ---------------------------------------------------------------------------
 
 
 class TestServedProviderIsReported:

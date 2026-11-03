@@ -20,7 +20,7 @@ LARGE_RESPONSE_CHARS = 100_000
 _BOUNDED_FIELDS = ("markdown", "html", "raw_html")
 
 
-def _bound_response(response: dict, max_chars: int | None, query: str | None) -> None:
+def _bound_response(response: dict[str, Any], max_chars: int | None, query: str | None) -> None:
     """Cap the text fields of a scrape response in place and say what was cut.
 
     With ``max_chars`` set, markdown is bounded by ``bound_markdown`` (best
@@ -54,7 +54,7 @@ def _bound_response(response: dict, max_chars: int | None, query: str | None) ->
     response["truncation"] = {"max_chars": max_chars, "truncated": bool(fields), "fields": fields}
 
 
-def _select_section(response: dict, section: str | None) -> None:
+def _select_section(response: dict[str, Any], section: str | None) -> None:
     """Narrow the markdown to ``section`` in place and report whether a heading matched."""
     data = response.get("data")
     if not section or not data or not data.get("markdown"):
@@ -218,7 +218,7 @@ async def supacrawl_scrape(
             description="Require asserted content before returning. A bare integer is a minimum word count; any other string is matched first as a CSS selector then as a text substring. When unmet, the scrape escalates (HTTP-first to browser, then a stealth + longer-wait retry) and ultimately returns success=False instead of a pre-hydration skeleton. Use this when an agent must be sure the data it asked for is actually present."
         ),
     ] = None,
-) -> dict:
+) -> dict[str, Any]:
     """
     Scrape a single URL and return content in specified formats.
 

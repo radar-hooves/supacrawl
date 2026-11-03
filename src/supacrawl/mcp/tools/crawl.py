@@ -5,7 +5,7 @@ Wraps supacrawl library's CrawlService for MCP consumption.
 Note: CrawlService uses streaming (AsyncGenerator), so we collect all results.
 """
 
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 from api_common.correlation import generate_correlation_id
 from pydantic import Field
@@ -80,7 +80,7 @@ async def supacrawl_crawl(
             description="Minimum seconds between requests to the same host (default 0.0, no throttle). Set a positive value to space out requests to one origin; a robots.txt Crawl-delay raises it when respect_robots is True."
         ),
     ] = 0.0,
-) -> dict:
+) -> dict[str, Any]:
     """
     Crawl a website starting from URL, discovering and scraping pages.
 

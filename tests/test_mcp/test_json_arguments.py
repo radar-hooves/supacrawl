@@ -28,12 +28,12 @@ from __future__ import annotations
 from unittest.mock import AsyncMock
 
 import pytest
-from conftest import LLMWire
 from fastmcp import Client, FastMCP
 
 from supacrawl.mcp.wiring import register_all_tools
 from supacrawl.models import ScrapeData, ScrapeMetadata, ScrapeResult
 from supacrawl.services.registry import SupacrawlServices
+from tests.helpers import LLMWire
 
 pytestmark = pytest.mark.mcp
 

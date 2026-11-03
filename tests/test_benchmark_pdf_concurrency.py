@@ -25,9 +25,7 @@ from supacrawl.benchmark.providers.base import ProviderOutput
 from supacrawl.benchmark.reference import ReferenceCapture
 from supacrawl.benchmark.runner import _has_words, _scrape_pdf_with_retry, run_benchmark
 
-# ---------------------------------------------------------------------------
 # Helpers
-# ---------------------------------------------------------------------------
 
 _PDF_CASE = BenchCase(
     id="pdf-arxiv-attention",
@@ -47,9 +45,7 @@ def _pdf_semaphore() -> asyncio.Semaphore:
     return asyncio.Semaphore(1)
 
 
-# ---------------------------------------------------------------------------
 # _has_words
-# ---------------------------------------------------------------------------
 
 
 @pytest.mark.unit
@@ -74,9 +70,7 @@ def test_has_words_false_for_failed_output() -> None:
     assert _has_words(output) is False
 
 
-# ---------------------------------------------------------------------------
 # _scrape_pdf_with_retry
-# ---------------------------------------------------------------------------
 
 
 @pytest.mark.unit
@@ -180,15 +174,13 @@ async def test_no_retry_when_first_attempt_has_words() -> None:
     assert _has_words(result)
 
 
-# ---------------------------------------------------------------------------
 # Full run_benchmark — stable non-zero extraction across repeated runs
-# ---------------------------------------------------------------------------
 
 
 class _FakeRendererForPdf:
     """Fake ReferenceRenderer that returns no-op captures."""
 
-    async def __aenter__(self) -> "_FakeRendererForPdf":
+    async def __aenter__(self) -> _FakeRendererForPdf:
         return self
 
     async def __aexit__(

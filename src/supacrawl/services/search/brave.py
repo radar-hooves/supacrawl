@@ -6,6 +6,7 @@ Per-provider credit/quota capability:
          it drops below LOW_CREDIT_THRESHOLD (providers.py).
 """
 
+import contextlib
 import logging
 
 import httpx
@@ -71,10 +72,8 @@ class BraveProvider:
             return
         raw = headers.get("X-RateLimit-Remaining")
         if raw is not None:
-            try:
+            with contextlib.suppress(ValueError):  # Malformed header — leave previous value intact
                 self.remaining_credits = int(raw)
-            except ValueError:
-                pass  # Malformed header — leave previous value intact
 
     def _apply_freshness(self, params: dict[str, str | int], filters: SearchFilters) -> None:
         """Add Brave freshness param for recency filtering."""

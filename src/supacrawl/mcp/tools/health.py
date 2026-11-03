@@ -320,7 +320,7 @@ async def supacrawl_health(
             description='When True (default), run one real, minimal search through the effective provider chain so a search-path regression (provider configured but silently returning nothing — #156) is caught here instead of reading "healthy". Set False for a config-only check with no live network call.'
         ),
     ] = True,
-) -> dict:
+) -> dict[str, Any]:
     """Get Supacrawl server health status, search provider state, and credit levels.
 
     Use this to verify connectivity, check which search provider is active,

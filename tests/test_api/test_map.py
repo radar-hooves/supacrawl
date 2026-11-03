@@ -59,7 +59,7 @@ class TestMapEndpoint:
     def test_error_event_returns_failure(self, client: TestClient, mock_map_service: AsyncMock) -> None:
         """An error event from the service returns success=false."""
 
-        async def _error_generator(**kwargs: Any) -> AsyncGenerator[MapEvent, None]:
+        async def _error_generator(**kwargs: Any) -> AsyncGenerator[MapEvent]:
             yield MapEvent(type="error", message="Something went wrong")
 
         mock_map_service.map.side_effect = _error_generator

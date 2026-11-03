@@ -10,9 +10,7 @@ from pydantic.alias_generators import to_camel
 # Known source types that supacrawl supports.
 _KNOWN_SOURCES = frozenset({"web", "images", "news"})
 
-# ---------------------------------------------------------------------------
 # Request
-# ---------------------------------------------------------------------------
 
 
 class SearchRequest(BaseModel):
@@ -71,9 +69,7 @@ class SearchRequest(BaseModel):
         return result or ["web"]
 
 
-# ---------------------------------------------------------------------------
 # Response
-# ---------------------------------------------------------------------------
 
 
 class WebResultItem(BaseModel):

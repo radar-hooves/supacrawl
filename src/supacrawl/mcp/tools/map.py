@@ -4,7 +4,7 @@ Map tool for Supacrawl MCP server.
 Wraps supacrawl library's MapService for MCP consumption.
 """
 
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 from api_common.correlation import generate_correlation_id
 from pydantic import Field
@@ -43,7 +43,7 @@ async def supacrawl_map(
             description='Custom HTTP headers sent with every request (e.g. {"Authorization": "Bearer token"}). Only header KEYS are logged; values are never persisted or written to logs.'
         ),
     ] = None,
-) -> dict:
+) -> dict[str, Any]:
     """
     Map a website to discover all URLs without scraping content.
 

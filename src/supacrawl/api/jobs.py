@@ -6,8 +6,8 @@ import asyncio
 import logging
 import os
 import uuid
-from datetime import datetime, timedelta, timezone
-from enum import Enum
+from datetime import UTC, datetime, timedelta
+from enum import StrEnum
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -19,7 +19,7 @@ DEFAULT_JOB_TTL = 86_400  # 24 hours in seconds
 DEFAULT_PAGE_SIZE = 10
 
 
-class JobStatus(str, Enum):
+class JobStatus(StrEnum):
     """Possible states for an async job."""
 
     scraping = "scraping"
@@ -36,7 +36,7 @@ class Job(BaseModel):
     total: int = 0
     completed: int = 0
     data: list[Any] = Field(default_factory=list)
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     expires_at: datetime | None = None
     error: str | None = None
 
@@ -76,7 +76,7 @@ class JobStore:
             raise MaxJobsExceededError(f"Maximum concurrent jobs ({self._max_jobs}) exceeded. Try again later.")
 
         job_id = uuid.uuid4().hex
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         job = Job(
             id=job_id,
             total=total,
@@ -180,7 +180,7 @@ class JobStore:
 
         Returns the number of removed jobs.
         """
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         expired_ids = [jid for jid, job in self._jobs.items() if job.expires_at is not None and job.expires_at <= now]
         for jid in expired_ids:
             del self._jobs[jid]

@@ -9,9 +9,7 @@ from supacrawl.services.scrape import (
 class TestAssessContentQuality:
     """Unit tests for _assess_content_quality — no network, no browser."""
 
-    # ------------------------------------------------------------------
     # HARD: binary / garbage bodies
-    # ------------------------------------------------------------------
 
     def test_binary_body_returns_hard_reason(self) -> None:
         """A body with >30% non-printable chars must return a HARD-prefixed reason."""
@@ -41,9 +39,7 @@ class TestAssessContentQuality:
         # Whitespace chars do not count — should not trip the binary check.
         assert result is None or not result.startswith("HARD:")
 
-    # ------------------------------------------------------------------
     # SOFT: printable but suspect structure / density
-    # ------------------------------------------------------------------
 
     def test_missing_structure_returns_soft_reason(self) -> None:
         """Printable HTML with no recognised structure tags should return a SOFT reason."""
@@ -61,9 +57,7 @@ class TestAssessContentQuality:
         assert result is not None
         assert result.startswith("SOFT:")
 
-    # ------------------------------------------------------------------
     # None: normal content passes
-    # ------------------------------------------------------------------
 
     def test_normal_article_html_returns_none(self) -> None:
         """A typical article page should pass all quality checks."""

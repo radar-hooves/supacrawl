@@ -29,9 +29,7 @@ from supacrawl.models import HARD_FAIL_VERDICTS, QualityAssessment, QualityVerdi
 # breaks it. The functions are pure and sys.modules-cached, so the call-time cost
 # is a dict lookup.
 
-# ---------------------------------------------------------------------------
 # Reference-free metric primitives (shared with benchmark.metrics)
-# ---------------------------------------------------------------------------
 
 # Word-spacing sanity. A token longer than this many characters that is pure
 # ASCII letters is almost certainly a fused word run from a PDF-extraction
@@ -205,9 +203,7 @@ def word_spacing(markdown: str) -> float | None:
     return max(0.0, 1.0 - ratio / _WORD_SPACING_FULL_PENALTY_RATIO)
 
 
-# ---------------------------------------------------------------------------
 # Crawler-tarpit / link-maze detection
-# ---------------------------------------------------------------------------
 # Nepenthes/iocaine-style AI-crawler tarpits serve real HTTP 200s with a
 # plausible word count, so the density gate above waves them through — the
 # tell is structural, not textual: every link on the page is a freshly minted
@@ -350,9 +346,7 @@ def link_maze_signal(markdown: str, page_url: str | None) -> tuple[float, float,
     return descendant_ratio, generated_ratio, same_host
 
 
-# ---------------------------------------------------------------------------
 # Runtime quality assessment (gate-then-grade)
-# ---------------------------------------------------------------------------
 
 # Below this word count a page is "thin": not enough prose to be a useful answer.
 # Matches the floor used elsewhere for platform/CAPTCHA thin-content checks.

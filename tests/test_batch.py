@@ -24,9 +24,7 @@ from supacrawl.cli.batch import _parse_urls_from_text, _write_directory
 from supacrawl.models import ScrapeData, ScrapeMetadata, ScrapeResult
 from supacrawl.services.batch import BatchScrapeResult, BatchURLResult, run_batch_scrape
 
-# ---------------------------------------------------------------------------
 # Helpers
-# ---------------------------------------------------------------------------
 
 
 def _make_scrape_result(url: str, success: bool = True) -> ScrapeResult:
@@ -57,9 +55,7 @@ def _make_mock_scrape_service(results: dict[str, ScrapeResult]) -> MagicMock:
     return mock
 
 
-# ---------------------------------------------------------------------------
 # Task 1 — URL-list parsing
-# ---------------------------------------------------------------------------
 
 
 class TestParseUrlsFromText:
@@ -104,9 +100,7 @@ class TestParseUrlsFromText:
         assert _parse_urls_from_text(text) == ["https://a.com", "https://b.com"]
 
 
-# ---------------------------------------------------------------------------
 # Task 2 — run_batch_scrape with mocked ScrapeService
-# ---------------------------------------------------------------------------
 
 
 class TestRunBatchScrapeAllSucceed:
@@ -299,9 +293,7 @@ class TestRunBatchScrapeEmptyInput:
         service.scrape.assert_not_called()
 
 
-# ---------------------------------------------------------------------------
 # Task 3 — Directory mode manifest helper
-# ---------------------------------------------------------------------------
 
 
 class TestWriteDirectory:
@@ -389,9 +381,7 @@ class TestWriteDirectory:
         assert len(md_files) == 0
 
 
-# ---------------------------------------------------------------------------
 # Task 4 — CLI exit-code contract via CliRunner
-# ---------------------------------------------------------------------------
 
 
 class TestBatchCliExitCodes:

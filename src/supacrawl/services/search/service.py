@@ -11,6 +11,7 @@ Provider chain can be configured via:
 """
 
 import asyncio
+import contextlib
 import logging
 import os
 import time
@@ -125,7 +126,7 @@ class _RateLimiter:
         try:
             await asyncio.wait_for(self._semaphore.acquire(), timeout=effective_timeout)
         except TimeoutError:
-            raise asyncio.TimeoutError(
+            raise TimeoutError(
                 f"Search rate limit queue timeout ({effective_timeout}s). Too many concurrent search requests."
             ) from None
 
@@ -440,7 +441,7 @@ class SearchService:
                             correlation_id=correlation_id,
                             filters=filters,
                         )
-                except asyncio.TimeoutError as e:
+                except TimeoutError as e:
                     msg = (
                         _describe_error(e)
                         if str(e).strip()
@@ -523,7 +524,7 @@ class SearchService:
                     success=False,
                     data=[],
                     error=msg,
-                    unresponsive_engines=_unresponsive_engines_from_error(e),  # type: ignore[arg-type]
+                    unresponsive_engines=_unresponsive_engines_from_error(e),
                 ),
                 query,
                 telemetry_started,
@@ -581,7 +582,7 @@ class SearchService:
             try:
                 result = await scrape_service.scrape(
                     url=item.url,
-                    formats=list(formats),  # type: ignore[arg-type]
+                    formats=list(formats),
                     only_main_content=options.only_main_content,
                 )
                 if result.success and result.data:
@@ -603,18 +604,14 @@ class SearchService:
         async def scrape_indexed(idx: int, item: SearchResultItem) -> tuple[int, SearchResultItem]:
             return idx, await scrape_one(item)
 
-        completed = 0
         indexed_results: dict[int, SearchResultItem] = {}
         tasks = [scrape_indexed(i, r) for i, r in enumerate(results)]
 
-        for coro in asyncio.as_completed(tasks):
+        for completed, coro in enumerate(asyncio.as_completed(tasks), start=1):
             idx, result_item = await coro
             indexed_results[idx] = result_item
-            completed += 1
             if progress_callback:
-                try:
+                with contextlib.suppress(Exception):  # Don't let callback errors break scraping
                     await progress_callback(completed, total, result_item.url)
-                except Exception:
-                    pass  # Don't let callback errors break scraping
 
         return [indexed_results[i] for i in range(total)]

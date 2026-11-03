@@ -25,9 +25,7 @@ from supacrawl.services.content_filter import (
 )
 from supacrawl.services.converter import MarkdownConverter
 
-# ---------------------------------------------------------------------------
 # Fixtures
-# ---------------------------------------------------------------------------
 
 ARTICLE_HTML = """
 <html><body>
@@ -97,9 +95,7 @@ def _soup(html: str) -> BeautifulSoup:
     return BeautifulSoup(html, "html.parser")
 
 
-# ---------------------------------------------------------------------------
 # Density helpers
-# ---------------------------------------------------------------------------
 
 
 class TestIsDenseEnough:
@@ -148,9 +144,7 @@ class TestIsDenseEnough:
             assert not result_high
 
 
-# ---------------------------------------------------------------------------
 # get_text separator (heading/paragraph sibling seam)
-# ---------------------------------------------------------------------------
 
 
 class TestGetTextSeparator:
@@ -184,9 +178,7 @@ class TestGetTextSeparator:
         assert "pythonlanguage" not in tokens
 
 
-# ---------------------------------------------------------------------------
 # Section splitting
-# ---------------------------------------------------------------------------
 
 
 class TestSplitIntoSections:
@@ -219,9 +211,7 @@ class TestSplitIntoSections:
             assert isinstance(sec, Tag)
 
 
-# ---------------------------------------------------------------------------
 # BM25 pruning
-# ---------------------------------------------------------------------------
 
 
 class TestBm25PruneSections:
@@ -268,9 +258,7 @@ class TestBm25PruneSections:
         assert len(kept) == len(sections)
 
 
-# ---------------------------------------------------------------------------
 # Strategy 1 (CSS heuristic)
-# ---------------------------------------------------------------------------
 
 
 class TestStrategy1:
@@ -291,9 +279,7 @@ class TestStrategy1:
         assert result is None
 
 
-# ---------------------------------------------------------------------------
 # Strategy 2 (readability)
-# ---------------------------------------------------------------------------
 
 
 class TestStrategy2:
@@ -315,9 +301,7 @@ class TestStrategy2:
         assert "Article" in result.get_text() or len(result.get_text().split()) > 0
 
 
-# ---------------------------------------------------------------------------
 # Strategy 3 (BM25 body fallback)
-# ---------------------------------------------------------------------------
 
 
 class TestStrategy3:
@@ -341,9 +325,7 @@ class TestStrategy3:
         assert len(result.get_text().split()) > 0
 
 
-# ---------------------------------------------------------------------------
 # Cascade: extract()
-# ---------------------------------------------------------------------------
 
 
 class TestExtract:
@@ -450,9 +432,7 @@ class TestExtract:
         assert result_high is not None
 
 
-# ---------------------------------------------------------------------------
 # Converter integration: content_mode / query round-trip
-# ---------------------------------------------------------------------------
 
 
 class TestConverterIntegration:
@@ -492,9 +472,7 @@ class TestConverterIntegration:
         assert "Main Article Title" in md
 
 
-# ---------------------------------------------------------------------------
 # Regression: BM25 zip alignment with empty sections (finding #1)
-# ---------------------------------------------------------------------------
 
 
 EMPTY_SECTION_HTML = """
@@ -569,9 +547,7 @@ class TestBm25ZipAlignment:
         assert "first real section" in combined or "second real section" in combined
 
 
-# ---------------------------------------------------------------------------
 # Regression: thin-but-valid main at default mode (finding #2)
-# ---------------------------------------------------------------------------
 
 
 THIN_MAIN_HTML = """

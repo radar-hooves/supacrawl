@@ -64,7 +64,7 @@ def _make_map_complete_event() -> MapEvent:
     )
 
 
-async def _mock_map_generator(**kwargs: Any) -> AsyncGenerator[MapEvent, None]:
+async def _mock_map_generator(**kwargs: Any) -> AsyncGenerator[MapEvent]:
     """Async generator yielding a single complete event."""
     yield _make_map_complete_event()
 

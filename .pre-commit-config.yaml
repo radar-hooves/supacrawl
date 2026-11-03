@@ -131,6 +131,14 @@ repos:
         pass_filenames: false
         files: ^(pyproject\.toml|uv\.lock)$
 
+      # ruff-format owns layout; a banner marks a module that wants splitting.
+      - id: no-section-banners
+        name: 'python - No section-banner comments'
+        entry: '^\s*#\s*[-=#*]{5,}'
+        language: pygrep
+        types: [python]
+        exclude: ^\.github/
+
       - id: mypy
         name: 'python - Type-check with mypy'
         entry: uv run mypy src

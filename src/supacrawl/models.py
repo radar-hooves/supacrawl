@@ -1,21 +1,17 @@
 """Data models for supacrawl."""
 
-from datetime import datetime, timezone
-from enum import Enum
+from datetime import UTC, datetime
+from enum import StrEnum
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-# =============================================================================
 # Device Emulation
-# =============================================================================
 
 # Default device used by the --mobile shortcut
 DEFAULT_MOBILE_DEVICE = "iPhone 14"
 
-# =============================================================================
 # Locale/Location Configuration
-# =============================================================================
 
 # Default country-to-locale mappings
 COUNTRY_DEFAULTS: dict[str, tuple[str, str]] = {
@@ -74,7 +70,7 @@ class LocaleConfig(BaseModel):
     timezone: str | None = None
 
     @classmethod
-    def from_country(cls, country: str) -> "LocaleConfig":
+    def from_country(cls, country: str) -> LocaleConfig:
         """Create config with sensible defaults for a country.
 
         Args:
@@ -206,7 +202,7 @@ class ScrapeMetadata(BaseModel):
             return s.replace("\\", "\\\\").replace('"', '\\"')
 
         source = url or self.source_url or ""
-        timestamp = scraped_at or datetime.now(timezone.utc)
+        timestamp = scraped_at or datetime.now(UTC)
         lines = [
             "---",
             f'url: "{escape_yaml(source)}"',
@@ -345,7 +341,7 @@ class StructuredData(BaseModel):
     next_data: dict[str, Any] | None = None  # Next.js __NEXT_DATA__ hydration payload
 
 
-class QualityVerdict(str, Enum):
+class QualityVerdict(StrEnum):
     """Classification of how usable a scrape result is.
 
     The taxonomy is gate-then-grade: the verdict is resolved first from cheap
@@ -471,7 +467,7 @@ class QualityAssessment(BaseModel):
     tried: list[AttemptRecord] = Field(default_factory=list)  # each strategy run, in order, and how it failed
 
     @model_validator(mode="after")
-    def _guarantee_suggestion(self) -> "QualityAssessment":
+    def _guarantee_suggestion(self) -> QualityAssessment:
         """Fill ``suggestion`` for any non-OK verdict that arrived without one.
 
         The tool contract promises a caller that a non-ok verdict always carries a
@@ -582,12 +578,10 @@ class CrawlEvent(BaseModel):
     change_summary: dict[str, int] | None = None  # Crawl-level change tracking summary
 
 
-# =============================================================================
 # Search Models
-# =============================================================================
 
 
-class SearchSourceType(str, Enum):
+class SearchSourceType(StrEnum):
     """Search source types."""
 
     WEB = "web"
@@ -690,9 +684,7 @@ class SearchResult(BaseModel):
     all_recent_empty: bool = False
 
 
-# =============================================================================
 # Extract Models
-# =============================================================================
 
 
 class ExtractResultItem(BaseModel):
@@ -712,9 +704,7 @@ class ExtractResult(BaseModel):
     error: str | None = None
 
 
-# =============================================================================
 # Agent Models
-# =============================================================================
 
 
 class AgentEvent(BaseModel):

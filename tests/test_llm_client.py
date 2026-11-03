@@ -106,9 +106,11 @@ class TestLLMClient:
         client = LLMClient(ollama_config)
 
         # Mock the chat method to return invalid JSON
-        with patch.object(client, "chat", return_value="not valid json at all"):
-            with pytest.raises(ProviderError) as exc_info:
-                await client.chat_json([{"role": "user", "content": "test"}])
+        with (
+            patch.object(client, "chat", return_value="not valid json at all"),
+            pytest.raises(ProviderError) as exc_info,
+        ):
+            await client.chat_json([{"role": "user", "content": "test"}])
 
         assert "JSON" in exc_info.value.message
 
@@ -404,9 +406,11 @@ class TestLLMClientReasoningReplies:
         client = LLMClient(anthropic_config)
         mock_http = self._http({"content": [{"type": "thinking", "thinking": "..."}]})
 
-        with patch.object(client, "_get_http_client", return_value=mock_http):
-            with pytest.raises(ProviderError) as exc_info:
-                await client.chat([{"role": "user", "content": "Hello"}])
+        with (
+            patch.object(client, "_get_http_client", return_value=mock_http),
+            pytest.raises(ProviderError) as exc_info,
+        ):
+            await client.chat([{"role": "user", "content": "Hello"}])
 
         assert "no text content" in exc_info.value.message.lower()
 
@@ -442,9 +446,11 @@ class TestLLMClientReasoningReplies:
         client = LLMClient(openai_config)
         mock_http = self._http({"choices": [{"message": {"content": None, "tool_calls": []}}]})
 
-        with patch.object(client, "_get_http_client", return_value=mock_http):
-            with pytest.raises(ProviderError) as exc_info:
-                await client.chat([{"role": "user", "content": "Hello"}])
+        with (
+            patch.object(client, "_get_http_client", return_value=mock_http),
+            pytest.raises(ProviderError) as exc_info,
+        ):
+            await client.chat([{"role": "user", "content": "Hello"}])
 
         assert "no text content" in exc_info.value.message.lower()
 

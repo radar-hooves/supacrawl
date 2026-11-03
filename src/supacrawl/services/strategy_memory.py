@@ -30,7 +30,7 @@ import json
 import logging
 import os
 import random
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, NamedTuple
 from urllib.parse import urlparse
@@ -179,7 +179,7 @@ class StrategyStore:
         for domain, payload in raw.items():
             try:
                 out[domain] = DomainStrategy.model_validate(payload)
-            except Exception:  # noqa: BLE001 — skip a single corrupt row, keep the rest
+            except Exception:
                 continue
         return out
 
@@ -217,7 +217,7 @@ class StrategyStore:
         champion = self._load().get(domain)
         if champion is None:
             return None
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         if self._is_expired(champion, now=now):
             self.forget(domain)
             return None
@@ -279,7 +279,7 @@ class StrategyStore:
         if verdict != "ok" or score < _MIN_RECORD_SCORE:
             return
 
-        now_iso = datetime.now(timezone.utc).isoformat()
+        now_iso = datetime.now(UTC).isoformat()
         observed = DomainStrategy(
             engine=engine,
             stealth=stealth,

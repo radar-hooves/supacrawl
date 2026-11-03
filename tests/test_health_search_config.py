@@ -17,9 +17,7 @@ from supacrawl.mcp.tools.health import _get_search_config
 
 pytestmark = pytest.mark.mcp
 
-# ---------------------------------------------------------------------------
 # Helpers
-# ---------------------------------------------------------------------------
 
 _SETTINGS_PATH = "supacrawl.mcp.tools.health.settings"
 
@@ -67,9 +65,7 @@ def _settings_kwargs(
     }
 
 
-# ---------------------------------------------------------------------------
 # Static path (no live search service)
-# ---------------------------------------------------------------------------
 
 
 class TestGetSearchConfigStatic:
@@ -198,9 +194,7 @@ class TestGetSearchConfigStatic:
         assert result["brave_api_key_configured"] is True
 
 
-# ---------------------------------------------------------------------------
 # Live path (with a SearchService mock)
-# ---------------------------------------------------------------------------
 
 
 class TestGetSearchConfigLive:

@@ -50,6 +50,12 @@ def bound_words(text: str, max_words: int) -> str:
     return " ".join(kept) + "\u2026"
 
 
+def _loads(text: str) -> dict[str, Any]:
+    """Parse JSON text the caller expects to be an object."""
+    parsed: dict[str, Any] = json.loads(text)
+    return parsed
+
+
 class LLMClient:
     """
     Unified async LLM client that abstracts provider differences.
@@ -88,7 +94,7 @@ class LLMClient:
     async def _get_ollama_client(self) -> Any:
         """Get or create Ollama AsyncClient."""
         if self._ollama_client is None:
-            from ollama import AsyncClient  # type: ignore[import-untyped]
+            from ollama import AsyncClient
 
             self._ollama_client = AsyncClient(
                 host=self._config.base_url,
@@ -216,7 +222,7 @@ class LLMClient:
         """Parse a JSON reply, falling back to a fenced code block inside it."""
         correlation_id = generate_correlation_id()
         try:
-            return json.loads(content)
+            return _loads(content)
         except json.JSONDecodeError:
             parsed = self._extract_json(content)
             if parsed is not None:
@@ -313,7 +319,7 @@ class LLMClient:
                 error=str(exc),
             )
             raise ProviderError(
-                f"Ollama chat failed: {str(exc)}",
+                f"Ollama chat failed: {exc!s}",
                 provider="ollama",
                 correlation_id=correlation_id,
                 context={"model": self._config.model, "error": str(exc)},
@@ -369,7 +375,7 @@ class LLMClient:
             ) from exc
         except Exception as exc:
             raise ProviderError(
-                f"OpenAI request failed: {str(exc)}",
+                f"OpenAI request failed: {exc!s}",
                 provider="openai",
                 correlation_id=correlation_id,
             ) from exc
@@ -432,7 +438,7 @@ class LLMClient:
             ) from exc
         except Exception as exc:
             raise ProviderError(
-                f"Anthropic request failed: {str(exc)}",
+                f"Anthropic request failed: {exc!s}",
                 provider="anthropic",
                 correlation_id=correlation_id,
             ) from exc
@@ -451,7 +457,7 @@ class LLMClient:
 
         # Try direct parse first
         try:
-            return json.loads(content)
+            return _loads(content)
         except json.JSONDecodeError:
             pass
 
@@ -461,7 +467,7 @@ class LLMClient:
             end = content.find("```", start)
             if end > start:
                 try:
-                    return json.loads(content[start:end].strip())
+                    return _loads(content[start:end].strip())
                 except json.JSONDecodeError:
                     pass
 
@@ -474,7 +480,7 @@ class LLMClient:
             end = content.find("```", start)
             if end > start:
                 try:
-                    return json.loads(content[start:end].strip())
+                    return _loads(content[start:end].strip())
                 except json.JSONDecodeError:
                     pass
 

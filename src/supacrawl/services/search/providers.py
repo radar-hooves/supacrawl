@@ -8,8 +8,8 @@ that orchestrates fallback between providers on failure.
 import logging
 import time
 from dataclasses import dataclass, field
-from enum import Enum
-from typing import Protocol, runtime_checkable
+from enum import StrEnum
+from typing import Any, Protocol, runtime_checkable
 
 from supacrawl.models import SearchFilters, SearchResultItem
 
@@ -19,12 +19,10 @@ LOGGER = logging.getLogger(__name__)
 ALERT_DEBOUNCE_SECONDS: float = 300.0
 
 
-# ---------------------------------------------------------------------------
 # Provider status tracking
-# ---------------------------------------------------------------------------
 
 
-class ProviderStatus(str, Enum):
+class ProviderStatus(StrEnum):
     """Runtime health status of a search provider."""
 
     HEALTHY = "healthy"
@@ -148,9 +146,9 @@ class ProviderHealth:
         """Cache the remaining-credit count reported by a provider response header."""
         self.remaining_credits = remaining
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         """Serialise to dict for health endpoint."""
-        result: dict = {
+        result: dict[str, Any] = {
             "status": self.status.value,
             "requests_made": self.requests_made,
             "consecutive_failures": self.consecutive_failures,
@@ -162,9 +160,7 @@ class ProviderHealth:
         return result
 
 
-# ---------------------------------------------------------------------------
 # Provider protocol
-# ---------------------------------------------------------------------------
 
 
 @runtime_checkable
@@ -203,9 +199,7 @@ class SearchProvider(Protocol):
         ...
 
 
-# ---------------------------------------------------------------------------
 # Fallback triggers
-# ---------------------------------------------------------------------------
 
 # HTTP status codes that always indicate provider exhaustion (should fallback)
 FALLBACK_HTTP_CODES = frozenset(
@@ -308,15 +302,10 @@ def is_fallback_error(error: BaseException) -> bool:
         return True
 
     # Generic timeout
-    if isinstance(error, TimeoutError):
-        return True
-
-    return False
+    return bool(isinstance(error, TimeoutError))
 
 
-# ---------------------------------------------------------------------------
 # Provider chain
-# ---------------------------------------------------------------------------
 
 
 @dataclass
@@ -393,7 +382,7 @@ class ProviderChain:
             return False
         return self.last_provider not in self.configured_names
 
-    def get_health(self) -> dict[str, dict]:
+    def get_health(self) -> dict[str, dict[str, Any]]:
         """Get health status for all providers (for health endpoint).
 
         For providers that expose remaining quota in response headers (currently

@@ -2,6 +2,7 @@
 
 import asyncio
 from pathlib import Path
+from typing import Any
 
 import click
 
@@ -142,7 +143,7 @@ def search(
     )
     search_filters = None if filters_obj.is_empty() else filters_obj
 
-    async def run():
+    async def run() -> Any:
         # Create scrape service if scraping is requested
         scrape_service = None
         scrape_options = None
@@ -249,7 +250,7 @@ def llm_extract(
         with open(schema) as f:
             schema_dict = json.load(f)
 
-    async def run():
+    async def run() -> Any:
         from supacrawl.services.strategy_memory import StrategyStore
         from supacrawl.telemetry import MetricsSink
 
@@ -362,7 +363,7 @@ def agent_cmd(
         with open(schema) as f:
             schema_dict = json.load(f)
 
-    async def run():
+    async def run() -> Any:
         from supacrawl.services.strategy_memory import StrategyStore
         from supacrawl.telemetry import MetricsSink
 

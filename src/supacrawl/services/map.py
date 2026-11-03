@@ -3,7 +3,8 @@
 import asyncio
 import logging
 from collections import deque
-from typing import AsyncGenerator, Literal
+from collections.abc import AsyncGenerator
+from typing import Literal
 from urllib.parse import urljoin, urlparse
 
 import httpx
@@ -95,7 +96,7 @@ class MapService:
         allow_external_links: bool = False,
         ignore_cache: bool = False,
         headers: dict[str, str] | None = None,
-    ) -> AsyncGenerator[MapEvent, None]:
+    ) -> AsyncGenerator[MapEvent]:
         """Map a website and discover URLs, yielding progress events.
 
         Args:
@@ -283,9 +284,9 @@ class MapService:
             ignore_cache=ignore_cache,
             headers=headers,
         ):
-            if event.type == "complete" and event.result is not None:
-                result = event.result
-            elif event.type == "error" and event.result is not None:
+            if (event.type == "complete" and event.result is not None) or (
+                event.type == "error" and event.result is not None
+            ):
                 result = event.result
         return result
 
@@ -377,7 +378,7 @@ class MapService:
         include_subdomains: bool,
         allow_external_links: bool = False,
         headers: dict[str, str] | None = None,
-    ) -> AsyncGenerator[MapEvent, None]:
+    ) -> AsyncGenerator[MapEvent]:
         """BFS crawl to discover URLs, yielding progress events.
 
         Uses parallel processing with semaphore to crawl multiple URLs concurrently.
@@ -448,9 +449,8 @@ class MapService:
                     visited.add(url)
 
                     # Check domain boundaries (unless external links allowed)
-                    if not allow_external_links:
-                        if not self._is_same_domain(url, domain, include_subdomains):
-                            continue
+                    if not allow_external_links and not self._is_same_domain(url, domain, include_subdomains):
+                        continue
 
                     # Track domain for logging
                     url_domain = urlparse(url).netloc

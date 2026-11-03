@@ -36,7 +36,7 @@ def _serve_probe_page() -> tuple[http.server.HTTPServer, int]:
     """A loopback HTTP server so the smoke test needs no external network."""
 
     class Handler(http.server.BaseHTTPRequestHandler):
-        def do_GET(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler's contract
+        def do_GET(self) -> None:
             self.send_response(200)
             self.send_header("Content-Type", "text/html")
             self.send_header("Content-Length", str(len(_PROBE_BODY)))

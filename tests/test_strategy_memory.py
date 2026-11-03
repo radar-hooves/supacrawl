@@ -9,7 +9,7 @@ back, prefer a cheaper equal strategy, crash on a block, decay on TTL — and th
 from __future__ import annotations
 
 import random
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -148,7 +148,7 @@ def test_ttl_expiry_forgets_stale_champion(tmp_path) -> None:
         ewma_score=80,
         samples=5,
         last_verdict="ok",
-        updated_at=(datetime.now(timezone.utc) - timedelta(days=30)).isoformat(),
+        updated_at=(datetime.now(UTC) - timedelta(days=30)).isoformat(),
     )
     store._save({"x.example": stale})
     assert store.seed("x.example") is None  # expired -> re-learn

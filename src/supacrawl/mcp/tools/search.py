@@ -5,6 +5,7 @@ Provides web search functionality with optional result scraping.
 """
 
 import asyncio
+import contextlib
 from typing import Annotated, Any, Literal
 
 import httpx
@@ -66,10 +67,8 @@ async def _fetch_url_metadata(url: str, timeout: float = 5.0) -> dict[str, Any]:
                 metadata["content_type"] = headers["content-type"].split(";")[0].strip()
 
             if "content-length" in headers:
-                try:
+                with contextlib.suppress(ValueError):
                     metadata["content_length"] = int(headers["content-length"])
-                except ValueError:
-                    pass
 
             if "last-modified" in headers:
                 metadata["last_modified"] = headers["last-modified"]

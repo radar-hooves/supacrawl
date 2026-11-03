@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -118,7 +118,7 @@ def test_cancel_cancels_asyncio_task(store: JobStore) -> None:
 def test_cleanup_expired_removes_old_jobs(store: JobStore) -> None:
     job = store.create_job()
     # Force expiry in the past.
-    store._jobs[job.id].expires_at = datetime.now(timezone.utc) - timedelta(seconds=1)
+    store._jobs[job.id].expires_at = datetime.now(UTC) - timedelta(seconds=1)
 
     removed = store.cleanup_expired()
     assert removed == 1
@@ -134,7 +134,7 @@ def test_cleanup_preserves_non_expired(store: JobStore) -> None:
 
 def test_an_expired_job_is_dropped_when_the_next_job_is_created(store: JobStore) -> None:
     old = store.create_job()
-    store._jobs[old.id].expires_at = datetime.now(timezone.utc) - timedelta(seconds=1)
+    store._jobs[old.id].expires_at = datetime.now(UTC) - timedelta(seconds=1)
     store.create_job()
     assert store.get_job(old.id) is None
 

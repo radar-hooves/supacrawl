@@ -93,14 +93,18 @@ class TestAssertSafeUrl:
         assert_safe_url("https://internal.corp/docs/")
 
     def test_rfc1918_ip_literal_rejected_in_strict_mode(self) -> None:
-        with patch.dict(os.environ, {"SUPACRAWL_BLOCK_PRIVATE_NETWORKS": "1"}):
-            with pytest.raises(ValidationError, match="blocked"):
-                assert_safe_url("http://192.168.1.10/docs/")
+        with (
+            patch.dict(os.environ, {"SUPACRAWL_BLOCK_PRIVATE_NETWORKS": "1"}),
+            pytest.raises(ValidationError, match="blocked"),
+        ):
+            assert_safe_url("http://192.168.1.10/docs/")
 
     def test_metadata_still_rejected_in_strict_mode(self) -> None:
-        with patch.dict(os.environ, {"SUPACRAWL_BLOCK_PRIVATE_NETWORKS": "1"}):
-            with pytest.raises(ValidationError, match="blocked"):
-                assert_safe_url("http://169.254.169.254/latest/meta-data/")
+        with (
+            patch.dict(os.environ, {"SUPACRAWL_BLOCK_PRIVATE_NETWORKS": "1"}),
+            pytest.raises(ValidationError, match="blocked"),
+        ):
+            assert_safe_url("http://169.254.169.254/latest/meta-data/")
 
 
 class TestParserDivergenceReject:
@@ -123,13 +127,15 @@ class TestParserDivergenceReject:
         ],
     )
     def test_parser_divergence_urls_refused(self, url: str) -> None:
-        with pytest.raises(ValidationError, match="percent-encode|control character|interpret"):
+        with pytest.raises(ValidationError, match=r"percent-encode|control character|interpret"):
             assert_safe_url(url)
 
     def test_resolve_and_pin_refuses_backslash_before_resolving(self) -> None:
-        with patch("supacrawl.services.url_guard.socket.getaddrinfo") as mock_resolve:
-            with pytest.raises(ValidationError):
-                resolve_and_pin("http://127.0.0.1\\@example.com/")
+        with (
+            patch("supacrawl.services.url_guard.socket.getaddrinfo") as mock_resolve,
+            pytest.raises(ValidationError),
+        ):
+            resolve_and_pin("http://127.0.0.1\\@example.com/")
         mock_resolve.assert_not_called()
 
     def test_percent_encoded_backslash_is_allowed(self) -> None:
@@ -211,15 +217,16 @@ class TestResolveAndPin:
 
     def test_hostname_resolving_to_metadata_is_refused(self) -> None:
         """The attack the IP-literal check cannot see: a name pointing at IMDS."""
-        with self._stub_resolver("169.254.169.254"):
-            with pytest.raises(ValidationError, match="169.254.169.254"):
-                resolve_and_pin("http://totally-innocent.example.com/latest/meta-data/")
+        with self._stub_resolver("169.254.169.254"), pytest.raises(ValidationError, match=r"169\.254\.169\.254"):
+            resolve_and_pin("http://totally-innocent.example.com/latest/meta-data/")
 
     def test_hostname_resolving_to_ipv6_link_local_is_refused(self) -> None:
         infos = [(socket.AF_INET6, socket.SOCK_STREAM, 6, "", ("fe80::1", 443, 0, 0))]
-        with patch("supacrawl.services.url_guard.socket.getaddrinfo", return_value=infos):
-            with pytest.raises(ValidationError, match="link-local"):
-                resolve_and_pin("http://evil.example.com/")
+        with (
+            patch("supacrawl.services.url_guard.socket.getaddrinfo", return_value=infos),
+            pytest.raises(ValidationError, match="link-local"),
+        ):
+            resolve_and_pin("http://evil.example.com/")
 
     def test_any_blocked_address_refuses_the_whole_fetch(self) -> None:
         """A name answering with both a public and an internal address is refused.
@@ -227,17 +234,21 @@ class TestResolveAndPin:
         Picking the address that passes would be exactly the rebinding attack:
         the resolver is free to hand the connection the other one.
         """
-        with self._stub_resolver("93.184.216.34", "169.254.169.254"):
-            with pytest.raises(ValidationError, match="169.254.169.254"):
-                resolve_and_pin("https://rebind.example.com/")
+        with (
+            self._stub_resolver("93.184.216.34", "169.254.169.254"),
+            pytest.raises(ValidationError, match=r"169\.254\.169\.254"),
+        ):
+            resolve_and_pin("https://rebind.example.com/")
 
     def test_unresolvable_host_is_refused(self) -> None:
-        with patch(
-            "supacrawl.services.url_guard.socket.getaddrinfo",
-            side_effect=socket.gaierror("nodename nor servname"),
+        with (
+            patch(
+                "supacrawl.services.url_guard.socket.getaddrinfo",
+                side_effect=socket.gaierror("nodename nor servname"),
+            ),
+            pytest.raises(ValidationError, match="Cannot resolve"),
         ):
-            with pytest.raises(ValidationError, match="Cannot resolve"):
-                resolve_and_pin("https://nx.example.com/")
+            resolve_and_pin("https://nx.example.com/")
 
     def test_private_address_allowed_by_default(self) -> None:
         """Internal documentation sites stay crawlable: RFC1918 is not blocked by default."""
@@ -247,34 +258,47 @@ class TestResolveAndPin:
         assert address == "192.168.1.10"
 
     def test_private_address_refused_in_strict_mode(self) -> None:
-        with self._stub_resolver("192.168.1.10"), patch.dict(os.environ, {"SUPACRAWL_BLOCK_PRIVATE_NETWORKS": "1"}):
-            with pytest.raises(ValidationError, match="private / loopback"):
-                resolve_and_pin("http://docs.internal.corp/")
+        with (
+            self._stub_resolver("192.168.1.10"),
+            patch.dict(os.environ, {"SUPACRAWL_BLOCK_PRIVATE_NETWORKS": "1"}),
+            pytest.raises(ValidationError, match="private / loopback"),
+        ):
+            resolve_and_pin("http://docs.internal.corp/")
 
     def test_loopback_refused_in_strict_mode(self) -> None:
-        with self._stub_resolver("127.0.0.1"), patch.dict(os.environ, {"SUPACRAWL_BLOCK_PRIVATE_NETWORKS": "1"}):
-            with pytest.raises(ValidationError, match="private / loopback"):
-                resolve_and_pin("http://localhost:8080/")
+        with (
+            self._stub_resolver("127.0.0.1"),
+            patch.dict(os.environ, {"SUPACRAWL_BLOCK_PRIVATE_NETWORKS": "1"}),
+            pytest.raises(ValidationError, match="private / loopback"),
+        ):
+            resolve_and_pin("http://localhost:8080/")
 
     def test_metadata_still_refused_in_strict_mode(self) -> None:
         """Strict mode adds ranges; it never drops the always-blocked ones."""
-        with self._stub_resolver("169.254.169.254"), patch.dict(os.environ, {"SUPACRAWL_BLOCK_PRIVATE_NETWORKS": "1"}):
-            with pytest.raises(ValidationError, match="link-local"):
-                resolve_and_pin("http://evil.example.com/")
+        with (
+            self._stub_resolver("169.254.169.254"),
+            patch.dict(os.environ, {"SUPACRAWL_BLOCK_PRIVATE_NETWORKS": "1"}),
+            pytest.raises(ValidationError, match="link-local"),
+        ):
+            resolve_and_pin("http://evil.example.com/")
 
     def test_bad_scheme_refused_before_any_resolution(self) -> None:
-        with patch("supacrawl.services.url_guard.socket.getaddrinfo") as mock_resolve:
-            with pytest.raises(ValidationError, match="scheme"):
-                resolve_and_pin("file:///etc/passwd")
+        with (
+            patch("supacrawl.services.url_guard.socket.getaddrinfo") as mock_resolve,
+            pytest.raises(ValidationError, match="scheme"),
+        ):
+            resolve_and_pin("file:///etc/passwd")
 
         mock_resolve.assert_not_called()
 
     def test_no_usable_address_is_refused(self) -> None:
         """getaddrinfo answering with no parseable address is refused, not silently passed."""
         infos = [(socket.AF_UNIX, socket.SOCK_STREAM, 0, "", "/tmp/weird.sock")]
-        with patch("supacrawl.services.url_guard.socket.getaddrinfo", return_value=infos):
-            with pytest.raises(ValidationError, match="no usable address"):
-                resolve_and_pin("https://odd.example.com/")
+        with (
+            patch("supacrawl.services.url_guard.socket.getaddrinfo", return_value=infos),
+            pytest.raises(ValidationError, match="no usable address"),
+        ):
+            resolve_and_pin("https://odd.example.com/")
 
 
 class TestPinnedUrl:
@@ -369,9 +393,11 @@ class TestGuardedRequestRedirectChain:
                 raise ValidationError("blocked range (link-local / cloud-metadata)", field="url", value=url)
             return ("93.184.216.34", "example.com")
 
-        with patch("supacrawl.services.url_guard.resolve_and_pin", side_effect=fake_resolve):
-            with pytest.raises(ValidationError, match="link-local"):
-                await guarded_request(client, "GET", "https://example.com/report.pdf")
+        with (
+            patch("supacrawl.services.url_guard.resolve_and_pin", side_effect=fake_resolve),
+            pytest.raises(ValidationError, match="link-local"),
+        ):
+            await guarded_request(client, "GET", "https://example.com/report.pdf")
 
     async def test_each_hop_is_revalidated(self) -> None:
         """Every hop is resolved and validated, not just the first."""
@@ -398,22 +424,26 @@ class TestGuardedRequestRedirectChain:
         """A redirect chain deeper than max_redirects is refused, not followed forever."""
         client, _calls = self._client([(302, {"location": f"https://example.com/n{i}"}) for i in range(3)])
 
-        with patch(
-            "supacrawl.services.url_guard.resolve_and_pin",
-            return_value=("93.184.216.34", "example.com"),
+        with (
+            patch(
+                "supacrawl.services.url_guard.resolve_and_pin",
+                return_value=("93.184.216.34", "example.com"),
+            ),
+            pytest.raises(ValidationError, match="Too many redirects"),
         ):
-            with pytest.raises(ValidationError, match="Too many redirects"):
-                await guarded_request(client, "GET", "https://example.com/start", max_redirects=2)
+            await guarded_request(client, "GET", "https://example.com/start", max_redirects=2)
 
     async def test_redirect_with_no_location_header_is_refused(self) -> None:
         client, _calls = self._client([(302, {})])
 
-        with patch(
-            "supacrawl.services.url_guard.resolve_and_pin",
-            return_value=("93.184.216.34", "example.com"),
+        with (
+            patch(
+                "supacrawl.services.url_guard.resolve_and_pin",
+                return_value=("93.184.216.34", "example.com"),
+            ),
+            pytest.raises(ValidationError, match="no Location header"),
         ):
-            with pytest.raises(ValidationError, match="no Location header"):
-                await guarded_request(client, "GET", "https://example.com/report.pdf")
+            await guarded_request(client, "GET", "https://example.com/report.pdf")
 
     async def test_relative_location_resolves_against_the_logical_url(self) -> None:
         """A relative Location keeps the real hostname, not the pinned-IP request URL.
@@ -462,12 +492,14 @@ class TestGuardedRequestRedirectChain:
             [(302, {"location": "http://[notanip]:80@evil.example.com/"})],
         )
 
-        with patch(
-            "supacrawl.services.url_guard.resolve_and_pin",
-            return_value=("93.184.216.34", "example.com"),
+        with (
+            patch(
+                "supacrawl.services.url_guard.resolve_and_pin",
+                return_value=("93.184.216.34", "example.com"),
+            ),
+            pytest.raises(ValidationError, match="could not be parsed"),
         ):
-            with pytest.raises(ValidationError, match="could not be parsed"):
-                await guarded_request(client, "GET", "https://example.com/report.pdf")
+            await guarded_request(client, "GET", "https://example.com/report.pdf")
 
 
 class TestEmbeddedIPv4InIPv6:
@@ -524,9 +556,11 @@ class TestEmbeddedIPv4InIPv6:
     def test_resolver_answering_with_mapped_metadata_is_refused(self) -> None:
         """The rebinding form: an AAAA answer of IPv4-mapped metadata is refused at resolve."""
         infos = [(socket.AF_INET6, socket.SOCK_STREAM, 6, "", ("::ffff:169.254.169.254", 443, 0, 0))]
-        with patch("supacrawl.services.url_guard.socket.getaddrinfo", return_value=infos):
-            with pytest.raises(ValidationError, match="blocked"):
-                resolve_and_pin("http://sneaky.example.com/")
+        with (
+            patch("supacrawl.services.url_guard.socket.getaddrinfo", return_value=infos),
+            pytest.raises(ValidationError, match="blocked"),
+        ):
+            resolve_and_pin("http://sneaky.example.com/")
 
     @pytest.mark.parametrize(
         "literal",
@@ -567,9 +601,11 @@ class TestEmbeddedIPv4InIPv6:
         see it at all — only the resolve-time check can.
         """
         infos = [(socket.AF_INET6, socket.SOCK_STREAM, 6, "", (literal, 443, 0, 0))]
-        with patch("supacrawl.services.url_guard.socket.getaddrinfo", return_value=infos):
-            with pytest.raises(ValidationError, match="blocked"):
-                resolve_and_pin("http://totally-innocent.example.com/")
+        with (
+            patch("supacrawl.services.url_guard.socket.getaddrinfo", return_value=infos),
+            pytest.raises(ValidationError, match="blocked"),
+        ):
+            resolve_and_pin("http://totally-innocent.example.com/")
 
 
 class TestIdnaUnicodeHostRejected:
@@ -590,9 +626,11 @@ class TestIdnaUnicodeHostRejected:
             assert_safe_url("http://例え.テスト/path")
 
     def test_unicode_host_rejected_before_any_resolution(self) -> None:
-        with patch("supacrawl.services.url_guard.socket.getaddrinfo") as mock_resolve:
-            with pytest.raises(ValidationError, match="non-ASCII"):
-                resolve_and_pin("http://例え.テスト/path")
+        with (
+            patch("supacrawl.services.url_guard.socket.getaddrinfo") as mock_resolve,
+            pytest.raises(ValidationError, match="non-ASCII"),
+        ):
+            resolve_and_pin("http://例え.テスト/path")
         mock_resolve.assert_not_called()
 
     def test_fullwidth_digit_homoglyph_of_metadata_ip_rejected(self) -> None:
@@ -646,9 +684,11 @@ class TestStrictModeRanges:
         ``0.0.0.0/8`` is blocked would defeat strict mode for exactly the
         deployment shape strict mode exists to protect.
         """
-        with patch.dict(os.environ, {"SUPACRAWL_BLOCK_PRIVATE_NETWORKS": "1"}):
-            with pytest.raises(ValidationError, match="private / loopback"):
-                resolve_and_pin("http://[::]/")
+        with (
+            patch.dict(os.environ, {"SUPACRAWL_BLOCK_PRIVATE_NETWORKS": "1"}),
+            pytest.raises(ValidationError, match="private / loopback"),
+        ):
+            resolve_and_pin("http://[::]/")
 
     def test_ipv6_unspecified_reachable_by_default(self) -> None:
         assert_safe_url("http://[::]/")
@@ -670,7 +710,7 @@ class TestGuardedRequestRealSocket:
         received: list[str] = []
 
         class Handler(http.server.BaseHTTPRequestHandler):
-            def do_GET(self) -> None:  # noqa: N802 (BaseHTTPRequestHandler API)
+            def do_GET(self) -> None:
                 received.append(self.headers.get("Host", ""))
                 body = b"OK-REAL-LISTENER"
                 self.send_response(200)

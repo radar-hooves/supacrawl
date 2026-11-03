@@ -29,71 +29,81 @@ class TestHttpInsecureGuard:
         """Binding 0.0.0.0 without a token must exit 1."""
         import supacrawl.mcp.server as srv
 
-        with patch("sys.exit") as mock_exit:
-            with patch("anyio.run"):
-                with patch(self._TOKEN_PATH, None):
-                    with patch.object(
-                        sys,
-                        "argv",
-                        ["supacrawl-mcp", "--transport", "http", "--host", "0.0.0.0"],
-                    ):
-                        srv.main()
+        with (
+            patch("sys.exit") as mock_exit,
+            patch("anyio.run"),
+            patch(self._TOKEN_PATH, None),
+            patch.object(
+                sys,
+                "argv",
+                ["supacrawl-mcp", "--transport", "http", "--host", "0.0.0.0"],
+            ),
+        ):
+            srv.main()
         mock_exit.assert_called_once_with(1)
 
     def test_loopback_no_token_allowed(self) -> None:
         """Binding 127.0.0.1 without a token is permitted (loopback is safe)."""
         import supacrawl.mcp.server as srv
 
-        with patch("sys.exit") as mock_exit:
-            with patch("anyio.run"):
-                with patch(self._TOKEN_PATH, None):
-                    with patch.object(
-                        sys,
-                        "argv",
-                        ["supacrawl-mcp", "--transport", "http", "--host", "127.0.0.1"],
-                    ):
-                        srv.main()
+        with (
+            patch("sys.exit") as mock_exit,
+            patch("anyio.run"),
+            patch(self._TOKEN_PATH, None),
+            patch.object(
+                sys,
+                "argv",
+                ["supacrawl-mcp", "--transport", "http", "--host", "127.0.0.1"],
+            ),
+        ):
+            srv.main()
         mock_exit.assert_not_called()
 
     def test_non_loopback_with_token_allowed(self) -> None:
         """Binding 0.0.0.0 with a token is permitted."""
         import supacrawl.mcp.server as srv
 
-        with patch("sys.exit") as mock_exit:
-            with patch("anyio.run"):
-                with patch(self._TOKEN_PATH, "supersecret"):
-                    with patch.object(
-                        sys,
-                        "argv",
-                        ["supacrawl-mcp", "--transport", "http", "--host", "0.0.0.0"],
-                    ):
-                        srv.main()
+        with (
+            patch("sys.exit") as mock_exit,
+            patch("anyio.run"),
+            patch(self._TOKEN_PATH, "supersecret"),
+            patch.object(
+                sys,
+                "argv",
+                ["supacrawl-mcp", "--transport", "http", "--host", "0.0.0.0"],
+            ),
+        ):
+            srv.main()
         mock_exit.assert_not_called()
 
     def test_non_loopback_insecure_flag_allowed(self) -> None:
         """--insecure bypasses the guard (with a warning, not an exit)."""
         import supacrawl.mcp.server as srv
 
-        with patch("sys.exit") as mock_exit:
-            with patch("anyio.run"):
-                with patch(self._TOKEN_PATH, None):
-                    with patch.object(
-                        sys,
-                        "argv",
-                        ["supacrawl-mcp", "--transport", "http", "--host", "0.0.0.0", "--insecure"],
-                    ):
-                        srv.main()
+        with (
+            patch("sys.exit") as mock_exit,
+            patch("anyio.run"),
+            patch(self._TOKEN_PATH, None),
+            patch.object(
+                sys,
+                "argv",
+                ["supacrawl-mcp", "--transport", "http", "--host", "0.0.0.0", "--insecure"],
+            ),
+        ):
+            srv.main()
         mock_exit.assert_not_called()
 
     def test_stdio_transport_ignores_guard(self) -> None:
         """stdio transport never triggers the non-loopback guard."""
         import supacrawl.mcp.server as srv
 
-        with patch("sys.exit") as mock_exit:
-            with patch("anyio.run"):
-                with patch(self._TOKEN_PATH, None):
-                    with patch.object(sys, "argv", ["supacrawl-mcp"]):
-                        srv.main()
+        with (
+            patch("sys.exit") as mock_exit,
+            patch("anyio.run"),
+            patch(self._TOKEN_PATH, None),
+            patch.object(sys, "argv", ["supacrawl-mcp"]),
+        ):
+            srv.main()
         mock_exit.assert_not_called()
 
     def test_default_host_is_loopback(self) -> None:

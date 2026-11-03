@@ -22,9 +22,7 @@ from supacrawl.config import (
 _REQUIRED_UI_KEYS = {"group", "order", "widget", "help"}
 
 
-# ---------------------------------------------------------------------------
 # x-ui schema contract — the dashboard renders the form from this
-# ---------------------------------------------------------------------------
 
 
 @pytest.mark.unit
@@ -66,9 +64,7 @@ def test_no_secret_field_appears_in_config_schema() -> None:
     assert config_fields.isdisjoint(secret_fields)
 
 
-# ---------------------------------------------------------------------------
 # Store round-trip
-# ---------------------------------------------------------------------------
 
 
 @pytest.mark.unit
@@ -98,9 +94,7 @@ def test_round_trip_preserves_values(tmp_path: Path) -> None:
     assert reloaded.timeout == 30000
 
 
-# ---------------------------------------------------------------------------
 # Precedence: default < stored < env
-# ---------------------------------------------------------------------------
 
 
 @pytest.mark.unit
@@ -138,9 +132,7 @@ def test_env_bool_coercion(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> N
     assert cfg.strategy_memory is False
 
 
-# ---------------------------------------------------------------------------
 # set_config_value
-# ---------------------------------------------------------------------------
 
 
 @pytest.mark.unit
@@ -172,9 +164,7 @@ def test_set_config_value_rejects_out_of_range(tmp_path: Path) -> None:
         set_config_value("timeout", "10", path=tmp_path / "config.toml")  # below ge=1000
 
 
-# ---------------------------------------------------------------------------
 # Secrets
-# ---------------------------------------------------------------------------
 
 
 @pytest.mark.unit

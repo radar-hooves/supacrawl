@@ -8,7 +8,7 @@ aggregation, prune, and the "disabled sink == no file" guarantee.
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -107,7 +107,7 @@ def test_reader_since_filter(tmp_path) -> None:
     old = {
         "schema": 1,
         "kind": "scrape",
-        "ts": (datetime.now(timezone.utc) - timedelta(days=10)).isoformat(),
+        "ts": (datetime.now(UTC) - timedelta(days=10)).isoformat(),
         "domain": "old.example",
         "verdict": "ok",
         "success": True,
@@ -115,13 +115,13 @@ def test_reader_since_filter(tmp_path) -> None:
     new = {
         "schema": 1,
         "kind": "scrape",
-        "ts": datetime.now(timezone.utc).isoformat(),
+        "ts": datetime.now(UTC).isoformat(),
         "domain": "new.example",
         "verdict": "ok",
         "success": True,
     }
     path.write_text(json.dumps(old) + "\n" + json.dumps(new) + "\n")
-    recent = list(MetricsReader(metrics_dir=tmp_path).events(since=datetime.now(timezone.utc) - timedelta(days=1)))
+    recent = list(MetricsReader(metrics_dir=tmp_path).events(since=datetime.now(UTC) - timedelta(days=1)))
     assert [e["domain"] for e in recent] == ["new.example"]
 
 
@@ -138,7 +138,7 @@ def test_corrupt_line_is_skipped_not_fatal(tmp_path) -> None:
     path = tmp_path / "events.jsonl"
     path.write_text(
         '{"schema":1,"kind":"scrape","ts":"'
-        + datetime.now(timezone.utc).isoformat()
+        + datetime.now(UTC).isoformat()
         + '","domain":"ok.example","verdict":"ok","success":true}\n{not valid json}\n'
     )
     events = list(MetricsReader(metrics_dir=tmp_path).events())
