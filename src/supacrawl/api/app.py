@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import contextlib
+import importlib
 import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from importlib.metadata import version
+from typing import Any
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
@@ -48,22 +51,20 @@ def create_app() -> FastAPI:
     process configuring logging of its own. A plain PyPI install carries no
     api-common (it is the ``telemetry`` extra) and skips both calls.
     """
-    try:
-        from api_common.telemetry import configure, instrument_app
-    except ImportError:
-        configure = None  # type: ignore[assignment]
-        instrument_app = None  # type: ignore[assignment]
+    telemetry: Any = None
+    with contextlib.suppress(ImportError):
+        telemetry = importlib.import_module("api_common.telemetry")
 
-    if configure is not None:
-        configure(service_name="supacrawl", service_version=version("supacrawl"))
+    if telemetry is not None:
+        telemetry.configure(service_name="supacrawl", service_version=version("supacrawl"))
 
     app = FastAPI(
         title="Supacrawl API",
         description="Firecrawl v2-compatible REST API for supacrawl.",
         lifespan=_lifespan,
     )
-    if instrument_app is not None:
-        instrument_app(app)
+    if telemetry is not None:
+        telemetry.instrument_app(app)
 
     # --- CORS ----------------------------------------------------------
     app.add_middleware(

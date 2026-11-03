@@ -211,6 +211,12 @@ ignore_missing_imports = true
 module = ["fastmcp.*", "mcp.*", "mcp_common.*", "api_common.*", "pydantic_settings.*"]
 ignore_missing_imports = true
 
+# The mcp-dev group is absent on CI and under a PyPI install, so these three modules
+# subclass an untyped (Any) upstream there and typed upstream locally.
+[[tool.mypy.overrides]]
+module = ["supacrawl.mcp.exceptions", "supacrawl.mcp.config", "supacrawl.mcp.server"]
+disallow_subclassing_any = false
+
 [tool.uv]
 environments = ["sys_platform == 'darwin'", "sys_platform == 'linux'"]
 

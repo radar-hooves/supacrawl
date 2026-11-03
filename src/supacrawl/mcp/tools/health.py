@@ -27,6 +27,12 @@ _SEARCH_PROBE_MIN_RESULTS = 3
 _SEARCH_PROBE_TIMEOUT_S = 15.0
 
 
+def _masked(payload: dict[str, Any]) -> dict[str, Any]:
+    """``mask_secrets`` with a declared return type."""
+    masked: dict[str, Any] = mask_secrets(payload)
+    return masked
+
+
 def _get_cache_info() -> dict[str, Any]:
     """Get cache directory statistics if caching is enabled."""
     cache_path = settings.get_cache_path()
@@ -421,7 +427,7 @@ async def supacrawl_health(
         # dicts are assembled from settings, which is exactly where a future
         # field named for a credential would arrive. mcp-servers rule 70
         # §'Allow-list and helper'.
-        return mask_secrets(
+        return _masked(
             {
                 "status": "healthy" if all_healthy else "degraded",
                 "services": service_status,
@@ -440,7 +446,7 @@ async def supacrawl_health(
             }
         )
     except Exception as e:
-        return mask_secrets(
+        return _masked(
             {
                 "status": "unhealthy",
                 "error": str(e),
