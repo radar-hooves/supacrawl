@@ -237,9 +237,34 @@ def test_root_image_declares_its_name_and_runners(app):
 
 def test_runner_labels_must_be_a_list(app):
     repo, _ = app
-    head = change(repo, {"pyproject.toml": '[tool.change]\ndeploy_on = "sample-host"\n'})
+    head = change(
+        repo, {"pyproject.toml": '[tool.change]\ndeploy_on = "sample-host"\n'}
+    )
     with pytest.raises(SystemExit, match="deploy_on must be a list"):
         plan(repo, head, head)
+
+
+def _workers(app, table: str):
+    repo, _ = app
+    head = change(
+        repo,
+        {"backend/pyproject.toml": project("sample-app", "dep", extra=table)},
+    )
+    return head
+
+
+def test_a_member_runs_two_test_workers_unless_it_declares_more(app):
+    repo, head = app
+    assert member(plan(repo, head, head), "sample-app")["workers"] == 2
+    head = _workers(app, "[tool.change]\nworkers = 4\n")
+    assert member(plan(repo, head, head), "sample-app")["workers"] == 4
+
+
+@pytest.mark.parametrize("bad", ["0", "9", '"4"', "true", "2.5"])
+def test_worker_count_must_be_a_small_integer(app, bad):
+    head = _workers(app, f"[tool.change]\nworkers = {bad}\n")
+    with pytest.raises(SystemExit, match="workers must be an integer"):
+        plan(app[0], head, head)
 
 
 def test_pnpm_workspace_without_packages_keeps_the_root(tmp_path):
@@ -613,6 +638,25 @@ def test_a_doc_the_image_copies_builds_it_and_one_it_does_not_does_not(app):
     assert not p["artefacts"][0]["build"]
 
 
+def test_a_doc_an_image_copies_by_glob_builds_it(app):
+    # eight copies docs/development/council-round-*.md and serves each round's report.
+    repo, _ = app
+    dockerfile = (repo / "Dockerfile").read_text()
+    base = change(
+        repo,
+        {
+            "Dockerfile": dockerfile + "COPY docs/development/round-*.md /app/docs/\n",
+            "docs/development/round-9.md": "a\n",
+            "docs/development/notes.md": "n\n",
+        },
+    )
+    mid = change(repo, {"docs/development/round-9.md": "b\n"})
+    p = plan(repo, mid, base)
+    assert p["reasons"]["image:sample-app"] == ["docs/development/round-9.md"]
+    p = plan(repo, change(repo, {"docs/development/notes.md": "m\n"}), mid)
+    assert not p["artefacts"][0]["build"]
+
+
 @pytest.fixture
 def served(app) -> tuple[Path, str]:
     """The app with its factory apt list, its live image built at the returned commit."""
@@ -628,7 +672,9 @@ def served(app) -> tuple[Path, str]:
 
 
 def source_plan(repo: Path, head: str, base: str, live: str, roll: str = "") -> dict:
-    return plan(repo, head, base, f"sample-app={live}", roll=roll, source=("sample-app",))
+    return plan(
+        repo, head, base, f"sample-app={live}", roll=roll, source=("sample-app",)
+    )
 
 
 def test_a_source_run_image_builds_for_no_code_and_waits_on_no_test(served):
@@ -651,7 +697,9 @@ def test_a_source_run_image_builds_for_no_code_and_waits_on_no_test(served):
         "build_on": ["self-hosted", "household", "light"],
         "deploy_on": ["self-hosted", "household", "light"],
     }
-    assert p["reasons"]["image:sample-app"] == ["runs from source; no image input moved"]
+    assert p["reasons"]["image:sample-app"] == [
+        "runs from source; no image input moved"
+    ]
     # The same push, its image not source-run, builds.
     assert plan(repo, head, live, f"sample-app={live}")["artefacts"][0]["build"]
 
@@ -934,7 +982,19 @@ def test_a_container_on_a_hand_tagged_image_is_refused_at_once(host, tmp_path):
 
 def test_copied_reads_the_context_paths_a_dockerfile_takes():
     text = b"FROM x\nCOPY . .\nADD https://e/x /x\nCOPY --from=a /a /a\nCOPY ./src/*.py \\\n  pyproject.toml /app/\n"
-    assert planner.copied(text) == [".", "src", "pyproject.toml"]
+    assert planner.copied(text) == [".", "src/*.py", "pyproject.toml"]
+    assert [planner.stem(s) for s in ("src/*.py", "a/b-*.md", "*.toml", "x")] == [
+        "src",
+        "a",
+        ".",
+        "x",
+    ]
+    assert planner.takes("a/b-9.md", "a/b-*.md") and planner.takes(
+        "src/x/y.py", "src/*"
+    )
+    assert not planner.takes("a/c.md", "a/b-*.md") and not planner.takes(
+        "a/b-9/x", "a/b"
+    )
 
 
 def test_go_version_and_workspace_mark_every_go_member(app):
@@ -1602,7 +1662,9 @@ def test_code_from_a_red_run_ships_with_the_next_green_one_though_it_touched_onl
     out = run_plan_sh(
         repo, tests, [(code, "failure"), (shipped_sha, "success")], tmp_path
     )
-    assert [m["name"] for m in __import__("json").loads(out["deploys"])] == ["sample-app"]
+    assert [m["name"] for m in __import__("json").loads(out["deploys"])] == [
+        "sample-app"
+    ]
     # Control: had the code run been green, the tests-only push ships nothing.
     (tmp_path / "green").mkdir()
     out = run_plan_sh(repo, tests, [(code, "success")], tmp_path / "green")

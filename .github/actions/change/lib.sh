@@ -47,13 +47,14 @@ typecheck() {  # <root> <dir> <name>
   (cd "$cwd" && MYPY_CACHE_DIR=$cache uv run --no-sync mypy "${args[@]}")
 }
 
-# pytest on <path> from <cwd> in the workspace env at <root>, two workers when xdist is there:
-# each worker holds the app (about 0.75 GB), and at four a leg four legs filled the host's 16G
-# runner pool and were OOM-killed (01/11). The path goes absolute: a conftest that changes
+# pytest on <path> from <cwd> in the workspace env at <root>, CHANGE_WORKERS workers (the
+# member's [tool.change] workers, default two) when xdist is there: each worker holds the app
+# (about 0.75 GB), and at four workers four legs filled the host's 16G runner pool and were
+# OOM-killed (01/11), so a member raises it only for a measured footprint. The path goes absolute: a conftest that changes
 # directory at import would otherwise start xdist's workers where the relative path names nothing.
 tests() {  # <root> <cwd> <path> [NAME=value...]
   local args=(-p no:cacheprovider)
-  (cd "$1" && uv run --no-sync python -c 'import xdist' 2>/dev/null) && args+=(-n 2)
+  (cd "$1" && uv run --no-sync python -c 'import xdist' 2>/dev/null) && args+=(-n "${CHANGE_WORKERS:-2}")
   (cd "$2" && env "${@:4}" uv run --no-sync --project "$1" python -m pytest "$(realpath "$3")" "${args[@]}")
 }
 

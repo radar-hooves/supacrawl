@@ -124,6 +124,20 @@ def runners(change: dict, key: str) -> list[str]:
     return labels
 
 
+MAX_WORKERS = 8
+
+
+def workers(change: dict) -> int:
+    """The xdist workers a member's tests run on (`[tool.change] workers`), else two: each
+    holds the app in memory, so a member raises it only for a measured footprint."""
+    n = change.get("workers", 2)
+    if not isinstance(n, int) or isinstance(n, bool) or not 1 <= n <= MAX_WORKERS:
+        raise SystemExit(
+            f"plan: [tool.change] workers must be an integer 1-{MAX_WORKERS}"
+        )
+    return n
+
+
 def repo_name(repo: str) -> str:
     return os.environ.get("GITHUB_REPOSITORY", "").rpartition("/")[2] or name_of(repo)
 
@@ -135,8 +149,8 @@ def glob_re(pat: str) -> re.Pattern[str]:
 
 
 def copied(dockerfile: bytes) -> list[str]:
-    """The build-context paths a Dockerfile's COPY, ADD and context bind mounts take, up
-    to any glob; a path it cannot resolve (a $variable) counts as the whole context."""
+    """The build-context paths a Dockerfile's COPY, ADD and context bind mounts take, globs
+    kept; a path it cannot resolve (a $variable) counts as the whole context."""
     out = []
     for line in re.sub(r"\\\n", " ", dockerfile.decode()).splitlines():
         words = line.split()
@@ -155,12 +169,23 @@ def copied(dockerfile: bytes) -> list[str]:
         args = " ".join(w for w in words[1:] if not w.startswith("--"))
         srcs = json.loads(args)[:-1] if args.startswith("[") else args.split()[:-1]
         out += [s for s in srcs if "://" not in s]
-    return [
-        "."
-        if "$" in s
-        else posixpath.normpath(re.split(r"[*?[]", s)[0].lstrip("/") or ".")
-        for s in out
-    ]
+    return ["." if "$" in s else posixpath.normpath(s.lstrip("/") or ".") for s in out]
+
+
+def stem(s: str) -> str:
+    """The directory a COPY source starts in, before any glob."""
+    head = re.split(r"[*?[]", s)[0]
+    return s if head == s else dir_of(head) or "."
+
+
+def takes(p: str, s: str) -> bool:
+    """COPY source s brings p into the image: p is s, under s, or under a path s's glob matches."""
+    if (t := stem(s)) == s or "[" in s:
+        return t == "." or within(p, t)
+    parts = p.split("/")
+    return any(
+        glob_re(s).fullmatch("/".join(parts[:i])) for i in range(1, len(parts) + 1)
+    )
 
 
 def glob(p: str, pats) -> bool:
@@ -1045,7 +1070,10 @@ def plan(
             m
             for m in members
             if m.deploy not in ("image", "mcp")
-            and any(s == "." or within(s, m.path) or within(m.path, s) for s in srcs)
+            and any(
+                (t := stem(s)) == "." or within(t, m.path) or within(m.path, t)
+                for s in srcs
+            )
         ]
         artefacts.append((image, held, srcs))
     if stray := set(sources) - {i for i, *_ in artefacts}:
@@ -1095,6 +1123,7 @@ def plan(
                 "deploy_now": ship and m.deploy != "none",
                 "build_on": runners(m.change or {}, "build_on"),
                 "deploy_on": runners(m.change or {}, "deploy_on"),
+                "workers": workers(m.change or {}),
                 "base": base_for[m],
                 "dependents": [
                     o.name
@@ -1129,8 +1158,7 @@ def plan(
                 or (repo_level(p) and not within(p, "tests"))
                 # An ignored path (docs) the image names, not one it reaches through `.`.
                 or (
-                    IGNORED.fullmatch(p)
-                    and any(s != "." and within(p, s) for s in srcs)
+                    IGNORED.fullmatch(p) and any(s != "." and takes(p, s) for s in srcs)
                 )
             ]
             why = cap(hits) + [

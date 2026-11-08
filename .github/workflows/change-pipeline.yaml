@@ -81,6 +81,7 @@ jobs:
     env:
       UV_FROZEN: '1'
       CHANGED_MEMBERS: ${{ needs.plan.outputs.changed }}
+      CHANGE_WORKERS: ${{ matrix.member.workers }}
       DEPLOY: ${{ needs.plan.outputs.ship == 'true' && matrix.member.deploy_now && contains(fromJSON('["wheel","mcp"]'), matrix.member.deploy) }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

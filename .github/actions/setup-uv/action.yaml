@@ -3,7 +3,7 @@
 # fleet that needs uv, in place of calling astral-sh/setup-uv directly:
 #
 #   - name: Set up uv
-#     uses: radar-hooves/master-project/.github/actions/setup-uv@main
+#     uses: ./.github/actions/setup-uv
 #
 # Why this exists rather than each workflow calling setup-uv itself
 # (master-project#173). Two independent network dependencies had to go, and
@@ -121,7 +121,7 @@ runs:
         REQUESTED_VERSION: ${{ inputs.version }}
 
     - name: Set up uv
-      uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
+      uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
       with:
         version: ${{ steps.pin.outputs.version }}
         python-version: ${{ inputs.python-version }}
