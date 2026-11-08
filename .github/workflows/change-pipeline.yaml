@@ -32,7 +32,8 @@ permissions:
 
 jobs:
   plan:
-    runs-on: [self-hosted, household, linux]
+    # Plan, build, deploy and the summary hold a slot for minutes on little memory: the light pool.
+    runs-on: [self-hosted, household, light]
     timeout-minutes: 10
     permissions:
       contents: read
@@ -65,15 +66,16 @@ jobs:
     needs: plan
     if: needs.plan.outputs.members != '[]'
     name: test ${{ matrix.member.name }}
-    runs-on: [self-hosted, household, linux]
+    # A Gradle leg needs a runner that can hold its JVMs: the pool labels those `gradle`.
+    runs-on: ${{ matrix.member.toolchain == 'gradle' && fromJSON('["self-hosted","household","gradle"]') || fromJSON('["self-hosted","household","linux"]') }}
     timeout-minutes: 75
     permissions:
       contents: read
       actions: read
     strategy:
       fail-fast: false
-      # With one library leg and the repo leg, the run stays near four runners.
-      max-parallel: 3
+      # The heavy pool's size: at 3, jobs waited with a free unit 290 of 327 waiting minutes (#448).
+      max-parallel: 6
       matrix:
         member: ${{ fromJSON(needs.plan.outputs.members) }}
     env:
@@ -280,7 +282,7 @@ jobs:
   change:
     if: always()
     needs: [plan, member, library, sweep, repo, build, deploy]
-    runs-on: [self-hosted, household, linux]
+    runs-on: [self-hosted, household, light]
     timeout-minutes: 5
     steps:
       - name: Every leg succeeded or was skipped

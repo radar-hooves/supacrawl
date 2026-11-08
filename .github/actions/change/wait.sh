@@ -9,13 +9,16 @@
 need GITHUB_REPOSITORY GITHUB_RUN_ID GH_TOKEN
 api=repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID
 deadline=$((SECONDS + 1500))
-# Each leg's state under its marker: passed, failed (finished without passing) or running.
+# Each leg's state under its marker: passed, failed (the job itself concluded other than success)
+# or running. A job reads completed before its steps' conclusions do, so completed-with-success
+# and no visible `passed` yet is still running, never failed.
 state() {
   gh api --paginate "$api/jobs?per_page=100&filter=all" --jq '.jobs[] | {name: (.name | sub("^[^ ]+ / "; "")),
-      done: (.status == "completed"), passed: any(.steps[]?; .name == "passed" and .conclusion == "success")}' |
+      done: (.status == "completed"), conclusion, passed: any(.steps[]?; .name == "passed" and .conclusion == "success")}' |
     jq -r --arg m "$1" 'select(.name | test("^(test|library) "))
       | select((.name | capture("^(test|library) (?<n>.+)$").n | "passed-" + gsub("[^A-Za-z0-9._-]"; "_")) == $m)
-      | if .passed then "passed" elif .done then "failed" else "running" end' | sort -u
+      | if .passed then "passed" elif .done and .conclusion != null and .conclusion != "success" then "failed"
+        else "running" end' | sort -u
 }
 for m in "${@:2}"; do
   while s=$(state "$m"); ! grep -qx passed <<<"$s"; do

@@ -25,7 +25,8 @@ from dataclasses import dataclass
 
 # A member's own .md can be a runtime file (a prompt), so only these are ignored.
 IGNORED = re.compile(
-    r"(docs|\.github|\.vscode)/.*|\.claude/(?!hooks/).*|[^/]*\.md|HANDOFF\.html|(.*/)?docs/.*\.md"
+    r"(docs|\.github|\.vscode|changelog\.d)/.*|\.claude/(?!hooks/).*|[^/]*\.md|HANDOFF\.html"
+    r"|(.*/)?docs/.*\.md"
     r"|(.*/)?(README\.md|CHANGELOG\.md|\.gitignore|\.gitattributes"
     r"|LICENSE.*|renovate\.json.*|\.pre-commit-config\.yaml|\.editorconfig|\.mcp\.json"
     r"|\.canonical-exceptions|\.template-parity\.json)"
@@ -38,11 +39,21 @@ PINS |= {"Cargo.lock": "cargo", ".go-version": "go", "go.work": "go"}
 TYPECHECK = {"mypy.ini", "pyrightconfig.json", "tsconfig.base.json"}
 PROJECT = {"pyproject.toml", "uv.lock", "package.json", "pnpm-lock.yaml"}
 READ = PROJECT - {"pnpm-lock.yaml"} | {".python-version", "pnpm-workspace.yaml"}
-READ |= {"go.mod", "Dockerfile", "Cargo.toml"}
+READ |= {"go.mod", "Dockerfile", "Cargo.toml", "libs.versions.toml"}
 SCRIPT = (".gradle", ".gradle.kts")
 # A Gradle build's own files, under its settings dir: every member builds against them.
 GRADLE = ("settings.gradle*", "build.gradle*", "gradle.properties", "gradle/**")
 GRADLE += ("gradlew*", "build-logic/**", "buildSrc/**")
+# Its version catalog, whose moved entries test only the members whose scripts name them.
+CATALOG = "gradle/libs.versions.toml"
+SECTIONS = {"versions": "findVersion", "libraries": "find(?:Library|Dependency)"}
+SECTIONS |= {"plugins": "findPlugin", "bundles": "findBundle"}
+# A lookup the plan cannot follow: a computed alias, or a walk over the catalog.
+OPAQUE = re.compile(
+    r"\bfind(?:Library|Dependency|Plugin|Version|Bundle)\s*\(\s*(?![\"'])"
+    r"|(?:[Ll]ibrary|[Pp]lugin|[Vv]ersion|[Bb]undle)Aliases\b"
+)
+UNAPPLIED = re.compile(r"\balias\s*\([^)]*\)\s*apply\s*\(?\s*false\b")
 INCLUDE = re.compile(r"\binclude\s*\(?((?:\s*,?\s*[\"'][^\"'\n]*[\"'])+)")
 # A string (its text in group 1 or 2, a ${...} template whole), else a comment: strings
 # first, so a // or /* inside one is no comment.
@@ -51,7 +62,7 @@ CODE = re.compile(
     r"|//[^\n]*|/\*[\s\S]*?\*/"
 )
 TESTS = re.compile(r"(?:.*/)?src/(?:test|androidTest)/")
-APPLY = re.compile(r"\bid\s*\(?\s*[\"']([^\"']+)")
+APPLY = re.compile(r"\b(?:id\s*\(?|plugin\s*[=:])\s*[\"']([^\"']+)")
 # A precompiled script plugin's id is its file's name, under any package it declares.
 PLUGIN = re.compile(
     r"(?:.*/)?src/main/(?:kotlin|groovy)/(?:.*/)?([^/]+)\.gradle(?:\.kts)?"
@@ -96,7 +107,8 @@ def cap(xs: list[str], n: int = 8) -> list[str]:
     return xs[:n] + [f"+{len(xs) - n} more"] * (len(xs) > n)
 
 
-RUNNERS = ["self-hosted", "household", "linux"]
+# A build or deploy job holds a slot, not memory (the image builds in Docker): the light pool.
+RUNNERS = ["self-hosted", "household", "light"]
 
 
 def runners(change: dict, key: str) -> list[str]:
@@ -216,6 +228,83 @@ def manifests(repo: str, sha: str) -> dict[str, bytes]:
         return {m.name: tar.extractfile(m).read() for m in tar if m.isfile()}
 
 
+def code(raw: bytes) -> str:
+    """Gradle or JVM source with its comments gone, so a commented-out line names nothing."""
+    text = raw.decode(errors="replace")
+    return CODE.sub(lambda c: c[0] if c[0][0] in "\"'" else "", text)
+
+
+@functools.cache
+def scripts(repo: str, sha: str) -> dict[str, str]:
+    return {p: code(v) for p, v in manifests(repo, sha).items() if p.endswith(SCRIPT)}
+
+
+def entries(
+    old: dict, new: dict, cats: set[str]
+) -> list[tuple[str, re.Pattern]] | None:
+    """For each version-catalog entry that resolves differently in new, what a script names
+    it by; None when a part outside the four sections moved."""
+    if any(
+        old.get(k) != new.get(k) for k in (old.keys() | new.keys()) - SECTIONS.keys()
+    ):
+        return None
+    o, n = ({s: t.get(s, {}) for s in SECTIONS} for t in (old, new))
+    if not all(isinstance(v, dict) for t in (o, n) for v in t.values()):
+        return None
+
+    def ref(e) -> str | None:
+        v = e.get("version") if isinstance(e, dict) else None
+        return v.get("ref") if isinstance(v, dict) else None
+
+    def segs(alias: str) -> list[str]:
+        return re.split(r"[-_.]", alias)
+
+    hit = {
+        s: {a for a in o[s].keys() | n[s].keys() if o[s].get(a) != n[s].get(a)}
+        for s in SECTIONS
+    }
+    for s in ("libraries", "plugins"):
+        hit[s] |= {
+            a for t in (o, n) for a, e in t[s].items() if ref(e) in hit["versions"]
+        }
+    libs = {tuple(segs(a)) for a in hit["libraries"]}
+    hit["bundles"] |= {
+        b
+        for t in (o, n)
+        for b, e in t["bundles"].items()
+        if isinstance(e, list)
+        and libs & {tuple(segs(x)) for x in e if isinstance(x, str)}
+    }
+    dot, cat = r"\s*\.\s*", "(?:" + "|".join(map(re.escape, sorted(cats))) + ")"
+    out = []
+    for s, aliases in hit.items():
+        for a in sorted(aliases):
+            via = "" if s == "libraries" else s + "."
+            parts = [re.escape(x) for x in segs(a)]
+            accessor = (
+                r"\b" + cat + dot + via.replace(".", dot) + dot.join(parts) + r"(?!\w)"
+            )
+            lookup = (
+                r"\b" + SECTIONS[s] + r"\s*\(\s*[\"']" + "[-_.]".join(parts) + "[\"']"
+            )
+            label = f"catalog libs.{via}{'.'.join(segs(a))}"
+            out.append((label, re.compile(f"{accessor}|{lookup}")))
+    # A plugin is applied by its id too, from a convention plugin or the kotlin() shorthand.
+    ids = {
+        e.get("id") if isinstance(e, dict) else str(e).partition(":")[0]
+        for t in (o, n)
+        for a, e in t["plugins"].items()
+        if a in hit["plugins"]
+    }
+    for i in sorted(x for x in ids if isinstance(x, str) and x):
+        short = i.removeprefix("org.jetbrains.kotlin.")
+        pat = "[\"']" + re.escape(i) + "[\"']"
+        if short != i:
+            pat += r"|\bkotlin\s*\(\s*[\"']" + re.escape(short) + "[\"']"
+        out.append((f"catalog plugin {i}", re.compile(pat)))
+    return out
+
+
 @functools.cache
 def workdir(repo: str, sha: str) -> str:
     root = os.path.join(TMP.name, sha)
@@ -273,6 +362,9 @@ class Member:
     library: bool = False
     deploy: str = "none"
     change: dict | None = None  # its [tool.change] table
+    # A Gradle include's script with the convention plugins it applies, and their paths.
+    script: str | None = None
+    applies: tuple[str, ...] = ()
 
 
 def discover(
@@ -368,10 +460,17 @@ def discover(
             ]
         for d in dirs:
             pkg = json.loads(files[join(d, "package.json")])
+            # package.json's "change" key is pyproject's [tool.change]: reads are repo paths its tests read.
+            reads = (pkg.get("change") or {}).get("reads", [])
+            reads = (reads,) if isinstance(reads, str) else tuple(reads)
             found.setdefault(
                 d,
                 Member(
-                    pkg.get("name") or name_of(d) or repo_name(repo), d, "pnpm", root
+                    pkg.get("name") or name_of(d) or repo_name(repo),
+                    d,
+                    "pnpm",
+                    root,
+                    reads,
                 ),
             )
 
@@ -401,13 +500,7 @@ def discover(
 
     # A Gradle build's members are its includes, at the dirs Gradle gives them by default,
     # and its included builds, whose own includes are none.
-    texts = {
-        p: CODE.sub(
-            lambda c: c[0] if c[0][0] in "\"'" else "", v.decode(errors="replace")
-        )
-        for p, v in files.items()
-        if p.endswith(SCRIPT)
-    }
+    texts = scripts(repo, sha)
     settings = sorted(p for p in texts if name_of(p).startswith("settings.gradle"))
     builds = r"\bincludeBuild\(\s*[\"']([^\"']+)"
     nested = {
@@ -420,9 +513,9 @@ def discover(
         top = max((n for n in nested if within(p, n)), key=len, default=None)
         if top and (m := PLUGIN.fullmatch(p)):
             pkg = re.search(r"(?m)^\s*package\s+([\w.]+)", text)
-            plugins[f"{pkg[1]}.{m[1]}" if pkg else m[1]] = (text, top)
+            plugins[f"{pkg[1]}.{m[1]}" if pkg else m[1]] = (text, top, p)
 
-    def applied(text: str) -> dict[str, tuple[str, str]]:
+    def applied(text: str) -> dict[str, tuple[str, str, str]]:
         """The convention plugins a script applies, through the plugins they apply."""
         seen, todo = {}, [text]
         while todo:
@@ -469,14 +562,14 @@ def discover(
             f = join(d, "build.gradle")
             text = texts.get(f) or texts.get(f + ".kts", "")
             conv = applied(text).values()
-            text = "\n".join([text, *(t for t, _ in conv)])
+            text = "\n".join([text, *(t for t, _, _ in conv)])
             # Its inputs: its build's included builds, and any path outside it that a literal
             # (no URL or coordinate) names from it, its build's root or a plugin's build.
             near = {n for n, r in nested.items() if r == root} | {
                 posixpath.normpath(join(b, s))
                 for c in CODE.finditer(text)
                 if (s := c[1] or c[2]) and ":" not in s
-                for b in {d, root, *(top for _, top in conv)}
+                for b in {d, root, *(top for _, top, _ in conv)}
             }
             # A CMakeLists.txt stands for its CMake project: the dir it builds.
             near = {dir_of(t) if name_of(t) == "CMakeLists.txt" else t for t in near}
@@ -499,7 +592,17 @@ def discover(
             ]
             deps = frozenset(norm(u.replace(":", "-")) for u in uses)
             found.setdefault(
-                d, Member(g.replace(":", "-"), d, "gradle", root, reads, deps)
+                d,
+                Member(
+                    g.replace(":", "-"),
+                    d,
+                    "gradle",
+                    root,
+                    reads,
+                    deps,
+                    script=text,
+                    applies=tuple(p for _, _, p in conv),
+                ),
             )
 
     members = sorted(found.values(), key=lambda m: m.path)
@@ -583,6 +686,76 @@ def plan(
             new = [o for k in todo.pop().deps if (o := build.get(k)) and o not in seen]
             seen, todo = seen + new, todo + new
         return seen[1:]
+
+    def gradle_own(p: str) -> bool:
+        """p is a Gradle build's own file, never a root project's that encloses the build."""
+        return any(build_wide(p, o) for o in members)
+
+    @functools.cache
+    def catalog(root: str, base: str) -> dict[Member, list[str]] | None:
+        """The includes of the Gradle build at root that name a catalog entry moved since
+        base, through their script or a convention plugin they apply, with what each names.
+        None when the move is not attributable: a catalog that is not TOML, a part outside
+        its four sections, a computed lookup, or an entry named anywhere else in the build
+        (build-logic's own dependencies, a root script), which every member builds against."""
+        old, new = (
+            parse(manifests(repo, s).get(join(root, CATALOG), b""))
+            for s in (base, head)
+        )
+        if not isinstance(old, dict) or not isinstance(new, dict):
+            return None
+        texts = {
+            p: UNAPPLIED.sub("", t)
+            for p, t in scripts(repo, head).items()
+            if within(p, root)
+        }
+        # The catalogs its settings declare: create("x") { from(...) }, or Groovy's x { from(...) }.
+        named = r"\bcreate\s*\(\s*[\"'](\w+)[\"']|\b(\w+)\s*\{\s*from\s*\("
+        cats = {"libs"} | {
+            a or b
+            for p, t in texts.items()
+            if name_of(p).startswith("settings.gradle")
+            for a, b in re.findall(named, t)
+        }
+        if (pats := entries(old, new, cats)) is None:
+            return None
+        gradle = [o for o in members if o.toolchain == "gradle" and o.lock == root]
+        own = {
+            join(o.path, f)
+            for o in gradle
+            if o.script is not None
+            for f in ("build.gradle", "build.gradle.kts")
+        }
+        applied = {p for o in gradle for p in o.applies}
+        for p, t in texts.items():
+            if OPAQUE.search(t) or (
+                p not in own and p not in applied and any(r.search(t) for _, r in pats)
+            ):
+                return None
+        # An included build's other sources (a binary convention plugin) name it unseen.
+        nested = [o.path for o in gradle if o.script is None]
+        needles = {re.split(r"[-_.]", label)[-1] for label, _ in pats}
+        needles |= {"Aliases", *(f"find{k}" for k in ("Library", "Dependency"))}
+        needles |= {f"find{k}" for k in ("Plugin", "Version", "Bundle")}
+        if nested:
+            cmd = ["git", "-C", repo, "--literal-pathspecs", "grep", "-l", "-I", "-F"]
+            cmd += [a for n in sorted(needles) for a in ("-e", n)]
+            r = subprocess.run([*cmd, head, "--", *nested], capture_output=True)
+            if r.returncode > 1:
+                raise SystemExit(f"plan: git grep failed: {r.stderr.decode()}")
+            for line in r.stdout.decode().splitlines():
+                p = line.partition(":")[2]
+                if p.endswith(SCRIPT):
+                    continue
+                t = code(git(repo, "show", f"{head}:{p}"))
+                if OPAQUE.search(t) or any(r.search(t) for _, r in pats):
+                    return None
+        hits = {
+            o: [label for label, r in pats if r.search(UNAPPLIED.sub("", o.script))]
+            for o in gradle
+            if o.script is not None
+        }
+        return {o: labels for o, labels in hits.items() if labels}
 
     def repo_level(p: str) -> bool:
         """A non-ignored path outside every member that no other rule consumes."""
@@ -749,8 +922,15 @@ def plan(
             for p in paths
             if (o := owner(p)) and not IGNORED.fullmatch(p) and not tests_only(p, o)
         }
+        builds = {o.lock for o in members if o.toolchain == "gradle"}
+        named = {
+            o
+            for r in builds
+            if join(r, CATALOG) in paths
+            for o in catalog(r, base) or {}
+        }
         return frozenset(
-            owned | {o for o in members if any(glob(p, o.reads) for p in paths)}
+            owned | named | {o for o in members if any(glob(p, o.reads) for p in paths)}
         )
 
     def lock_moved(m: Member, base: str) -> str | None:
@@ -788,7 +968,12 @@ def plan(
         paths = diff(repo, base, head)
         lock = join(m.lock, "uv.lock") if m.lock is not None else None
         mine = [
-            p for p in paths if not IGNORED.fullmatch(p) and owner(p) is m and p != lock
+            p
+            for p in paths
+            if not IGNORED.fullmatch(p)
+            and owner(p) is m
+            and p != lock
+            and (m.toolchain == "gradle" or not gradle_own(p))
         ]
         ship = any(not within(p, join(m.path, "tests")) for p in mine)
         pins = [
@@ -805,9 +990,19 @@ def plan(
             if moved and owner("package.json") is not m:
                 why.append("package.json packageManager")
         if m.toolchain == "gradle":
-            wide = [p for p in paths if build_wide(p, m) and not IGNORED.fullmatch(p)]
+            # A catalog whose moved entries the plan follows tests only the members naming them.
+            cat = join(m.lock, CATALOG)
+            named = catalog(m.lock, base) if cat in paths else None
+            wide = [
+                p
+                for p in paths
+                if build_wide(p, m)
+                and not IGNORED.fullmatch(p)
+                and (named is None or p != cat)
+            ]
             touched = changed_in(base)
             tests += [f"build {p}" for p in cap(wide)]
+            tests += cap((named or {}).get(m, []))
             tests += cap(sorted(f"uses {u.name}" for u in used(m) if u in touched))
         if m.toolchain in ("cargo", "gradle"):
             # Both legs run inside the repo root's flake shell.
@@ -852,11 +1047,11 @@ def plan(
             if m.deploy not in ("image", "mcp")
             and any(s == "." or within(s, m.path) or within(m.path, s) for s in srcs)
         ]
-        artefacts.append((image, held))
-    if stray := set(sources) - {i for i, _ in artefacts}:
+        artefacts.append((image, held, srcs))
+    if stray := set(sources) - {i for i, *_ in artefacts}:
         raise SystemExit(f"plan: --source names no root image: {sorted(stray)}")
     base_for = {m: own.get(m.name, default) for m in members}
-    for image, ms in artefacts:
+    for image, ms, _ in artefacts:
         base_for |= {m: own[image] for m in ms if image in own and m.name not in own}
 
     TIMES.clear()
@@ -869,7 +1064,7 @@ def plan(
     jobs |= {(b, lock, None, None) for b, lock, _, group in jobs if not group}
     jobs |= {
         (live[image], m.lock, m.name, m.group)
-        for image, ms in artefacts
+        for image, ms, _ in artefacts
         if image in live
         for m in ms
         if lock_touched(m, diff(repo, live[image], head))
@@ -917,7 +1112,7 @@ def plan(
         )
 
     out_artefacts = []
-    for image, ms in artefacts:
+    for image, ms, srcs in artefacts:
         source = image in sources
         base = live.get(image) if source else own.get(image, default)
         # A source-run image ships no member, so only a roll of everything rebuilds it;
@@ -932,6 +1127,11 @@ def plan(
                 for p in paths
                 if p in (SMOKE, "Dockerfile")
                 or (repo_level(p) and not within(p, "tests"))
+                # An ignored path (docs) the image names, not one it reaches through `.`.
+                or (
+                    IGNORED.fullmatch(p)
+                    and any(s != "." and within(p, s) for s in srcs)
+                )
             ]
             why = cap(hits) + [
                 m.name for m in ms if m.name in rolled or evaluate(m, base)[1]

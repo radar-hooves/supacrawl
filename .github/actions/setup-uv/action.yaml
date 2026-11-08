@@ -3,7 +3,7 @@
 # fleet that needs uv, in place of calling astral-sh/setup-uv directly:
 #
 #   - name: Set up uv
-#     uses: ./.github/actions/setup-uv
+#     uses: radar-hooves/master-project/.github/actions/setup-uv@main
 #
 # Why this exists rather than each workflow calling setup-uv itself
 # (master-project#173). Two independent network dependencies had to go, and
@@ -47,8 +47,9 @@
 #   different uv pass `version`.
 #
 # Advancing the pin: keep HOUSEHOLD_UV_VERSION aligned with the uv the
-# workstation runs (nix-managed, the fleet repo's home module), so CI
-# resolves dependencies exactly as local runs do; bump both together,
+# workstation runs (nix-managed, the fleet repo's home module) and with
+# Renovate's (default.json constraints.uv), so CI resolves dependencies exactly
+# as local runs and Renovate's re-locks do; bump all three together,
 # deliberately. The first run on a new pin downloads once, then caches.
 #
 # Degrades safely: where $HOME is not persistent (a github-hosted runner), the

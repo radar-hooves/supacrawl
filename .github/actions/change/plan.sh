@@ -1,39 +1,55 @@
 #!/usr/bin/env bash
 # Resolve head and bases for the event, run plan.py, and hand its legs to the workflow.
 # A pull request diffs from its merge-base. A push or dispatch diffs from the newest run of
-# this workflow on main whose plan passed and whose head is an ancestor of this one, and
-# rolls every leg that failed there, since it never shipped; an image diffs from the
+# this workflow on main that went green and whose head is an ancestor of this one, so code a
+# red run left unshipped ships with the next green one; an image diffs from the
 # revision running live. A root image whose containers carry household.run-from-source=true
 # serves code its host fast-forwards from a checkout, so it builds only when its environment
 # moved, and waits on no test. A fork's pull request plans nothing: its code never runs here.
 # A tag plans nothing either: it releases through the repo's own release workflow.
+# A push whose tree a green run of this workflow already tested (its branch, before it
+# landed) skips those member test legs and ships on that run's tests.
 # Usage: plan.sh <repo-dir> [head [base]]   (outputs on stdout, summary on stderr by hand)
 . "$(dirname "$0")/lib.sh"
 repo=$(cd "${1:-.}" && pwd) head=${2:-} base=${3:-}
 ev=${GITHUB_EVENT_NAME:-} event=${GITHUB_EVENT_PATH:-/dev/null} roll=${ROLL:-}
-carried=() bases=() force='' history=''
+bases=() history=''
 none='{"members":[],"artefacts":[],"libraries":[],"repo_suites":false,"typecheck_all":false,"changed_members":"","reasons":{}}'
 
-# The newest usable run of this workflow on main: sets base and carried (its failed legs),
-# and history when main has any completed run at all.
+# The newest run of this workflow on main that went green and whose head is an ancestor of
+# this one: sets base, and history when main has any completed run at all. A run that did not
+# go green never shipped what it planned, whichever leg failed, so it is no base: the next
+# green run diffs from the last commit that shipped and takes the failed run's code with it.
 walk() {
-  local runs id sha kind end jobs
+  local runs id sha kind end
   runs=$(gh api "repos/$slug/actions/workflows/change.yaml/runs?branch=main&status=completed&per_page=20" \
     --jq '.workflow_runs[] | "\(.id) \(.head_sha) \(.event) \(.conclusion)"') ||
     die "cannot list $slug's change.yaml runs: the caller must grant actions: read (by hand, pass a base)"
   [ -z "$runs" ] || history=1
   while read -r id sha kind end; do
-    [ -n "$id" ] && [ "$kind" != pull_request ] && [ "$end" != cancelled ] || continue
+    [ -n "$id" ] && [ "$kind" != pull_request ] && [ "$end" = success ] || continue
     git -C "$repo" merge-base --is-ancestor "$sha" "$head" 2>/dev/null || continue
-    jobs=$(gh api --paginate "repos/$slug/actions/runs/$id/jobs?per_page=100" </dev/null \
-      --jq '.jobs[] | "\(.conclusion)\t\(.name | sub("^[^ ]+ / "; ""))"') || die "cannot read run $id's jobs"
-    grep -qx $'success\tplan' <<<"$jobs" || continue
     base=$sha
-    mapfile -t carried < <(awk -F'\t' '$1 ~ /^(failure|cancelled|timed_out)$/ {print $2}' <<<"$jobs")
-    note "base: run $id at ${sha:0:12}${carried[*]:+; carried forward: ${carried[*]}}"
+    note "base: run $id at ${sha:0:12}"
     return
   done <<<"$runs"
-  [ -z "$history" ] || note "no usable run among main's last 20: no base, so every member tests and none ships"
+  [ -z "$history" ] || note "no green run among main's last 20: no base, so every member tests and none ships"
+}
+
+# The test legs a green run of this workflow passed on this push's exact tree: none when no
+# run among the last 20 green ones carried it.
+tested() {
+  local tree id sha
+  tree=$(git -C "$repo" rev-parse "$head^{tree}")
+  gh api "repos/$slug/actions/workflows/change.yaml/runs?status=success&per_page=20" \
+    --jq '.workflow_runs[] | "\(.id) \(.head_sha)"' | while read -r id sha; do
+    [ "$id" != "${GITHUB_RUN_ID:-}" ] || continue
+    [ "$(gh api "repos/$slug/commits/$sha" --jq .commit.tree.sha 2>/dev/null)" = "$tree" ] || continue
+    note "tree ${tree:0:12} passed run $id at ${sha:0:12}: its member tests are not run again" >&2
+    gh api --paginate "repos/$slug/actions/runs/$id/jobs?per_page=100" </dev/null \
+      --jq '.jobs[] | select(.conclusion == "success") | .name | sub("^[^ ]+ / "; "")'
+    return
+  done
 }
 
 fork=$(jq -r '.pull_request.head.repo.full_name // empty' "$event")
@@ -49,22 +65,15 @@ else
     base=$(git -C "$repo" merge-base "$(jq -r .pull_request.base.sha "$event")" "$head")
   else
     head=$(git -C "$repo" rev-parse "${head:-HEAD}")
+    slug=${GITHUB_REPOSITORY:-$(cd "$repo" && gh repo view --json nameWithOwner -q .nameWithOwner)}
     if [ -n "$base" ]; then
       base=$(git -C "$repo" rev-parse "$base")
     else
-      slug=${GITHUB_REPOSITORY:-$(cd "$repo" && gh repo view --json nameWithOwner -q .nameWithOwner)}
       walk
       [ -n "$base$history" ] || base=$(git -C "$repo" rev-parse -q --verify "$(jq -r '.before // empty' "$event")^{commit}" || true)
     fi
-    # Names only, so failed legs map to members and images to their live revisions.
+    # Names only, so images map to their live revisions.
     known=$(python3 "$here/plan.py" --repo "$repo" --head "$head" --base "$head")
-    if [ "${#carried[@]}" -gt 0 ]; then
-      [[ " ${carried[*]} " != *" repo "* ]] || force=1
-      more=$(jq -r '(.artefacts | map({key: .image, value: .members}) | from_entries) as $a
-        | [.members[].name] as $m | [$ARGS.positional[] | capture("^(test|library|deploy) (?<n>.+)$").n
-        | if IN($m[]) then . else ($a[.] // [])[] end] | unique | join(",")' --args "${carried[@]}" <<<"$known")
-      [ "$roll" = all ] || roll=$(tr -s , <<<"$roll,$more" | sed 's/^,//; s/,$//')
-    fi
     roots=$(jq -r '.artefacts[].image' <<<"$known")
     mapfile -t images < <(jq -r '.artefacts[].image, (.members[] | select(.deploy == "image") | .name)' <<<"$known")
     for img in "${images[@]}"; do
@@ -80,6 +89,13 @@ else
     done
   fi
   plan=$(python3 "$here/plan.py" --repo "$repo" --head "$head" ${base:+--base "$base"} "${bases[@]}" --roll "$roll")
+  if [ "$ev" != pull_request ] && [ -z "$roll" ]; then
+    mapfile -t passed < <(tested)
+    # A library keeps its leg: its pass marker in this run is what its dependents ship on.
+    [ "${#passed[@]}" -eq 0 ] || plan=$(jq -c '.libraries as $l | .members |= map(
+      if .test and (.name | IN($l[]) | not) and (("test " + .name) | IN($ARGS.positional[]))
+      then .test = false else . end)' --args "${passed[@]}" <<<"$plan")
+  fi
 fi
 
 # A marker per member: its own leg's `passed` step, which wait.sh reads. A member's `waits`
@@ -110,8 +126,7 @@ deploys=$(jq -c --argjson s "$ship" '(.members | map({key: .name, value: .}) | f
   echo "libraries=$(jq -c '[.libraries[] as $n | .members[] | select(.name == $n)]' <<<"$plan")"
   echo "deploys=$deploys"
   echo "builds=$(jq -c '[.[] | select(.split) | .phase = "build"]' <<<"$deploys")"
-  echo "repo=$(if [ -n "$force" ]; then echo suites typecheck; else
-    jq -r '[(.repo_suites | select(.) | "suites"), (.typecheck_all | select(.) | "typecheck")] | join(" ")' <<<"$plan"; fi)"
+  echo "repo=$(jq -r '[(.repo_suites | select(.) | "suites"), (.typecheck_all | select(.) | "typecheck")] | join(" ")' <<<"$plan")"
   echo "changed=$(jq -r .changed_members <<<"$plan" | tr -cd 'A-Za-z0-9._,-')"
   echo "ship=$ship"
 } >>"${GITHUB_OUTPUT:-/dev/stdout}"

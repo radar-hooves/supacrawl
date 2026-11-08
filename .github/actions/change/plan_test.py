@@ -135,18 +135,18 @@ def mono(tmp_path: Path) -> tuple[Path, str]:
 @pytest.fixture
 def app(tmp_path: Path) -> tuple[Path, str]:
     """A stamped app: backend/ (uv, own lock), frontend/ (pnpm), one root image."""
-    repo, dist = tmp_path / "godswood", tmp_path / "dist"
+    repo, dist = tmp_path / "sample-app", tmp_path / "dist"
     wheel(dist, "1.0")
     wheel(dist, "1.0", "tool")
     init(
         repo,
         {
             "Dockerfile": 'FROM scratch AS f\nCOPY frontend/src \\\n  /f\nFROM scratch\nCOPY --chown=1:1 ["backend/", "/b"]\nCOPY --from=f /f /f\n',
-            "cli/go.mod": "module github.com/x/godswood/cli/v2\n\ngo 1.25.0\n",
+            "cli/go.mod": "module github.com/x/sample-app/cli/v2\n\ngo 1.25.0\n",
             "cli/main.go": "package main\n",
             ".github/image-smoke.sh": "true\n",
             "backend/pyproject.toml": project(
-                "godswood", "dep", extra='[dependency-groups]\ndev = ["tool"]\n'
+                "sample-app", "dep", extra='[dependency-groups]\ndev = ["tool"]\n'
             ),
             "backend/app.py": "x = 1\n",
             "frontend/package.json": '{"name": "frontend", "packageManager": "pnpm@10.0.0"}\n',
@@ -194,30 +194,30 @@ def test_discovery(mono, app):
     }
     p = plan(app[0], app[1], app[1])
     assert [(m["name"], m["toolchain"]) for m in p["members"]] == [
-        ("godswood", "uv"),
+        ("sample-app", "uv"),
         ("cli", "go"),
         ("frontend", "pnpm"),
     ]
     assert p["artefacts"] == [
         {
-            "image": "godswood",
-            "members": ["godswood", "frontend"],
+            "image": "sample-app",
+            "members": ["sample-app", "frontend"],
             "build": False,
             "source": False,
-            "build_on": ["self-hosted", "household", "linux"],
-            "deploy_on": ["self-hosted", "household", "linux"],
+            "build_on": ["self-hosted", "household", "light"],
+            "deploy_on": ["self-hosted", "household", "light"],
         }
     ]
 
 
 def test_image_name_from_github_repository(app, monkeypatch):
-    monkeypatch.setenv("GITHUB_REPOSITORY", "radar-hooves/godswood-app")
-    assert plan(app[0], app[1], app[1])["artefacts"][0]["image"] == "godswood-app"
+    monkeypatch.setenv("GITHUB_REPOSITORY", "radar-hooves/sample-app-app")
+    assert plan(app[0], app[1], app[1])["artefacts"][0]["image"] == "sample-app-app"
 
 
 def test_image_name_is_lowercase(app, monkeypatch):
-    monkeypatch.setenv("GITHUB_REPOSITORY", "DiegoSeagull/Godswood")
-    assert plan(app[0], app[1], app[1])["artefacts"][0]["image"] == "godswood"
+    monkeypatch.setenv("GITHUB_REPOSITORY", "Example-Owner/Sample-App")
+    assert plan(app[0], app[1], app[1])["artefacts"][0]["image"] == "sample-app"
 
 
 def test_root_image_declares_its_name_and_runners(app):
@@ -225,19 +225,19 @@ def test_root_image_declares_its_name_and_runners(app):
     head = change(
         repo,
         {
-            "pyproject.toml": '[tool.change]\nimage = "Godswood-Backend"\n'
+            "pyproject.toml": '[tool.change]\nimage = "Sample-app-Backend"\n'
             'build_on = ["self-hosted", "builder"]\n'
         },
     )
     art = plan(repo, head, head)["artefacts"][0]
-    assert art["image"] == "godswood-backend"
+    assert art["image"] == "sample-app-backend"
     assert art["build_on"] == ["self-hosted", "builder"]
-    assert art["deploy_on"] == ["self-hosted", "household", "linux"]
+    assert art["deploy_on"] == ["self-hosted", "household", "light"]
 
 
 def test_runner_labels_must_be_a_list(app):
     repo, _ = app
-    head = change(repo, {"pyproject.toml": '[tool.change]\ndeploy_on = "mimir"\n'})
+    head = change(repo, {"pyproject.toml": '[tool.change]\ndeploy_on = "sample-host"\n'})
     with pytest.raises(SystemExit, match="deploy_on must be a list"):
         plan(repo, head, head)
 
@@ -284,6 +284,7 @@ def test_a_members_markdown_is_runtime_but_docs_are_not(mono):
                 ".claude/rules/x.md": "c\n",
                 "packages/b/README.md": "r\n",
                 "HANDOFF.html": "<li>h</li>\n",
+                "changelog.d/b-fix.md": "Fixed\n- **b**: x\n",
             },
         ),
         mid,
@@ -344,7 +345,9 @@ def test_a_libraries_pin_bump_marks_the_library_not_its_users(mono, tmp_path):
     assert p["legs"] == ["lib"] and p["reasons"]["lib"] == ["lock: runtime set moved"]
     assert member(p, "lib")["dependents"] == ["a", "b"]
     # Its users ship on the moved pin without a test leg.
-    assert p["reasons"]["a"] == p["reasons"]["b"] == ["lock: carried pin moved, ship only"]
+    assert (
+        p["reasons"]["a"] == p["reasons"]["b"] == ["lock: carried pin moved, ship only"]
+    )
     assert not member(p, "a")["test"] and not member(p, "b")["test"]
 
 
@@ -383,7 +386,9 @@ def test_a_pin_nobody_declares_tests_the_members_that_carry_it(mono, tmp_path):
     assert p["reasons"]["lib"] == ["lock: runtime set moved"]
 
 
-def shared_base(repo: Path, dist: Path, top_reaches_base: bool = True, below: str = "") -> str:
+def shared_base(
+    repo: Path, dist: Path, top_reaches_base: bool = True, below: str = ""
+) -> str:
     """Servers a and b require clients that share `base`; lib requires `top` directly."""
     wheel(dist, "1.0", "base", below)
     wheel(dist, "1.0", "ca", "Requires-Dist: base\n")
@@ -401,7 +406,9 @@ def shared_base(repo: Path, dist: Path, top_reaches_base: bool = True, below: st
     return commit(repo)
 
 
-def test_a_shared_base_moving_beside_a_requirement_tests_only_the_requirers(mono, tmp_path):
+def test_a_shared_base_moving_beside_a_requirement_tests_only_the_requirers(
+    mono, tmp_path
+):
     # mcp-servers 02feb27b0: api-common moved in every client, commbank and nab with it, and
     # all 69 servers tested; only the one requiring the moved clients had cause.
     repo, _ = mono
@@ -412,10 +419,14 @@ def test_a_shared_base_moving_beside_a_requirement_tests_only_the_requirers(mono
     lock(repo, dist, "--upgrade-package", "base", "--upgrade-package", "top")
     p = plan(repo, commit(repo), base)
     assert p["legs"] == ["lib"]
-    assert p["reasons"]["a"] == p["reasons"]["b"] == ["lock: carried pin moved, ship only"]
+    assert (
+        p["reasons"]["a"] == p["reasons"]["b"] == ["lock: carried pin moved, ship only"]
+    )
 
 
-def test_a_shared_base_no_moved_requirement_reaches_is_tested_by_its_users(mono, tmp_path):
+def test_a_shared_base_no_moved_requirement_reaches_is_tested_by_its_users(
+    mono, tmp_path
+):
     repo, _ = mono
     dist = tmp_path / "dist"
     base = shared_base(repo, dist, top_reaches_base=False)
@@ -436,7 +447,9 @@ def test_a_pin_two_hops_below_no_moved_leg_is_tested_by_its_users(mono, tmp_path
     assert plan(repo, commit(repo), base)["legs"] == ["a", "b", "lib"]
 
 
-def test_a_shared_base_covered_by_a_sibling_leg_it_does_not_wait_on_is_tested(mono, tmp_path):
+def test_a_shared_base_covered_by_a_sibling_leg_it_does_not_wait_on_is_tested(
+    mono, tmp_path
+):
     # No library: a deploy waits on no sibling leg, so c's red test must not excuse a and b.
     repo, _ = mono
     dist = tmp_path / "dist"
@@ -460,7 +473,9 @@ def test_a_shared_base_covered_by_a_sibling_leg_it_does_not_wait_on_is_tested(mo
     assert plan(repo, commit(repo), base)["legs"] == ["a", "b", "c"]
 
 
-def test_a_line_a_library_dropped_does_not_cover_a_member_that_gained_it(mono, tmp_path):
+def test_a_line_a_library_dropped_does_not_cover_a_member_that_gained_it(
+    mono, tmp_path
+):
     # lib's all-extras set loses xx at head; a gains xx through core[http], a path no library leg covers.
     repo, _ = mono
     dist = tmp_path / "dist"
@@ -480,7 +495,12 @@ def test_a_line_a_library_dropped_does_not_cover_a_member_that_gained_it(mono, t
     lock(repo, dist)
     base = commit(repo)
     wheel(dist, "2.0", "top")
-    wheel(dist, "2.0", "core", "Provides-Extra: http\nRequires-Dist: xx; extra == 'http'\n")
+    wheel(
+        dist,
+        "2.0",
+        "core",
+        "Provides-Extra: http\nRequires-Dist: xx; extra == 'http'\n",
+    )
     write(repo, {"packages/lib/pyproject.toml": project("lib", "top", "core")})
     lock(repo, dist, "--upgrade-package", "top", "--upgrade-package", "core")
     p = plan(repo, commit(repo), base)
@@ -530,12 +550,12 @@ def test_a_members_own_lock_goes_through_the_export(app, tmp_path):
     mid = bump(repo / "backend", tmp_path / "dist", "dep")
     p = plan(repo, mid, base)
     assert (
-        p["reasons"]["godswood"] == ["lock: runtime set moved"]
+        p["reasons"]["sample-app"] == ["lock: runtime set moved"]
         and p["artefacts"][0]["build"]
     )
     p = plan(repo, bump(repo / "backend", tmp_path / "dist", "tool"), mid)
     assert (
-        p["legs"] == ["godswood"]
+        p["legs"] == ["sample-app"]
         and shipped(p) == []
         and not p["artefacts"][0]["build"]
     )
@@ -568,9 +588,29 @@ def test_a_go_member_stays_out_of_an_image_that_does_not_copy_it(app):
     p = plan(repo, mid, base)
     assert p["legs"] == ["cli"] and not p["artefacts"][0]["build"]
     assert (member(p, "cli")["toolchain"], member(p, "cli")["deploy"]) == ("go", "none")
-    assert p["artefacts"][0]["members"] == ["godswood", "frontend"]
+    assert p["artefacts"][0]["members"] == ["sample-app", "frontend"]
     p = plan(repo, change(repo, {"backend/app.py": "x = 2\n"}), mid)
-    assert p["legs"] == ["godswood"] and p["artefacts"][0]["build"]
+    assert p["legs"] == ["sample-app"] and p["artefacts"][0]["build"]
+
+
+def test_a_doc_the_image_copies_builds_it_and_one_it_does_not_does_not(app):
+    # eight copies docs/development/road.json into its image and serves it live.
+    repo, _ = app
+    dockerfile = (repo / "Dockerfile").read_text()
+    base = change(
+        repo,
+        {
+            "Dockerfile": dockerfile + "COPY docs/development/road.json /app/docs/\n",
+            "docs/development/road.json": "{}\n",
+            "docs/development/notes.md": "n\n",
+        },
+    )
+    mid = change(repo, {"docs/development/road.json": '{"a": 1}\n'})
+    p = plan(repo, mid, base)
+    assert p["artefacts"][0]["build"] and p["legs"] == []
+    assert p["reasons"]["image:sample-app"] == ["docs/development/road.json"]
+    p = plan(repo, change(repo, {"docs/development/notes.md": "m\n"}), mid)
+    assert not p["artefacts"][0]["build"]
 
 
 @pytest.fixture
@@ -588,7 +628,7 @@ def served(app) -> tuple[Path, str]:
 
 
 def source_plan(repo: Path, head: str, base: str, live: str, roll: str = "") -> dict:
-    return plan(repo, head, base, f"godswood={live}", roll=roll, source=("godswood",))
+    return plan(repo, head, base, f"sample-app={live}", roll=roll, source=("sample-app",))
 
 
 def test_a_source_run_image_builds_for_no_code_and_waits_on_no_test(served):
@@ -602,18 +642,18 @@ def test_a_source_run_image_builds_for_no_code_and_waits_on_no_test(served):
         },
     )
     p = source_plan(repo, head, live, live)
-    assert p["legs"] == ["godswood", "frontend"] and p["repo_suites"]
+    assert p["legs"] == ["sample-app", "frontend"] and p["repo_suites"]
     assert p["artefacts"][0] | {"members": None} == {
-        "image": "godswood",
+        "image": "sample-app",
         "members": None,
         "build": False,
         "source": True,
-        "build_on": ["self-hosted", "household", "linux"],
-        "deploy_on": ["self-hosted", "household", "linux"],
+        "build_on": ["self-hosted", "household", "light"],
+        "deploy_on": ["self-hosted", "household", "light"],
     }
-    assert p["reasons"]["image:godswood"] == ["runs from source; no image input moved"]
+    assert p["reasons"]["image:sample-app"] == ["runs from source; no image input moved"]
     # The same push, its image not source-run, builds.
-    assert plan(repo, head, live, f"godswood={live}")["artefacts"][0]["build"]
+    assert plan(repo, head, live, f"sample-app={live}")["artefacts"][0]["build"]
 
 
 @pytest.mark.parametrize(
@@ -629,17 +669,17 @@ def test_a_source_run_image_builds_for_no_code_and_waits_on_no_test(served):
 def test_a_source_run_image_builds_when_its_environment_moved(served, path):
     repo, live = served
     p = source_plan(repo, change(repo, {path: "# moved\n"}), live, live)
-    assert p["artefacts"][0]["build"] and p["reasons"]["image:godswood"] == [path]
+    assert p["artefacts"][0]["build"] and p["reasons"]["image:sample-app"] == [path]
 
 
 def test_a_source_run_image_builds_for_its_runtime_set_alone(served, tmp_path):
     repo, live = served
     mid = bump(repo / "backend", tmp_path / "dist", "dep")
     p = source_plan(repo, mid, live, live)
-    assert p["reasons"]["image:godswood"] == ["godswood lock: runtime set moved"]
+    assert p["reasons"]["image:sample-app"] == ["sample-app lock: runtime set moved"]
     assert p["artefacts"][0]["build"]
     p = source_plan(repo, bump(repo / "backend", tmp_path / "dist", "tool"), mid, mid)
-    assert p["legs"] == ["godswood"] and not p["artefacts"][0]["build"]
+    assert p["legs"] == ["sample-app"] and not p["artefacts"][0]["build"]
 
 
 def test_a_source_run_image_diffs_from_its_live_revision_and_its_members_do_not(
@@ -651,24 +691,24 @@ def test_a_source_run_image_diffs_from_its_live_revision_and_its_members_do_not(
     mid = change(repo, {"Dockerfile": "FROM scratch\nCOPY backend/ /b\n"})
     head = change(repo, {"frontend/src/x.ts": "2\n"})
     p = source_plan(repo, head, mid, live)
-    assert p["legs"] == ["frontend"] and member(p, "godswood")["base"] == mid
-    assert p["reasons"]["image:godswood"] == ["Dockerfile"]
+    assert p["legs"] == ["frontend"] and member(p, "sample-app")["base"] == mid
+    assert p["reasons"]["image:sample-app"] == ["Dockerfile"]
     assert not source_plan(repo, head, mid, mid)["artefacts"][0]["build"]
 
 
 def test_a_source_run_image_running_an_unknown_revision_builds(served):
     repo, live = served
     head = change(repo, {"backend/app.py": "x = 2\n"})
-    p = plan(repo, head, live, source=("godswood",))
+    p = plan(repo, head, live, source=("sample-app",))
     assert p["artefacts"][0]["build"]
-    assert p["reasons"]["image:godswood"] == ["no live revision"]
-    assert member(p, "godswood")["base"] == live
+    assert p["reasons"]["image:sample-app"] == ["no live revision"]
+    assert member(p, "sample-app")["base"] == live
 
 
 def test_a_source_run_image_rebuilds_on_a_roll_of_everything_alone(served):
     repo, live = served
     head = change(repo, {"backend/app.py": "x = 2\n"})
-    assert not source_plan(repo, head, live, live, roll="godswood")["artefacts"][0][
+    assert not source_plan(repo, head, live, live, roll="sample-app")["artefacts"][0][
         "build"
     ]
     assert source_plan(repo, head, live, live, roll="all")["artefacts"][0]["build"]
@@ -681,9 +721,9 @@ def test_a_source_naming_no_root_image_is_fatal(mono):
 
 
 # docker and curl as image.sh calls them: a registry whose :latest is $STUB/latest, this host's
-# containers of it in $STUB/boxes (id, revision, run-from-source label, compose one-off label), and
-# a label-enabled Watchtower, which moves each unlabelled one onto :latest and none whose label
-# its host dropped, nor a one-off `docker compose run` container.
+# containers of it in $STUB/boxes (id, revision, run-from-source label, compose one-off label,
+# `adhoc` for a bare `docker run`), and a label-enabled Watchtower, which moves each unlabelled
+# one onto :latest and none whose label its host dropped, nor a one-off `docker compose run` container.
 STUB = r"""#!/usr/bin/env bash
 s=$STUB last=${*: -1}
 echo "${0##*/} $*" >>"$s/calls"
@@ -697,7 +737,7 @@ case "${0##*/} $1 $2 $3" in
     echo "{\"summary\": {\"failed\": 0, \"updated\": $n}}" ;;
   "docker ps"*) cut -f1 "$s/boxes" ;;
   "docker inspect"*)
-    awk -F'\t' -v i="$STUB_REF:latest" 'BEGIN {OFS = FS} {print i, $2, "healthy", $1, 0, "img-" $2, $3, "/box-" $1, $4}' "$s/boxes" ;;
+    awk -F'\t' -v i="$STUB_REF:latest" 'BEGIN {OFS = FS} {print i, $2, "healthy", $1, 0, "img-" $2, $3, "/box-" $1, $4, $5 == "adhoc" ? "" : "app"}' "$s/boxes" ;;
   "docker image inspect"*) case $4 in *RepoDigests*) cat "$s/digests" 2>/dev/null || echo 1 ;; *REVISION*) echo "${last##*:}" ;; *) echo "img-${last##*:}" ;; esac ;;
   "docker login"*) cat >/dev/null ;;
   "docker buildx imagetools inspect")
@@ -724,7 +764,9 @@ def host(tmp_path: Path):
     bin_.mkdir()
     s.mkdir()
     cred.write_text("u:p\n")
-    (bin_ / "stack-up").write_text('#!/usr/bin/env bash\necho "stack-up $*" >>"$STUB/calls"\n[ ! -e "$STUB/up-fails" ]\n')
+    (bin_ / "stack-up").write_text(
+        '#!/usr/bin/env bash\necho "stack-up $*" >>"$STUB/calls"\n[ ! -e "$STUB/up-fails" ]\n'
+    )
     (bin_ / "stack-up").chmod(0o755)
     for tool in ("docker", "curl"):
         (bin_ / tool).write_text(STUB)
@@ -784,10 +826,14 @@ def test_the_host_applies_its_compose_config_to_what_watchtower_took(host):
     assert r.returncode == 0, r.stdout + r.stderr
     # Only the Watchtower-taken container, after Watchtower.
     assert calls.count("stack-up box-c0") == 1 and not any("box-c1" in c for c in calls)
-    assert calls.index("stack-up box-c0") > next(i for i, c in enumerate(calls) if c.startswith("curl "))
+    assert calls.index("stack-up box-c0") > next(
+        i for i, c in enumerate(calls) if c.startswith("curl ")
+    )
 
 
-def test_the_host_applies_its_compose_config_to_every_container_of_the_image_in_one_call(host):
+def test_the_host_applies_its_compose_config_to_every_container_of_the_image_in_one_call(
+    host,
+):
     old, new, image = host
     r, _, _, calls = image([(old, ""), (old, ""), (old, "true")], old, new)
     assert r.returncode == 0, r.stdout + r.stderr
@@ -843,7 +889,9 @@ def test_a_stale_source_run_container_never_asks_watchtower_again(host):
     assert after == [(new, ""), (old, "true")]
 
 
-@pytest.mark.parametrize("service", ["", "False"], ids=["unlabelled", "compose-service"])
+@pytest.mark.parametrize(
+    "service", ["", "False"], ids=["unlabelled", "compose-service"]
+)
 def test_a_one_off_run_container_of_the_image_is_not_the_stacks_to_watch(host, service):
     old, new, image = host
     # `docker compose run` (com.docker.compose.oneoff=True) keeps the old image while its job runs.
@@ -854,7 +902,18 @@ def test_a_one_off_run_container_of_the_image_is_not_the_stacks_to_watch(host, s
     assert "healthy on this host" in r.stdout
 
 
-def test_a_host_running_only_a_one_off_container_of_the_image_has_nothing_to_watch(host):
+def test_a_bare_docker_run_of_the_image_is_not_the_stacks_to_apply_or_watch(host):
+    old, new, image = host
+    # A session's `docker run` of :latest carries the image's Watchtower label but has no stack.
+    r, latest, _, calls = image([(old, "", "", "adhoc"), (old, "")], old, new)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert latest == f"d-{new}" and "healthy on this host" in r.stdout
+    assert [c for c in calls if c.startswith("stack-up")] == ["stack-up box-c1"]
+
+
+def test_a_host_running_only_a_one_off_container_of_the_image_has_nothing_to_watch(
+    host,
+):
     old, new, image = host
     r, latest, _, calls = image([(old, "", "True")], old, new)
     assert r.returncode == 0, r.stdout + r.stderr
@@ -866,7 +925,9 @@ def test_a_container_on_a_hand_tagged_image_is_refused_at_once(host, tmp_path):
     (tmp_path / "stub").joinpath("digests").write_text("0\n")
     r, latest, _, calls = image([(old, "")], old, new)
     assert r.returncode != 0
-    assert "container box-c0" in r.stderr and "pull" in r.stderr and "recreate" in r.stderr
+    assert (
+        "container box-c0" in r.stderr and "pull" in r.stderr and "recreate" in r.stderr
+    )
     assert latest == f"d-{old}" and not asked(calls)
     assert not any(c.startswith("docker push") for c in calls)
 
@@ -1011,6 +1072,106 @@ def test_a_gradle_build_file_tests_every_member_and_no_repo_suite(droid):
         prev = head
 
 
+LIBS = """[versions]
+jsoup = "1.0"
+[libraries]
+tb-jsoup = { module = "org.jsoup:jsoup", version.ref = "jsoup" }
+junit = "junit:junit:4.0"
+gradle-plugin = "com.android.tools.build:gradle:8.0"
+[plugins]
+kotlin-android = { id = "org.jetbrains.kotlin.android", version = "2.0" }
+"""
+
+
+def catalogued(repo: Path, extra: dict[str, str] | None = None) -> str:
+    """droid with a catalog that notes, clock's convention plugin, design-system's plugin
+    block, the root (apply false) and build-logic's own dependencies name."""
+    text = (repo / "apps/notes/build.gradle.kts").read_text()
+    base = (repo / CONVENTION / "base.gradle.kts").read_text()
+    ds = (repo / "core/design-system/build.gradle.kts").read_text()
+    files = {
+        "gradle/libs.versions.toml": LIBS,
+        "build.gradle.kts": "plugins { alias(libs.plugins.kotlin.android) apply false }\n",
+        "apps/notes/build.gradle.kts": text
+        + "dependencies { implementation(libs.tb.jsoup) }\n",
+        f"{CONVENTION}/base.gradle.kts": base
+        + 'dependencies { add("testImplementation", libs.findLibrary("junit").get()) }\n',
+        "core/design-system/build.gradle.kts": 'plugins { kotlin("android") }\n' + ds,
+        "build-logic/convention/build.gradle.kts": "dependencies { implementation(libs.gradle.plugin) }\n",
+    }
+    return change(repo, files | (extra or {}))
+
+
+def recatalog(repo: Path, old: str, new: str) -> str:
+    text = (repo / "gradle/libs.versions.toml").read_text()
+    assert old in text
+    return change(repo, {"gradle/libs.versions.toml": text.replace(old, new)})
+
+
+@pytest.mark.parametrize(
+    ("old", "new", "reasons"),
+    [
+        ('jsoup = "1.0"', 'jsoup = "1.1"', {"apps-notes": ["catalog libs.tb.jsoup"]}),
+        ("junit:4.0", "junit:4.1", {"apps-clock": ["catalog libs.junit"]}),
+        (
+            'version = "2.0" }',
+            'version = "2.1" }',
+            {
+                "apps-notes": ["uses core-design-system"],
+                "core-design-system": ["catalog plugin org.jetbrains.kotlin.android"],
+            },
+        ),
+    ],
+    ids=["version-ref", "convention-lookup", "plugin-id"],
+)
+def test_a_catalog_entry_tests_the_members_naming_it_and_their_users(
+    droid, old, new, reasons
+):
+    repo, _ = droid
+    prev = catalogued(repo)
+    p = plan(repo, recatalog(repo, old, new), prev)
+    assert {k: v for k, v in p["reasons"].items() if v} == reasons
+    assert p["legs"] == sorted(reasons) and not p["repo_suites"]
+
+
+@pytest.mark.parametrize(
+    ("extra", "old", "new"),
+    [
+        # build-logic's own dependency is on every member's build classpath.
+        ({}, "gradle:8.0", "gradle:8.1"),
+        ({}, "[versions]", '[metadata]\nformat.version = "1.1"\n[versions]'),
+        (
+            {
+                "apps/clock/build.gradle.kts": 'val n = "junit"\nval j = libs.findLibrary(n)\n'
+            },
+            "junit:4.0",
+            "junit:4.1",
+        ),
+        (
+            {"build-logic/src/x.kt": 'val j = libs.findLibrary("tb-jsoup")\n'},
+            'jsoup = "1.0"',
+            'jsoup = "1.1"',
+        ),
+    ],
+    ids=["build-logic", "metadata", "computed-lookup", "binary-plugin"],
+)
+def test_a_catalog_move_the_plan_cannot_attribute_tests_every_member(
+    droid, extra, old, new
+):
+    repo, _ = droid
+    prev = catalogued(repo, extra)
+    p = plan(repo, recatalog(repo, old, new), prev)
+    assert p["legs"] == DROID
+    assert p["reasons"]["core-data"] == ["build gradle/libs.versions.toml"]
+
+
+def test_a_gradle_file_is_never_an_enclosing_root_projects(droid):
+    repo, _ = droid
+    prev = change(repo, {"pyproject.toml": '[project]\nname = "droid-py"\n'})
+    p = plan(repo, change(repo, {"gradle.properties": "x=1\n"}), prev)
+    assert p["legs"] == DROID and "droid-py" not in p["reasons"]
+
+
 def test_a_gradle_module_change_tests_its_users_transitively(droid):
     repo, base = droid
     mid = change(repo, {"core/data/src/D.kt": "//\n"})
@@ -1116,6 +1277,15 @@ def test_declared_reads_test_the_reader_and_never_ship_it(mono):
     p = plan(repo, change(repo, {"packages/a/server_config.json": "{1}\n"}), base)
     assert p["legs"] == ["a", "b"] and shipped(p) == ["a"]
     assert p["reasons"]["b"] == ["reads packages/a/server_config.json"]
+
+
+def test_a_pnpm_member_declares_reads_in_package_json(app):
+    repo, _ = app
+    pkg = '{"name": "frontend", "packageManager": "pnpm@10.0.0", "change": {"reads": ["docs/road.json"]}}\n'
+    base = change(repo, {"frontend/package.json": pkg, "docs/road.json": "[]\n"})
+    p = plan(repo, change(repo, {"docs/road.json": "[1]\n"}), base)
+    assert p["legs"] == ["frontend"] and shipped(p) == []
+    assert p["reasons"]["frontend"] == ["reads docs/road.json"]
 
 
 def test_claude_only_commit_selects_nothing_but_hooks_run_repo_suites(mono):
@@ -1353,8 +1523,19 @@ def test_per_member_base_and_roll(mono):
 
 def no_rollback(repo: Path, live: str, sha: str) -> subprocess.CompletedProcess:
     return subprocess.run(
-        ["bash", "-c", '. "$1/live.sh"; no_rollback "$2" app "$3" "$4"', "x", str(HERE), str(repo), live, sha],
-        env=ENV, capture_output=True, text=True,
+        [
+            "bash",
+            "-c",
+            '. "$1/live.sh"; no_rollback "$2" app "$3" "$4"',
+            "x",
+            str(HERE),
+            str(repo),
+            live,
+            sha,
+        ],
+        env=ENV,
+        capture_output=True,
+        text=True,
     )
 
 
@@ -1372,3 +1553,57 @@ def test_no_rollback_guard(tmp_path):
     shallow = tmp_path / "s"
     run(tmp_path, "git", "clone", "-q", "--depth=1", f"file://{repo}", str(shallow))
     assert no_rollback(shallow, gone, new).returncode == 1  # shallow cannot tell
+
+
+def run_plan_sh(repo: Path, head: str, runs: list[tuple[str, str]], tmp: Path) -> dict:
+    """plan.sh on a push to main, its history `runs` (newest first: sha, conclusion) served by a stub gh."""
+    bin = tmp / "bin"
+    bin.mkdir()
+    listing = "".join(
+        f"{i} {sha} push {end}\\n" for i, (sha, end) in enumerate(runs, 100)
+    )
+    (bin / "gh").write_text(
+        f"#!/bin/sh\ncase \"$*\" in *branch=main*) printf '{listing}';; "
+        f"*/jobs*) printf 'success\\tplan\\n';; esac\n"
+    )
+    (bin / "docker").write_text("#!/bin/sh\n")
+    for f in bin.iterdir():
+        f.chmod(0o755)
+    out = tmp / "out"
+    env = {
+        **ENV,
+        "PATH": f"{bin}:{os.environ['PATH']}",
+        "GITHUB_EVENT_NAME": "push",
+        "GITHUB_REF": "refs/heads/main",
+        "GITHUB_REPOSITORY": "o/sample-app",
+        "GITHUB_OUTPUT": str(out),
+        "GITHUB_STEP_SUMMARY": str(tmp / "sum"),
+        "CHANGE_REGISTRY": "r",
+    }
+    subprocess.run(
+        [str(HERE / "plan.sh"), str(repo), head],
+        env=env,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return dict(l.split("=", 1) for l in out.read_text().splitlines() if "=" in l)
+
+
+def test_code_from_a_red_run_ships_with_the_next_green_one_though_it_touched_only_tests(
+    app, tmp_path
+):
+    repo, shipped_sha = app
+    code = change(
+        repo, {"backend/app.py": "x = 2\n"}
+    )  # its run went red, shipped nothing
+    tests = change(repo, {"backend/tests/test_x.py": "x = 1\n"})  # green, tests only
+    # Whichever leg failed (a repo suite, a build), the red run is no base.
+    out = run_plan_sh(
+        repo, tests, [(code, "failure"), (shipped_sha, "success")], tmp_path
+    )
+    assert [m["name"] for m in __import__("json").loads(out["deploys"])] == ["sample-app"]
+    # Control: had the code run been green, the tests-only push ships nothing.
+    (tmp_path / "green").mkdir()
+    out = run_plan_sh(repo, tests, [(code, "success")], tmp_path / "green")
+    assert out["deploys"] == "[]"
