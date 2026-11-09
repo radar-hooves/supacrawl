@@ -12,7 +12,7 @@ Security notes:
 
 from functools import lru_cache
 from pathlib import Path
-from typing import Literal
+from typing import ClassVar, Literal
 
 from dotenv import load_dotenv
 from mcp_common.config import BaseMCPSettings
@@ -34,6 +34,10 @@ class SupacrawlSettings(BaseMCPSettings):
     ``mask_error_details`` fields, and the lenient env source that lets a
     comma-separated list env var through.
     """
+
+    # No upstream account: tools get the real SupacrawlServices, not a routing
+    # proxy (which cannot be iterated, so supacrawl_health read "unhealthy").
+    accountless: ClassVar[bool] = True
 
     model_config = SettingsConfigDict(
         env_prefix="SUPACRAWL_",

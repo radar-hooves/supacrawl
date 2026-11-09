@@ -282,3 +282,23 @@ class TestServerCleanup:
 
         # Should not raise
         await server.cleanup()
+
+
+class TestAccountless:
+    """The health probe iterates the real services, never a RoutedClient proxy."""
+
+    @pytest.mark.asyncio
+    async def test_startup_client_is_not_a_routing_proxy(self):
+        from supacrawl.mcp.tools.health import supacrawl_health
+
+        server = SupacrawlServer()
+        services = MagicMock()
+        services.get_service_status.return_value = {"browser": True}
+        with (
+            patch.object(server, "create_api_client", AsyncMock(return_value=services)),
+        ):
+            await server.initialize_client()
+
+        assert server.api_client is services
+        result = await supacrawl_health(server.api_client, verify_search=False)
+        assert result["status"] != "unhealthy"
