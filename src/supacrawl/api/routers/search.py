@@ -21,7 +21,7 @@ from supacrawl.api.models.search import (
 from supacrawl.models import SearchFilters, SearchResult, SearchSourceType
 from supacrawl.services.search.service import SearchService
 
-logger = logging.getLogger("supacrawl.api.search")
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 

@@ -15,7 +15,7 @@ from supacrawl.api.models.map import (
 )
 from supacrawl.services import MapService
 
-logger = logging.getLogger("supacrawl.api.map")
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 

@@ -21,7 +21,7 @@ from supacrawl.api.routers.scrape import _scrape_result_to_response
 from supacrawl.models import ScrapeData
 from supacrawl.services import CrawlService
 
-logger = logging.getLogger("supacrawl.api.crawl")
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 

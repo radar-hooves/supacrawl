@@ -21,7 +21,7 @@ from supacrawl.exceptions import ValidationError
 from supacrawl.llm.schema import schema_validator
 from supacrawl.services.extract import ExtractService
 
-logger = logging.getLogger("supacrawl.api.extract")
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 

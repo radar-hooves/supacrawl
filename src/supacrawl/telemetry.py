@@ -48,7 +48,7 @@ LOGGER = logging.getLogger(__name__)
 # event, fields in `extra`, shipped over OTLP or to stdout/stderr by whatever
 # api_common.telemetry.configure() call the process made at startup. This
 # module never pushes to a log store's own API or carries a credential for one.
-_TELEMETRY_LOGGER = logging.getLogger("supacrawl.telemetry")
+_TELEMETRY_LOGGER = logging.getLogger(__name__)
 
 # Bump only on a breaking change to the event shape; readers branch on it.
 SCHEMA_VERSION = 1

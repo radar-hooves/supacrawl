@@ -56,6 +56,7 @@ from supacrawl.quality import (
     word_spacing,
 )
 from supacrawl.services.renderers import process_tree_pss_bytes
+from supacrawl.utils import gather_results
 
 LOGGER = logging.getLogger(__name__)
 
@@ -584,7 +585,7 @@ async def run_benchmark(
                 )
                 for case in cases
             ]
-            return list(await asyncio.gather(*tasks))
+            return await gather_results(tasks)
 
         if reference:
             async with ReferenceRenderer() as renderer:

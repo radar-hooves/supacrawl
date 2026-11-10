@@ -4,7 +4,6 @@ Search tool for Supacrawl MCP server.
 Provides web search functionality with optional result scraping.
 """
 
-import asyncio
 import contextlib
 from typing import Annotated, Any, Literal
 
@@ -25,6 +24,7 @@ from supacrawl.mcp.validators import (
 from supacrawl.models import SearchFilters
 from supacrawl.services.registry import SupacrawlServices
 from supacrawl.services.url_guard import guarded_request, guarded_stream
+from supacrawl.utils import gather_results
 
 
 async def _fetch_url_metadata(url: str, timeout: float = 5.0) -> dict[str, Any]:
@@ -108,7 +108,7 @@ async def _enrich_results_with_metadata(
 
     # Fetch metadata in parallel
     tasks = [_fetch_url_metadata(r["url"], timeout) for _, r in web_results]
-    metadata_list = await asyncio.gather(*tasks)
+    metadata_list = await gather_results(tasks)
 
     # Merge metadata into results
     for (idx, _), metadata in zip(web_results, metadata_list, strict=True):

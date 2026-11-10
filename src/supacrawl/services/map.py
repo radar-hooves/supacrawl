@@ -13,6 +13,7 @@ from bs4 import BeautifulSoup
 from supacrawl.models import MapEvent, MapLink, MapResult
 from supacrawl.services.browser import BrowserManager
 from supacrawl.services.url_guard import guarded_request
+from supacrawl.utils import gather_results
 
 LOGGER = logging.getLogger(__name__)
 
@@ -213,7 +214,7 @@ class MapService:
                 batch_urls = urls_list[batch_start:batch_end]
 
                 # Process batch concurrently
-                batch_results = await asyncio.gather(*[extract_with_limit(u) for u in batch_urls])
+                batch_results = await gather_results(extract_with_limit(u) for u in batch_urls)
                 links.extend(batch_results)
                 completed_count += len(batch_results)
 
@@ -482,7 +483,7 @@ class MapService:
                 # Extract links from all URLs in batch concurrently
                 if urls_to_extract:
                     extraction_tasks = [extract_links_with_limit(url) for url, _ in urls_to_extract]
-                    results = await asyncio.gather(*extraction_tasks)
+                    results = await gather_results(extraction_tasks)
 
                     # Process extracted links
                     for (_url, depth), (_, links) in zip(urls_to_extract, results, strict=True):

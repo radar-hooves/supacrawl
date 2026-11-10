@@ -178,3 +178,29 @@ class TestTrackingParams:
     def test_is_frozenset(self):
         """Test that TRACKING_PARAMS is immutable."""
         assert isinstance(TRACKING_PARAMS, frozenset)
+
+
+class TestGatherResults:
+    """gather_results keeps asyncio.gather's contract on a TaskGroup."""
+
+    async def test_results_keep_input_order(self):
+        import asyncio
+
+        from supacrawl.utils import gather_results
+
+        async def slow(n: int) -> int:
+            await asyncio.sleep(0.01 * (3 - n))
+            return n
+
+        assert await gather_results(slow(n) for n in range(3)) == [0, 1, 2]
+
+    async def test_first_failure_propagates_unwrapped(self):
+        import pytest
+
+        from supacrawl.utils import gather_results
+
+        async def boom() -> None:
+            raise ValueError("bad")
+
+        with pytest.raises(ValueError, match="bad"):
+            await gather_results([boom()])

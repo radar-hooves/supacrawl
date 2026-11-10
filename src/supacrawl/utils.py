@@ -1,8 +1,10 @@
 """Utility functions for supacrawl."""
 
+import asyncio
 import hashlib
 import logging
 import re
+from collections.abc import Awaitable, Iterable
 from typing import Any
 from urllib.parse import parse_qsl, urlencode, urljoin, urlsplit, urlunsplit
 
@@ -11,6 +13,25 @@ from bs4 import BeautifulSoup
 from supacrawl.exceptions import generate_correlation_id
 
 LOGGER = logging.getLogger(__name__)
+
+
+async def gather_results[T](awaitables: Iterable[Awaitable[T]]) -> list[T]:
+    """Run awaitables concurrently under a TaskGroup; results keep input order.
+
+    Same contract as ``asyncio.gather`` without ``return_exceptions``: the first
+    failure propagates as itself (not an ``ExceptionGroup``). Siblings are cancelled
+    on that failure, as a TaskGroup does.
+    """
+
+    async def _run(awaitable: Awaitable[T]) -> T:
+        return await awaitable
+
+    try:
+        async with asyncio.TaskGroup() as group:
+            tasks = [group.create_task(_run(a)) for a in awaitables]
+    except BaseExceptionGroup as group_error:
+        raise group_error.exceptions[0] from None
+    return [task.result() for task in tasks]
 
 
 def log_with_correlation(

@@ -20,6 +20,7 @@ from PIL import ImageFile
 from supacrawl.models import ImageDetail
 from supacrawl.services.http_fetch import DEFAULT_USER_AGENT
 from supacrawl.services.url_guard import guarded_stream
+from supacrawl.utils import gather_results
 
 LOGGER = logging.getLogger(__name__)
 
@@ -128,7 +129,7 @@ async def measure_images(html: str, base_url: str) -> list[ImageDetail]:
         timeout=httpx.Timeout(PROBE_TIMEOUT_S),
         headers={"User-Agent": DEFAULT_USER_AGENT, "Referer": base_url, "Range": f"bytes=0-{HEADER_BYTES - 1}"},
     ) as client:
-        details = await asyncio.gather(*(_probe(client, url, hint, semaphore) for url, hint in ordered))
+        details = await gather_results(_probe(client, url, hint, semaphore) for url, hint in ordered)
     for detail in details:
         side = max(detail.width or 0, detail.height or 0)
         detail.icon = any(hint in detail.url.lower() for hint in _ICON_HINTS) or (0 < side < ICON_MAX_SIDE)

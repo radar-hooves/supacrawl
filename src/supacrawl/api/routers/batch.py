@@ -23,7 +23,7 @@ from supacrawl.api.routers.scrape import _build_service_kwargs, _scrape_result_t
 from supacrawl.services import ScrapeService
 from supacrawl.services.batch import run_batch_scrape
 
-logger = logging.getLogger("supacrawl.api.batch")
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 

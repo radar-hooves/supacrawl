@@ -12,7 +12,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-logger = logging.getLogger("supacrawl.api.jobs")
+logger = logging.getLogger(__name__)
 
 DEFAULT_MAX_JOBS = 3
 DEFAULT_JOB_TTL = 86_400  # 24 hours in seconds

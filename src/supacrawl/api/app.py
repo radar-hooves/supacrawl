@@ -17,7 +17,7 @@ from fastapi.responses import JSONResponse
 
 from supacrawl.api.models.common import ErrorResponse
 
-logger = logging.getLogger("supacrawl.api")
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
