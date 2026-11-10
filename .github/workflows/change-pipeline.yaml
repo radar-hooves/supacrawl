@@ -66,8 +66,10 @@ jobs:
     needs: plan
     if: needs.plan.outputs.members != '[]'
     name: test ${{ matrix.member.name }}
-    # A Gradle leg needs a runner that can hold its JVMs: the pool labels those `gradle`.
-    runs-on: ${{ matrix.member.toolchain == 'gradle' && fromJSON('["self-hosted","household","gradle"]') || fromJSON('["self-hosted","household","linux"]') }}
+    # A Gradle leg needs a runner that can hold its JVMs: the pool labels those `gradle`. A leg
+    # that ships a wheel or an MCP server takes `release`, a label only runners holding the
+    # release environment (CHANGE_MCP_RELEASE, CHANGE_INDEX_*) carry; a leg that only tests runs on any.
+    runs-on: ${{ matrix.member.toolchain == 'gradle' && fromJSON('["self-hosted","household","gradle"]') || (matrix.member.deploy_now && contains(fromJSON('["wheel","mcp"]'), matrix.member.deploy) && fromJSON('["self-hosted","household","linux","release"]') || fromJSON('["self-hosted","household","linux"]')) }}
     timeout-minutes: 75
     permissions:
       contents: read
@@ -116,7 +118,8 @@ jobs:
     needs: plan
     if: needs.plan.outputs.libraries != '[]'
     name: library ${{ matrix.member.name }}
-    runs-on: [self-hosted, household, linux]
+    # As `member`: a leg that ships takes `release`, where the release environment is.
+    runs-on: ${{ matrix.member.deploy_now && contains(fromJSON('["wheel","mcp"]'), matrix.member.deploy) && fromJSON('["self-hosted","household","linux","release"]') || fromJSON('["self-hosted","household","linux"]') }}
     timeout-minutes: 75
     permissions:
       contents: read
