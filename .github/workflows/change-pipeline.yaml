@@ -11,6 +11,8 @@
 # and the repo's contract suite) and the repo legs are early warnings: a consumer takes a
 # new library only at its own next change, where its own leg checks it, so nothing ships
 # or waits on them. The aggregate `change` is the one status a branch protection requires.
+# A repo with no recognised manifest declares `test = "..."` in .github/change.toml, optionally `test_on = [labels]`: one member, run in its flake shell, shipping nothing, on `test_on` labels when it names them.
+# Past six members of one runner class, the rest share six `group` legs (group.sh), each member still its own test, wait and deploy, a failure naming it; libraries, image members and members whose pass marker another job reads keep a leg of their own.
 # The step logic lives in .github/actions/change/*.sh and runs by hand on a runner host.
 #
 # Every caller is docs/master/templates/github-workflows/change.yaml, granting `actions:
@@ -42,6 +44,7 @@ jobs:
       plan: ${{ steps.plan.outputs.plan }}
       head: ${{ steps.plan.outputs.head }}
       members: ${{ steps.plan.outputs.members }}
+      groups: ${{ steps.plan.outputs.groups }}
       libraries: ${{ steps.plan.outputs.libraries }}
       deploys: ${{ steps.plan.outputs.deploys }}
       builds: ${{ steps.plan.outputs.builds }}
@@ -69,7 +72,7 @@ jobs:
     # A Gradle leg needs a runner that can hold its JVMs: the pool labels those `gradle`. A leg
     # that ships a wheel or an MCP server takes `release`, a label only runners holding the
     # release environment (CHANGE_MCP_RELEASE, CHANGE_INDEX_*) carry; a leg that only tests runs on any.
-    runs-on: ${{ matrix.member.toolchain == 'gradle' && fromJSON('["self-hosted","household","gradle"]') || (matrix.member.deploy_now && contains(fromJSON('["wheel","mcp"]'), matrix.member.deploy) && fromJSON('["self-hosted","household","linux","release"]') || fromJSON('["self-hosted","household","linux"]')) }}
+    runs-on: ${{ matrix.member.test_on || matrix.member.toolchain == 'gradle' && fromJSON('["self-hosted","household","gradle"]') || (matrix.member.deploy_now && contains(fromJSON('["wheel","mcp"]'), matrix.member.deploy) && fromJSON('["self-hosted","household","linux","release"]') || fromJSON('["self-hosted","household","linux"]')) }}
     timeout-minutes: 75
     permissions:
       contents: read
@@ -113,6 +116,43 @@ jobs:
           step: ${{ matrix.member.deploy }}
           path: ${{ matrix.member.path || '.' }}
           args: ${{ matrix.member.name }} ${{ needs.plan.outputs.head }}
+
+  # Members past six of one runner class share six legs, each member still its own test, wait and
+  # deploy, a failure naming it (group.sh). The queue is made of legs: 94 of them cost api-clients
+  # 27% of the estate's queue minutes (#454).
+  group:
+    needs: plan
+    if: needs.plan.outputs.groups != '[]'
+    name: test ${{ matrix.group.name }}
+    runs-on: ${{ matrix.group.release && fromJSON('["self-hosted","household","linux","release"]') || fromJSON('["self-hosted","household","linux"]') }}
+    timeout-minutes: 300
+    permissions:
+      contents: read
+      actions: read
+    strategy:
+      fail-fast: false
+      max-parallel: 6
+      matrix:
+        group: ${{ fromJSON(needs.plan.outputs.groups) }}
+    env:
+      UV_FROZEN: '1'
+      CHANGED_MEMBERS: ${{ needs.plan.outputs.changed }}
+      MEMBERS: ${{ toJSON(matrix.group.members) }}
+      GROUP: ${{ matrix.group.name }}
+      HEAD_SHA: ${{ needs.plan.outputs.head }}
+      SHIP: ${{ needs.plan.outputs.ship }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: ${{ matrix.group.deep && '0' || '1' }}
+      - uses: ./.github/actions/change
+        with:
+          step: group
+        env:
+          GH_TOKEN: ${{ github.token }}
+      # Green only when every member passed: a later run on this tree reads the names here.
+      - name: 'passed: ${{ join(matrix.group.names, '' '') }}'
+        run: 'true'
 
   library:
     needs: plan
@@ -201,7 +241,7 @@ jobs:
   # An image that declares another runner to build on (`[tool.change] build_on`) builds and
   # pushes its :<sha> here, once its tests passed; its deploy job then goes live on `deploy_on`.
   build:
-    needs: [plan, member, library]
+    needs: [plan, member, group, library]
     if: ${{ !cancelled() && needs.plan.result == 'success' && needs.plan.outputs.ship == 'true' && needs.plan.outputs.builds != '[]' }}
     name: build ${{ matrix.deploy.name }}
     runs-on: ${{ matrix.deploy.build_on }}
@@ -236,7 +276,7 @@ jobs:
           args: ${{ matrix.deploy.name }} ${{ needs.plan.outputs.head }} build
 
   deploy:
-    needs: [plan, member, library, build]
+    needs: [plan, member, group, library, build]
     # A build that failed holds every deploy of the run: none goes live on a half-built run.
     if: ${{ !cancelled() && needs.plan.result == 'success' && needs.build.result != 'failure' && needs.plan.outputs.ship == 'true' && needs.plan.outputs.deploys != '[]' }}
     name: deploy ${{ matrix.deploy.name }}
@@ -285,7 +325,7 @@ jobs:
 
   change:
     if: always()
-    needs: [plan, member, library, sweep, repo, build, deploy]
+    needs: [plan, member, group, library, sweep, repo, build, deploy]
     runs-on: [self-hosted, household, light]
     timeout-minutes: 5
     steps:

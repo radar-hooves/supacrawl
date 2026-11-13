@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import sys
@@ -1615,7 +1616,9 @@ def test_no_rollback_guard(tmp_path):
     assert no_rollback(shallow, gone, new).returncode == 1  # shallow cannot tell
 
 
-def run_plan_sh(repo: Path, head: str, runs: list[tuple[str, str]], tmp: Path) -> dict:
+def run_plan_sh(
+    repo: Path, head: str, runs: list[tuple[str, str]], tmp: Path, **extra: str
+) -> dict:
     """plan.sh on a push to main, its history `runs` (newest first: sha, conclusion) served by a stub gh."""
     bin = tmp / "bin"
     bin.mkdir()
@@ -1639,6 +1642,7 @@ def run_plan_sh(repo: Path, head: str, runs: list[tuple[str, str]], tmp: Path) -
         "GITHUB_OUTPUT": str(out),
         "GITHUB_STEP_SUMMARY": str(tmp / "sum"),
         "CHANGE_REGISTRY": "r",
+        **extra,
     }
     subprocess.run(
         [str(HERE / "plan.sh"), str(repo), head],
@@ -1669,3 +1673,131 @@ def test_code_from_a_red_run_ships_with_the_next_green_one_though_it_touched_onl
     (tmp_path / "green").mkdir()
     out = run_plan_sh(repo, tests, [(code, "success")], tmp_path / "green")
     assert out["deploys"] == "[]"
+
+
+def declared(tmp_path: Path, test: str = 'test = "just check"\n') -> tuple[Path, str]:
+    repo = tmp_path / "tree"
+    init(repo, {".github/change.toml": test, "flake.nix": "{}\n", "hosts/a/x.nix": "1\n"})
+    return repo, commit(repo)
+
+
+def test_a_repo_with_no_manifest_declares_its_test_command(tmp_path):
+    repo, base = declared(tmp_path)
+    p = plan(repo, base, base)
+    assert [(m["name"], m["toolchain"], m["path"], m["deploy"]) for m in p["members"]] == [
+        ("tree", "command", "", "none")
+    ]
+    assert p["libraries"] == [] and p["artefacts"] == [] and not p["repo_suites"]
+    assert p["legs"] == []
+    for path, text in (
+        ("hosts/a/x.nix", "2\n"),
+        ("flake.nix", "2\n"),
+        (".github/change.toml", 'test = "just check"  # 2\n'),
+    ):
+        head = change(repo, {path: text})
+        assert plan(repo, head, base)["legs"] == ["tree"], path
+        base = head
+    head = change(repo, {"docs/x.md": "d\n", "README.md": "r\n"})
+    assert plan(repo, head, base)["legs"] == []
+    assert [m for m in plan(repo, head)["members"] if m["deploy_now"]] == []
+
+
+def test_a_repo_declaring_nothing_with_no_manifest_plans_no_members(tmp_path):
+    repo = tmp_path / "bare"
+    init(repo, {"hosts/a/x.nix": "1\n"})
+    base = commit(repo)
+    assert plan(repo, base, base)["members"] == []
+
+
+def test_a_declaration_needs_a_test_command(tmp_path):
+    repo, base = declared(tmp_path, 'other = "x"\n')
+    with pytest.raises(SystemExit, match="needs `test"):
+        plan(repo, base, base)
+
+
+def test_a_declaration_beside_a_manifest_fails_the_plan(mono):
+    repo, _ = mono
+    head = change(repo, {".github/change.toml": 'test = "x"\n'})
+    with pytest.raises(SystemExit, match="no manifest"):
+        plan(repo, head, head)
+
+
+def test_a_declared_test_leg_runs_on_the_labels_it_names(tmp_path):
+    repo, base = declared(
+        tmp_path, 'test = "just check"\ntest_on = ["self-hosted", "household", "atlas"]\n'
+    )
+    row = member(plan(repo, base, base), "tree")
+    assert row["test_on"] == ["self-hosted", "household", "atlas"]
+
+
+def test_a_declared_test_leg_names_no_runner_by_default(tmp_path):
+    repo, base = declared(tmp_path)
+    assert "test_on" not in member(plan(repo, base, base), "tree")
+
+
+def test_test_on_must_be_a_list_of_labels(tmp_path):
+    repo, base = declared(tmp_path, 'test = "x"\ntest_on = "atlas"\n')
+    with pytest.raises(SystemExit, match="test_on must be a list"):
+        plan(repo, base, base)
+
+
+@pytest.fixture
+def many(tmp_path: Path) -> tuple[Path, str]:
+    """A workspace of nine wheel-publishing members, shaped like api-clients."""
+    repo, dist = tmp_path / "many", tmp_path / "dist"
+    files = {
+        "pyproject.toml": '[tool.uv.workspace]\nmembers = ["m/*"]\n[tool.change]\npublish = "wheels"\n',
+        ".python-version": "3.12\n",
+    }
+    files |= {f"m/m{i}/pyproject.toml": project(f"m{i}") for i in range(1, 10)}
+    init(repo, files)
+    dist.mkdir()
+    lock(repo, dist)
+    return repo, commit(repo)
+
+
+def groups_of(out: dict) -> tuple[list[dict], list[dict]]:
+    return json.loads(out["groups"]), json.loads(out["members"])
+
+
+def test_members_past_six_share_six_legs_and_each_still_ships(many, tmp_path):
+    repo, base = many
+    head = commit(repo)
+    out = run_plan_sh(repo, head, [(base, "success")], tmp_path, ROLL="all")
+    groups, singles = groups_of(out)
+    assert singles == [] and len(groups) == 6
+    assert [g["name"] for g in groups] == [f"release-group-{i}" for i in range(1, 7)]
+    assert all(g["release"] and g["deep"] for g in groups)
+    names = sorted(n for g in groups for n in g["names"])
+    assert names == [f"m{i}" for i in range(1, 10)]
+
+
+def test_a_run_that_ships_nothing_groups_on_any_runner(many, tmp_path):
+    repo, base = many
+    head = commit(repo)
+    out = run_plan_sh(
+        repo, head, [(base, "success")], tmp_path, ROLL="all", GITHUB_REF="refs/heads/x"
+    )
+    groups, _ = groups_of(out)
+    assert len(groups) == 6 and not any(g["release"] or g["deep"] for g in groups)
+
+
+def test_six_members_or_fewer_keep_their_own_legs(many, tmp_path):
+    repo, base = many
+    head = commit(repo)
+    out = run_plan_sh(
+        repo, head, [(base, "success")], tmp_path, ROLL="m1,m2,m3", CHANGE_GROUPS="3"
+    )
+    groups, singles = groups_of(out)
+    assert groups == [] and [m["name"] for m in singles] == ["m1", "m2", "m3"]
+
+
+def test_a_library_keeps_its_own_leg(mono, tmp_path):
+    repo, base = mono
+    head = change(repo, {"packages/lib/lib.py": "x = 2\n"})
+    out = run_plan_sh(
+        repo, head, [(base, "success")], tmp_path, CHANGE_GROUPS="1", GITHUB_REF="refs/heads/x"
+    )
+    groups, singles = groups_of(out)
+    assert json.loads(out["libraries"])[0]["name"] == "lib"
+    assert "lib" not in {n for g in groups for n in g["names"]} | {m["name"] for m in singles}

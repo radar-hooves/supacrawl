@@ -8,7 +8,10 @@
 # moved, and waits on no test. A fork's pull request plans nothing: its code never runs here.
 # A tag plans nothing either: it releases through the repo's own release workflow.
 # A push whose tree a green run of this workflow already tested (its branch, before it
-# landed) skips those member test legs and ships on that run's tests.
+# landed) skips those member test legs and ships on that run's tests. A green group leg
+# names its members in its `passed: ...` step, so grouped members skip too.
+# More than CHANGE_GROUPS members of one runner class share that many group legs (group.sh);
+# a library, an image's member, a Gradle or declared-runner member keeps its own leg.
 # Usage: plan.sh <repo-dir> [head [base]]   (outputs on stdout, summary on stderr by hand)
 . "$(dirname "$0")/lib.sh"
 repo=$(cd "${1:-.}" && pwd) head=${2:-} base=${3:-}
@@ -47,7 +50,8 @@ tested() {
     [ "$(gh api "repos/$slug/commits/$sha" --jq .commit.tree.sha 2>/dev/null)" = "$tree" ] || continue
     note "tree ${tree:0:12} passed run $id at ${sha:0:12}: its member tests are not run again" >&2
     gh api --paginate "repos/$slug/actions/runs/$id/jobs?per_page=100" </dev/null \
-      --jq '.jobs[] | select(.conclusion == "success") | .name | sub("^[^ ]+ / "; "")'
+      --jq '.jobs[] | select(.conclusion == "success") | (.name | sub("^[^ ]+ / "; "")),
+        (.steps[]?.name | select(startswith("passed: ")) | ltrimstr("passed: ") | split(" ")[] | "test " + .)'
     return
   done
 }
@@ -119,10 +123,21 @@ deploys=$(jq -c --argjson s "$ship" '(.members | map({key: .name, value: .}) | f
      markers: (if .source then [] else [.members[] | $by[.] | (select(.test or (.deploy_now and $s)) | .marker), .waits[]] | unique end),
      build_on, deploy_on}]
   | map(. + {split: ((.build_on | sort) != (.deploy_on | sort))} | . + {phase: (if .split then "release" else "" end)})' <<<"$plan")
+groups=${CHANGE_GROUPS:-6}
+split=$(jq -c --argjson s "$ship" --argjson n "$groups" 'def rel: .deploy_now and $s and (.deploy | IN("wheel", "mcp"));
+  .libraries as $l | [.artefacts[].members[]] as $held
+  | [.members[] | select((.test or (.deploy_now and $s)) and (.name | IN($l[]) | not))] as $run
+  | [$run[] | select(.toolchain != "gradle" and (has("test_on") | not) and .deploy != "image" and (.name | IN($held[]) | not))] as $el
+  | [(false, true) as $c | [$el[] | select(rel == $c)] | select(length > $n) | to_entries | group_by(.key % $n)
+     | to_entries[] | {name: ((if $c then "release-" else "" end) + "group-" + (.key + 1 | tostring)), release: $c,
+       members: (.value | map(.value))}
+     | . + {names: [.members[].name], deep: ($s and any(.members[]; .deploy_now))}] as $g
+  | {groups: $g, members: ($run - [$g[].members[]])}' <<<"$plan")
 {
   echo "plan=$plan"
   echo "head=$head"
-  echo "members=$(jq -c --argjson s "$ship" '.libraries as $l | [.members[] | select((.test or (.deploy_now and $s)) and (.name | IN($l[]) | not))]' <<<"$plan")"
+  echo "members=$(jq -c .members <<<"$split")"
+  echo "groups=$(jq -c .groups <<<"$split")"
   echo "libraries=$(jq -c '[.libraries[] as $n | .members[] | select(.name == $n)]' <<<"$plan")"
   echo "deploys=$deploys"
   echo "builds=$(jq -c '[.[] | select(.split) | .phase = "build"]' <<<"$deploys")"

@@ -10,7 +10,7 @@ description: 'Run one step script of the change pipeline against the checkout'
 
 inputs:
   step:
-    description: 'The script to run: plan, a toolchain leg (uv, pnpm, go, cargo, gradle), library, repo, typecheck, wait, or a deploy kind (wheel, image, mcp)'
+    description: 'The script to run: plan, a toolchain leg (uv, pnpm, go, cargo, gradle, or command for a repo with no manifest that declares `test` in .github/change.toml), library, repo, typecheck, wait, group, or a deploy kind (wheel, image, mcp)'
     required: true
   path:
     description: 'The member, context or repo directory, relative to the checkout'
@@ -25,6 +25,7 @@ outputs:
   plan: { description: 'plan.py output, compact, with a marker per member', value: '${{ steps.run.outputs.plan }}' }
   head: { description: 'the commit planned', value: '${{ steps.run.outputs.head }}' }
   members: { description: 'member rows needing a test leg', value: '${{ steps.run.outputs.members }}' }
+  groups: { description: 'group legs: members that share one runner and run one after another', value: '${{ steps.run.outputs.groups }}' }
   libraries: { description: 'member rows needing a library leg', value: '${{ steps.run.outputs.libraries }}' }
   deploys: { description: 'root artefacts to build: kind, path, name, markers, runner labels', value: '${{ steps.run.outputs.deploys }}' }
   builds: { description: 'the deploys whose build runs on another runner than their deploy', value: '${{ steps.run.outputs.builds }}' }

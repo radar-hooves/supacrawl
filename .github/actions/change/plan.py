@@ -32,6 +32,8 @@ IGNORED = re.compile(
     r"|\.canonical-exceptions|\.template-parity\.json)"
 )
 SMOKE = ".github/image-smoke.sh"
+# A repo with no recognised manifest declares its one test command here: `test = "..."`.
+DECLARED = ".github/change.toml"
 SYSTEM = "system-packages.txt"  # the factory image's apt list
 PINS = {".python-version": "uv", ".node-version": "pnpm", ".nvmrc": "pnpm"}
 PINS |= {"rust-toolchain": "cargo", "rust-toolchain.toml": "cargo"}
@@ -111,7 +113,7 @@ def cap(xs: list[str], n: int = 8) -> list[str]:
 RUNNERS = ["self-hosted", "household", "light"]
 
 
-def runners(change: dict, key: str) -> list[str]:
+def runners(change: dict, key: str, table: str = "[tool.change]") -> list[str]:
     """The runner labels a `[tool.change]` table names for a job (`build_on`, `deploy_on`),
     else the household's."""
     labels = change.get(key, RUNNERS)
@@ -120,7 +122,7 @@ def runners(change: dict, key: str) -> list[str]:
         or not labels
         or not all(isinstance(x, str) and x for x in labels)
     ):
-        raise SystemExit(f"plan: [tool.change] {key} must be a list of runner labels")
+        raise SystemExit(f"plan: {table} {key} must be a list of runner labels")
     return labels
 
 
@@ -244,7 +246,9 @@ def diff(repo: str, base: str, head: str) -> tuple[str, ...]:
 @functools.cache
 def manifests(repo: str, sha: str) -> dict[str, bytes]:
     paths = sorted(
-        p for p in tree(repo, sha) if name_of(p) in READ or p.endswith(SCRIPT)
+        p
+        for p in tree(repo, sha)
+        if name_of(p) in READ or p.endswith(SCRIPT) or p == DECLARED
     )
     if not paths:
         return {}
@@ -629,6 +633,21 @@ def discover(
                     applies=tuple(p for _, _, p in conv),
                 ),
             )
+
+    # A repo with no manifest declares its test command; its one member is the whole tree.
+    if DECLARED in files:
+        decl = parse(files[DECLARED])
+        test = decl.get("test") if isinstance(decl, dict) else None
+        if not isinstance(test, str) or not test.strip():
+            raise SystemExit(f"plan: {DECLARED} needs `test = \"<command>\"`: {decl}")
+        if found:
+            raise SystemExit(
+                f"plan: {DECLARED} is for a repo with no manifest, and this has "
+                f"members: {sorted(m.name for m in found.values())}"
+            )
+        if "test_on" in decl:
+            runners(decl, "test_on", DECLARED)
+        found[""] = Member(repo_name(repo), "", "command", "", (DECLARED,), change=decl)
 
     members = sorted(found.values(), key=lambda m: m.path)
     names = [m.name for m in members]
@@ -1029,8 +1048,8 @@ def plan(
             tests += [f"build {p}" for p in cap(wide)]
             tests += cap((named or {}).get(m, []))
             tests += cap(sorted(f"uses {u.name}" for u in used(m) if u in touched))
-        if m.toolchain in ("cargo", "gradle"):
-            # Both legs run inside the repo root's flake shell.
+        if m.toolchain in ("cargo", "gradle", "command"):
+            # Each leg runs inside the repo root's flake shell.
             tests += [f"flake {p}" for p in paths if p in ("flake.nix", "flake.lock")]
         if lock_touched(m, paths):
             if moved := lock_moved(m, base):
@@ -1124,6 +1143,11 @@ def plan(
                 "build_on": runners(m.change or {}, "build_on"),
                 "deploy_on": runners(m.change or {}, "deploy_on"),
                 "workers": workers(m.change or {}),
+                **(
+                    {"test_on": runners(m.change, "test_on", DECLARED)}
+                    if m.toolchain == "command" and "test_on" in m.change
+                    else {}
+                ),
                 "base": base_for[m],
                 "dependents": [
                     o.name
