@@ -1503,11 +1503,14 @@ def test_a_root_members_leg_runs_every_tests_dir_no_other_member_or_project_hold
 def test_a_root_members_suite_runs_the_nested_tests_and_fails_with_them(
     rooted, tmp_path
 ):
-    # uv run is this interpreter, which has pytest: what is tested is the suite's choice.
+    # uv run is this interpreter, which has pytest: what is tested is the suite's choice. The
+    # xdist probe fails whatever the interpreter holds: workers print no per-file lines to read.
     shim = tmp_path / "bin" / "uv"
     shim.parent.mkdir()
     shim.write_text(
-        f'#!/bin/sh\nwhile [ "$1" != python ]; do shift; done\nshift\nexec "{sys.executable}" "$@"\n'
+        '#!/bin/sh\nwhile [ "$1" != python ]; do shift; done\nshift\n'
+        '[ "$2" = "import xdist" ] && exit 1\n'
+        f'exec "{sys.executable}" "$@"\n'
     )
     shim.chmod(0o755)
     env = {**ENV, "PATH": f"{shim.parent}{os.pathsep}{ENV['PATH']}"}
