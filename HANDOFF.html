@@ -62,7 +62,7 @@ a { color: var(--accent); }
 .ask p { max-width: 68ch; }
 .ask::before, .table::before { justify-self: start; font: 600 .68rem/1 var(--f-mono); letter-spacing: .08em; text-transform: uppercase; padding: .3em .5em; border-radius: 3px; }
 [data-kind="decide"]::before { content: "Decide"; color: var(--flag); background: var(--flag-wash); }
-[data-kind="do"]::before { content: "Your act"; color: var(--accent); background: var(--accent-wash); }
+[data-kind="read"]::before { content: "Read"; color: var(--accent); background: var(--accent-wash); }
 
 .ask::after { font: .78rem var(--f-mono); color: var(--ink-2); }
 .ask[data-track]::after { content: attr(data-track); }
@@ -113,10 +113,40 @@ table.detail th, table.detail td { padding: .35rem .9rem .35rem 0; border-bottom
 </style>
 </head>
 <body>
-<h1>supacrawl handoff</h1>
-<p>Rewritten in place as work lands. One section per live thread; each open item names its next step and an issue or the reason it has none.</p>
+<main>
+<header class="masthead">
+<p class="eyebrow">supacrawl</p>
+<h1>Open work</h1>
+<p class="updated">Updated <time datetime="2026-11-13">13/11/2026</time></p>
+</header>
 
-<h2>Release 2026.11.0 (radar-hooves/supacrawl#180)</h2>
+<section class="operator" aria-labelledby="for-the-operator">
+<h2 id="for-the-operator">For the operator</h2>
+
+<section class="when today">
+<h3>Today</h3>
+<div class="asks">
+<article class="ask" data-id="promise-to-strangers" data-kind="decide" data-track="#192">
+<h4>What does supacrawl promise someone who installs it from PyPI?</h4>
+<p>The README and product brief say one install gives a command line, a Python library, a Firecrawl-style web API and an MCP server. From PyPI the MCP server cannot start, because it is built on a private library. It is also the part your own sessions use most (over ten thousand calls in a month). Suggested wording: "a CLI, a Python library and a Firecrawl-shaped REST API from one pip install; the MCP server runs from the maintainer's container image". Your sentence is all that waits; about five documents then follow, no code. Detail: <code>docs/research/holistic-review-decisions.md</code>.</p>
+</article>
+<article class="ask" data-id="keep-agent-command" data-kind="decide" data-track="#192">
+<h4>Should the "agent" command, which lets a local model browse on its own, be deleted?</h4>
+<p>It is about 830 lines, has no tests, nobody has asked for it since the first release, and every household caller is already an agent. Suggested: cut it, with one changelog line. The risk is a stranger among the monthly PyPI downloads who uses it and would find it gone. Detail: <code>docs/research/holistic-review-decisions.md</code>.</p>
+</article>
+<article class="ask" data-id="keep-settings-dashboard-seam" data-kind="decide" data-track="#192">
+<h4>Do you still want the settings dashboard that the config schema endpoint was built for?</h4>
+<p>Five months on, nothing in the estate calls that endpoint. If the dashboard is dead, the endpoint and its display metadata go when the settings are folded into one system; the config command and its readers stay. If you may want it later, keeping the endpoint is cheap and it could be rebuilt in a day. Detail: <code>docs/research/holistic-review-decisions.md</code>.</p>
+</article>
+</div>
+</section>
+</section>
+
+<section class="threads" aria-labelledby="threads">
+<h2 id="threads">Threads</h2>
+
+<details class="thread" id="release-2026-11-0" open>
+<summary><h3>Release 2026.11.0 (radar-hooves/supacrawl#180)</h3><span class="state">Released 01/11/2026; image deploy and image URLs still open.</span></summary>
 <p>Released 01/11/2026: tag <code>v2026.11.0</code> at 083566a, on PyPI, wheel <code>2026.11.1103324</code> on the household index, mcp-servers' lock pinned to it (mcp-servers 18d7660).</p>
 <ul>
 <li data-id="mcp-image-deploy-lag" data-track="#180"><strong>supacrawl-mcp still serves 2026.10.30215256</strong>: mcp-servers' <code>change</code> runs on main were cancelled three times in a row on 01/11 by newer landings (41258347187, 41258661170, 41258879192), so the image carrying the new lock has not deployed. Next step: once a <code>change</code> run on mcp-servers main completes green, call <code>supacrawl_health</code> and expect <code>version.supacrawl_lib == 2026.11.1103324</code>, then one scrape through it;</li>
@@ -125,5 +155,8 @@ table.detail th, table.detail td { padding: .35rem .9rem .35rem 0; border-bottom
 <li data-id="firecrawl-column" data-untracked="a hosted account is out of scope; the self-hosted row is in the table"><strong>Firecrawl self-hosted column</strong>: the stack's API needs <code>USE_DB_AUTHENTICATION=false</code> and a database URL to start; <code>docs/benchmark.md</code> records the outcome of the attempt on 01/11/2026. Re-run with <code>supacrawl bench run --provider firecrawl</code> once a Firecrawl API answers on <code>FIRECRAWL_API_URL</code>..</li>
 <li data-id="timings-quiet-host" data-untracked="one command per reader on a quiet host"><strong>Timings under load</strong>: every figure in <code>docs/benchmark.md</code> was measured on a 20-core host at load average about 30. Next step: re-run <code>supacrawl bench run --provider &lt;each&gt; --no-reference</code> on a quiet host and refresh the two tables..</li>
 </ul>
+</details>
+</section>
+</main>
 </body>
 </html>
