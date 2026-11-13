@@ -10,8 +10,9 @@
 # A push whose tree a green run of this workflow already tested (its branch, before it
 # landed) skips those member test legs and ships on that run's tests. A green group leg
 # names its members in its `passed: ...` step, so grouped members skip too.
-# More than CHANGE_GROUPS members of one runner class share that many group legs (group.sh);
-# a library, an image's member, a Gradle or declared-runner member keeps its own leg.
+# More than CHANGE_GROUPS members of one runner class share that many group legs (group.sh),
+# Gradle's past CHANGE_GRADLE_GROUPS, its pool's size; a library, an image's member or a
+# declared-runner member keeps its own leg.
 # Usage: plan.sh <repo-dir> [head [base]]   (outputs on stdout, summary on stderr by hand)
 . "$(dirname "$0")/lib.sh"
 repo=$(cd "${1:-.}" && pwd) head=${2:-} base=${3:-}
@@ -123,14 +124,16 @@ deploys=$(jq -c --argjson s "$ship" '(.members | map({key: .name, value: .}) | f
      markers: (if .source then [] else [.members[] | $by[.] | (select(.test or (.deploy_now and $s)) | .marker), .waits[]] | unique end),
      build_on, deploy_on}]
   | map(. + {split: ((.build_on | sort) != (.deploy_on | sort))} | . + {phase: (if .split then "release" else "" end)})' <<<"$plan")
-groups=${CHANGE_GROUPS:-6}
-split=$(jq -c --argjson s "$ship" --argjson n "$groups" 'def rel: .deploy_now and $s and (.deploy | IN("wheel", "mcp"));
+groups=${CHANGE_GROUPS:-6} gradle=${CHANGE_GRADLE_GROUPS:-2}
+split=$(jq -c --argjson s "$ship" --argjson n "$groups" --argjson gn "$gradle" 'def rel: .deploy_now and $s and (.deploy | IN("wheel", "mcp"));
+  def class: if .toolchain == "gradle" then "gradle-" elif rel then "release-" else "" end;
   .libraries as $l | [.artefacts[].members[]] as $held
   | [.members[] | select((.test or (.deploy_now and $s)) and (.name | IN($l[]) | not))] as $run
-  | [$run[] | select(.toolchain != "gradle" and (has("test_on") | not) and .deploy != "image" and (.name | IN($held[]) | not))] as $el
-  | [(false, true) as $c | [$el[] | select(rel == $c)] | select(length > $n) | to_entries | group_by(.key % $n)
-     | to_entries[] | {name: ((if $c then "release-" else "" end) + "group-" + (.key + 1 | tostring)), release: $c,
-       members: (.value | map(.value))}
+  | [$run[] | select((has("test_on") | not) and .deploy != "image" and (.name | IN($held[]) | not))] as $el
+  | [("", "release-", "gradle-") as $c | (if $c == "gradle-" then $gn else $n end) as $k
+     | [$el[] | select(class == $c)] | select(length > $k) | to_entries | group_by(.key % $k)
+     | to_entries[] | {name: ($c + "group-" + (.key + 1 | tostring)), release: ($c == "release-"),
+       gradle: ($c == "gradle-"), members: (.value | map(.value))}
      | . + {names: [.members[].name], deep: ($s and any(.members[]; .deploy_now))}] as $g
   | {groups: $g, members: ($run - [$g[].members[]])}' <<<"$plan")
 {

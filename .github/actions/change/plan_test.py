@@ -1767,7 +1767,7 @@ def test_members_past_six_share_six_legs_and_each_still_ships(many, tmp_path):
     groups, singles = groups_of(out)
     assert singles == [] and len(groups) == 6
     assert [g["name"] for g in groups] == [f"release-group-{i}" for i in range(1, 7)]
-    assert all(g["release"] and g["deep"] for g in groups)
+    assert all(g["release"] and g["deep"] and not g["gradle"] for g in groups)
     names = sorted(n for g in groups for n in g["names"])
     assert names == [f"m{i}" for i in range(1, 10)]
 
@@ -1790,6 +1790,29 @@ def test_six_members_or_fewer_keep_their_own_legs(many, tmp_path):
     )
     groups, singles = groups_of(out)
     assert groups == [] and [m["name"] for m in singles] == ["m1", "m2", "m3"]
+
+
+def test_gradle_members_past_two_share_the_gradle_units(droid, tmp_path):
+    repo, base = droid
+    head = commit(repo)
+    out = run_plan_sh(repo, head, [(base, "success")], tmp_path, ROLL="all")
+    groups, singles = groups_of(out)
+    assert singles == []
+    assert [(g["name"], g["gradle"], g["release"]) for g in groups] == [
+        ("gradle-group-1", True, False),
+        ("gradle-group-2", True, False),
+    ]
+    assert sorted(n for g in groups for n in g["names"]) == DROID
+
+
+def test_gradle_members_within_the_gradle_pool_keep_their_own_legs(droid, tmp_path):
+    repo, base = droid
+    head = commit(repo)
+    out = run_plan_sh(
+        repo, head, [(base, "success")], tmp_path, ROLL="all", CHANGE_GRADLE_GROUPS="6"
+    )
+    groups, singles = groups_of(out)
+    assert groups == [] and sorted(m["name"] for m in singles) == DROID
 
 
 def test_a_library_keeps_its_own_leg(mono, tmp_path):

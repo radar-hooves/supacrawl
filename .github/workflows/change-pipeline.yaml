@@ -12,7 +12,7 @@
 # new library only at its own next change, where its own leg checks it, so nothing ships
 # or waits on them. The aggregate `change` is the one status a branch protection requires.
 # A repo with no recognised manifest declares `test = "..."` in .github/change.toml, optionally `test_on = [labels]`: one member, run in its flake shell, shipping nothing, on `test_on` labels when it names them.
-# Past six members of one runner class, the rest share six `group` legs (group.sh), each member still its own test, wait and deploy, a failure naming it; libraries, image members and members whose pass marker another job reads keep a leg of their own.
+# Past its pool's size (six; Gradle's two) of one runner class, the members share that many `group` legs (group.sh), each member still its own test, wait and deploy, a failure naming it; libraries, image members and members whose pass marker another job reads keep a leg of their own.
 # The step logic lives in .github/actions/change/*.sh and runs by hand on a runner host.
 #
 # Every caller is docs/master/templates/github-workflows/change.yaml, granting `actions:
@@ -119,12 +119,13 @@ jobs:
 
   # Members past six of one runner class share six legs, each member still its own test, wait and
   # deploy, a failure naming it (group.sh). The queue is made of legs: 94 of them cost api-clients
-  # 27% of the estate's queue minutes (#454).
+  # 27% of the estate's queue minutes (#454). Gradle's share its two units: each member keeps its
+  # own JVM, since one JVM over 16 members held its 8 GB unit at the cap for 35 minutes (#448).
   group:
     needs: plan
     if: needs.plan.outputs.groups != '[]'
     name: test ${{ matrix.group.name }}
-    runs-on: ${{ matrix.group.release && fromJSON('["self-hosted","household","linux","release"]') || fromJSON('["self-hosted","household","linux"]') }}
+    runs-on: ${{ matrix.group.gradle && fromJSON('["self-hosted","household","gradle"]') || matrix.group.release && fromJSON('["self-hosted","household","linux","release"]') || fromJSON('["self-hosted","household","linux"]') }}
     timeout-minutes: 300
     permissions:
       contents: read
