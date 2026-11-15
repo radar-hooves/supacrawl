@@ -38,7 +38,7 @@ outputs:
 runs:
   using: composite
   steps:
-    - uses: radar-hooves/master-project/.github/actions/setup-uv@main
+    - uses: ./.github/actions/setup-uv
 
     - id: run
       shell: bash
