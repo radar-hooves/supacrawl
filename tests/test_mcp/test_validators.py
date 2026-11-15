@@ -297,14 +297,14 @@ class TestEnhanceQueryWithCurrentYear:
         )
 
     @patch("supacrawl.mcp.validators.datetime")
-    def test_replaces_stale_year_in_time_sensitive_query(self, mock_datetime):
-        """Should replace past years with current year in time-sensitive queries."""
+    def test_never_replaces_a_year_the_caller_wrote(self, mock_datetime):
+        """A year in the query is the caller's choice, past or not."""
         mock_datetime.now.return_value = datetime(2026, 1, 24, tzinfo=UTC)
 
-        # Stale years should be replaced (LLMs often use their training cutoff year)
-        assert enhance_query_with_current_year("best python frameworks 2024") == "best python frameworks 2026"
-        assert enhance_query_with_current_year("python 2024 tutorial") == "python 2026 tutorial"
-        assert enhance_query_with_current_year("latest react 2025") == "latest react 2026"
+        assert enhance_query_with_current_year("best python frameworks 2024") == "best python frameworks 2024"
+        assert enhance_query_with_current_year("python 3.12 new features 2023") == "python 3.12 new features 2023"
+        assert enhance_query_with_current_year("best laptops 2024 review") == "best laptops 2024 review"
+        assert enhance_query_with_current_year("top 10 films of 2019") == "top 10 films of 2019"
 
     @patch("supacrawl.mcp.validators.datetime")
     def test_preserves_current_and_future_years(self, mock_datetime):

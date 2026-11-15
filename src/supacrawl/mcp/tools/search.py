@@ -184,7 +184,7 @@ async def supacrawl_search(
     - You're looking for images matching a description
 
     **Common patterns:**
-    - For current/recent info: the query is automatically enhanced with current year
+    - For current/recent info: the query is given the current year when it has none
     - For specific sites: use "site:example.com" in query
     - For exact phrases: wrap in quotes ("exact phrase")
     - To exclude terms: use minus (-unwanted)
@@ -302,7 +302,7 @@ async def supacrawl_search(
     try:
         # Validate inputs - provides helpful error messages
         validated_query = validate_query(query)
-        # Enhance query with current year if time-sensitive (LLMs often use training cutoff year)
+        # A time-sensitive query with no year gets the current year; a caller-written year is kept
         validated_query = enhance_query_with_current_year(validated_query)
         validated_limit = validate_limit(limit, "limit", min_value=1, max_value=10, default=5)
         assert validated_limit is not None  # default=5 ensures non-None

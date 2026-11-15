@@ -52,8 +52,8 @@ TIME_SENSITIVE_KEYWORDS = {
     "tutorial",
 }
 
-# Regex to detect years (2020-2099)
-YEAR_PATTERN = re.compile(r"\b20[2-9]\d\b")
+# Regex to detect a year the caller wrote (1900-2099)
+YEAR_PATTERN = re.compile(r"\b(?:19|20)\d\d\b")
 
 
 def validate_url(
@@ -195,22 +195,20 @@ def enhance_query_with_current_year(query: str) -> str:
     """
     Enhance a search query with the current year if it appears time-sensitive.
 
-    LLMs often default to their training data cutoff year when generating searches
-    (e.g., using 2024 when it's actually 2026). This function:
-    1. Replaces stale (past) years with the current year in time-sensitive queries
-    2. Appends the current year to time-sensitive queries missing a year
+    LLMs often search without a year and get stale results. A time-sensitive query
+    with no year gets the current year appended; a year the caller wrote is never
+    replaced.
 
     Args:
         query: The search query string
 
     Returns:
-        Query with current year (replacing stale year or appended) if time-sensitive,
-        otherwise returns the original query unchanged.
+        Query with the current year appended if time-sensitive and yearless,
+        otherwise the original query unchanged.
 
     Examples:
-        "best python frameworks 2024" -> "best python frameworks 2026" (stale year replaced)
         "best python frameworks" -> "best python frameworks 2026" (year appended)
-        "python frameworks 2027" -> "python frameworks 2027" (future year preserved)
+        "best python frameworks 2024" -> "best python frameworks 2024" (caller's year kept)
         "python syntax" -> "python syntax" (unchanged, not time-sensitive)
     """
     current_year = datetime.now(UTC).year
@@ -223,15 +221,7 @@ def enhance_query_with_current_year(query: str) -> str:
     if not is_time_sensitive:
         return query
 
-    # Check for existing years in the query
-    year_match = YEAR_PATTERN.search(query)
-
-    if year_match:
-        found_year = int(year_match.group())
-        # Replace stale (past) years with current year
-        if found_year < current_year:
-            return YEAR_PATTERN.sub(str(current_year), query)
-        # Future or current year - leave as-is
+    if YEAR_PATTERN.search(query):
         return query
 
     # No year present - append current year
