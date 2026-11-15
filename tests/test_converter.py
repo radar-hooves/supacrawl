@@ -961,6 +961,12 @@ class TestWordPressPreprocessor:
         soup = BeautifulSoup(html, "html.parser")
         assert _detect_wordpress(soup) is True
 
+    def test_non_wordpress_class_substrings_are_not_wordpress(self):
+        """blog-post-body and a rating table must survive on a non-WordPress page."""
+        html = '<html><body><div class="blog-post-body"><table class="energy-rating-table"><tr><td>A</td></tr></table></div></body></html>'
+        soup = BeautifulSoup(html, "html.parser")
+        assert _detect_wordpress(soup) is False
+
     def test_detect_wordpress_by_post_classes(self):
         """Test WordPress detection via post-related classes."""
         html = """

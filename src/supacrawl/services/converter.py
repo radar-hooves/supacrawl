@@ -244,8 +244,8 @@ def _detect_wordpress(soup: BeautifulSoup) -> bool:
     """Detect if the page is a WordPress site.
 
     Detection signals:
-    - Classes with wp- prefix (wp-content, wp-block, etc.)
-    - Post-related classes (post-, hentry, entry-content)
+    - Class tokens with a wp- prefix (wp-content, wp-block, etc.)
+    - WordPress post markers (post-<id>, hentry, entry-content)
     - WordPress meta generator tag
 
     Args:
@@ -255,11 +255,12 @@ def _detect_wordpress(soup: BeautifulSoup) -> bool:
         True if WordPress site detected, False otherwise
     """
     # Check for wp- prefixed classes
-    if soup.select("[class*='wp-']"):
+    # Whole class tokens only: a substring match flags "blog-post-body" or "swp-x".
+    if soup.find(class_=re.compile(r"^wp-")):
         return True
 
     # Check for post-related classes
-    if soup.select("[class*='post-'], .hentry, .entry-content"):
+    if soup.find(class_=re.compile(r"^post-\d+$")) or soup.select(".hentry, .entry-content"):
         return True
 
     # Check for WordPress meta generator
