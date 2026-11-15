@@ -87,7 +87,7 @@ Scrape a single URL synchronously. Returns scraped content in the requested form
 | `excludeTags` | string[] | `null` | CSS selectors for elements to exclude |
 | `mobile` | boolean | `null` | Emulate a mobile viewport |
 | `actions` | array | `null` | Page actions (click, scroll, wait) |
-| `location` | object | `null` | Locale settings: `{ "country": "AU", "languages": ["en-AU"] }` |
+| `location` | object | `null` | Not supported per request; a non-empty value is refused with 400. Set the locale on the service |
 | `headers` | object | `null` | Custom HTTP request headers |
 | `maxAge` | integer | `null` | Cache freshness in milliseconds (divided by 1000 for service layer) |
 | `proxy` | string/boolean | `null` | `"basic"`, `"enhanced"`, `"auto"` map to `true`; a URL string is passed through |
@@ -204,9 +204,9 @@ Start an asynchronous crawl job. Returns a job ID immediately; use `GET /crawl/{
 | `includePaths` | string[] | `null` | Regex patterns on URL path to include |
 | `excludePaths` | string[] | `null` | Regex patterns on URL path to exclude |
 | `allowExternalLinks` | boolean | `false` | Follow links to external domains |
-| `allowSubdomains` | boolean | `false` | Follow links to subdomains |
+| `allowSubdomains` | boolean | `false` | Not supported; `true` is refused with 400 |
 | `maxConcurrency` | integer | `10` | Maximum concurrent requests |
-| `ignoreQueryParameters` | boolean | `false` | Deduplicate URLs differing only by query params |
+| `ignoreQueryParameters` | boolean | `false` | Deduplicate URLs differing only by tracking parameters or fragments |
 | `ignoreRobotsTxt` | boolean | `true` | Skip `robots.txt` checks. Set to `false` to consult each origin's robots.txt and skip disallowed URLs |
 | `delay` | number | `0` | Minimum seconds between requests to the same host |
 | `scrapeOptions` | object | `null` | Nested scrape options (same fields as POST /scrape minus `url`) |
@@ -377,8 +377,8 @@ Search the web synchronously. Results are bucketed by source type (web, images, 
 | `query` | string | required | Search query |
 | `limit` | integer | `5` | Maximum results per source type |
 | `sources` | array | `[{"type": "web"}]` | Source types. Accepts v2 objects `[{"type": "web"}]` or plain strings `["web"]`. Valid types: `"web"`, `"images"`, `"news"` |
-| `timeout` | integer | `30000` | Timeout in milliseconds |
-| `scrapeOptions` | object | `null` | Nested scrape options for fetching result page content |
+| `timeout` | integer | `30000` | Accepted for compatibility; providers apply their own timeouts |
+| `scrapeOptions` | object | `null` | `formats` and `onlyMainContent` for fetching result page content |
 | `timeRange` | string | `null` | Restrict results to the past `"day"`, `"week"`, `"month"`, or `"year"` (mapped per provider) |
 | `startDate` | string | `null` | Earliest result date (YYYY-MM-DD) |
 | `endDate` | string | `null` | Latest result date (YYYY-MM-DD) |
@@ -509,7 +509,7 @@ Start an asynchronous batch scrape job. Scrapes multiple URLs with the same opti
 | ------ | -------- | -------- | -------------- |
 | `urls` | string[] | required | URLs to scrape |
 
-All other fields are the same as POST /scrape (formats, onlyMainContent, waitFor, timeout, includeTags, excludeTags, mobile, actions, location, headers, maxAge, proxy, storeInCache), applied to every URL in the batch.
+All other fields are the same as POST /scrape (formats, onlyMainContent, waitFor, timeout, includeTags, excludeTags, mobile, actions, location, headers, maxAge, proxy, storeInCache), applied to every URL in the batch, plus `httpFirst` and `expect`.
 
 **Response body:**
 

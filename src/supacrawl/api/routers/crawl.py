@@ -17,7 +17,7 @@ from supacrawl.api.models.crawl import (
     CrawlRequest,
     CrawlStatusResponse,
 )
-from supacrawl.api.routers.scrape import _scrape_result_to_response
+from supacrawl.api.routers.scrape import _build_service_kwargs, _scrape_result_to_response
 from supacrawl.models import ScrapeData
 from supacrawl.services import CrawlService
 
@@ -59,10 +59,19 @@ def _build_crawl_kwargs(req: CrawlRequest) -> dict[str, Any]:
         "concurrency": req.concurrency,
         "respect_robots": not req.ignore_robots_txt,
         "request_delay": req.delay,
+        "deduplicate_similar_urls": req.ignore_query_params,
     }
 
-    if req.scrape_options and req.scrape_options.formats:
-        kwargs["formats"] = req.scrape_options.formats
+    if req.scrape_options:
+        # Crawl sets formats, headers and engine itself; the rest ride each page scrape.
+        page = _build_service_kwargs(req.scrape_options)
+        formats = page.pop("formats", None)
+        if formats:
+            kwargs["formats"] = formats
+        headers = page.pop("headers", None)
+        if headers:
+            kwargs["headers"] = headers
+        kwargs["scrape_options"] = page
 
     return kwargs
 

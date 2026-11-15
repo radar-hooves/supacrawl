@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Fixed
 
 - Crawl `include`/`exclude` patterns are regular expressions on every surface (CLI, REST, MCP), as the REST and MCP docs said; the code used shell globs, so the MCP tool's documented examples matched nothing. Glob patterns such as `*/docs/*` are no longer valid.
+- REST no longer drops documented fields: `/scrape` and `/batch/scrape` forward `mobile`, `httpFirst` and `expect`; `/crawl` forwards `scrapeOptions` and `ignoreQueryParameters`; `/search` forwards `scrapeOptions`. A per-request `location`, `allowSubdomains: true` and `sitemap: skip|only` are refused with 400 instead of ignored.
 - MCP search no longer rewrites a year the caller wrote (`python 3.12 new features 2023` became `… 2026`); a time-sensitive query with no year still gets the current year appended.
 
 ## [2026.11.5] - 02/11/2026

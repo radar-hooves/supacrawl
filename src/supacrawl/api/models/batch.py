@@ -4,8 +4,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from pydantic.alias_generators import to_camel
+
+from supacrawl.api.models.scrape import _refuse_location
 
 # Request
 
@@ -40,6 +42,13 @@ class BatchScrapeRequest(BaseModel):
     store_in_cache: bool | None = Field(None, alias="storeInCache")
     content_mode: float | None = Field(None, ge=0.0, le=1.0)
     query: str | None = None
+    http_first: bool = True
+    expect: str | None = None
+
+    @field_validator("location")
+    @classmethod
+    def _refuse_location(cls, v: dict[str, Any] | None) -> dict[str, Any] | None:
+        return _refuse_location(v)
 
 
 # Response

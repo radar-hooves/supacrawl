@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from pydantic.alias_generators import to_camel
 
 from supacrawl.api.models.scrape import ScrapeRequest
@@ -48,6 +48,20 @@ class CrawlRequest(BaseModel):
     ignore_robots_txt: bool = Field(True, alias="ignoreRobotsTxt")
     delay: float = 0.0
     scrape_options: CrawlScrapeOptions | None = Field(None, alias="scrapeOptions")
+
+    @field_validator("sitemap")
+    @classmethod
+    def _refuse_sitemap_mode(cls, v: str | None) -> str | None:
+        if v in ("skip", "only"):
+            raise ValueError(f"sitemap '{v}' is not supported; discovery always combines sitemap and links")
+        return v
+
+    @field_validator("allow_subdomains")
+    @classmethod
+    def _refuse_subdomains(cls, v: bool) -> bool:
+        if v:
+            raise ValueError("allowSubdomains is not supported")
+        return v
 
 
 # Response

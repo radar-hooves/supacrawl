@@ -15,7 +15,7 @@ from supacrawl.api.models.scrape import (
     ScrapeRequest,
     ScrapeResponse,
 )
-from supacrawl.models import ScrapeResult
+from supacrawl.models import DEFAULT_MOBILE_DEVICE, ScrapeResult
 from supacrawl.services import ScrapeService
 
 logger = logging.getLogger(__name__)
@@ -53,6 +53,9 @@ def _build_service_kwargs(req: ScrapeRequest) -> dict[str, Any]:
 
     if req.headers:
         kwargs["headers"] = req.headers
+
+    if req.mobile:
+        kwargs["device"] = DEFAULT_MOBILE_DEVICE
 
     # maxAge: v2 sends milliseconds; service expects seconds.
     if req.max_age is not None:

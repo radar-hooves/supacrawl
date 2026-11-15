@@ -4,10 +4,17 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from pydantic.alias_generators import to_camel
 
 # Request
+
+
+def _refuse_location(v: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Locale is fixed when the service is built, so a per-request one cannot be honoured."""
+    if v:
+        raise ValueError("location is not supported per request; set the service locale instead")
+    return v
 
 
 class ScrapeRequest(BaseModel):
@@ -41,6 +48,11 @@ class ScrapeRequest(BaseModel):
     query: str | None = None
     http_first: bool = True
     expect: str | None = None
+
+    @field_validator("location")
+    @classmethod
+    def _refuse_location(cls, v: dict[str, Any] | None) -> dict[str, Any] | None:
+        return _refuse_location(v)
 
 
 # Response

@@ -6,7 +6,7 @@ import logging
 import re
 from collections.abc import AsyncGenerator
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Any, Literal
 from urllib.parse import urlparse
 
 from supacrawl.discovery.robots import RobotsConfig, fetch_robots, is_url_allowed
@@ -143,6 +143,7 @@ class CrawlService:
         headers: dict[str, str] | None = None,
         respect_robots: bool = False,
         request_delay: float = 0.0,
+        scrape_options: dict[str, Any] | None = None,
     ) -> AsyncGenerator[CrawlEvent]:
         """Crawl a website, yielding events as pages complete.
 
@@ -189,6 +190,8 @@ class CrawlService:
                 disallowed URLs before scraping (a declared Crawl-delay also raises
                 the per-host gap). Default False: the crawl fetches the URLs it is
                 given without consulting robots.txt.
+            scrape_options: Extra keyword arguments for each page's ``ScrapeService.scrape``
+                (only_main_content, wait_for, include_tags, ...).
             request_delay: Minimum seconds between requests to the same host
                 (default 0.0, i.e. no throttle). Set a positive value to space out
                 requests to a single origin. When respect_robots is True and a site
@@ -235,6 +238,7 @@ class CrawlService:
                     headers=headers,
                     respect_robots=respect_robots,
                     request_delay=request_delay,
+                    scrape_options=scrape_options,
                 ):
                     yield event
             else:
@@ -315,6 +319,7 @@ class CrawlService:
                         headers=headers,
                         respect_robots=respect_robots,
                         request_delay=request_delay,
+                        scrape_options=scrape_options,
                     ):
                         yield event
 
@@ -344,6 +349,7 @@ class CrawlService:
         headers: dict[str, str] | None = None,
         respect_robots: bool = False,
         request_delay: float = 0.0,
+        scrape_options: dict[str, Any] | None = None,
     ) -> AsyncGenerator[CrawlEvent]:
         """Core crawl logic. Assumes _browser, _map_service, _scrape_service are set."""
         assert self._map_service is not None
@@ -503,6 +509,7 @@ class CrawlService:
                     expand_iframes=expand_iframes,  # type: ignore[arg-type]
                     engine=engine,
                     headers=scoped_headers,
+                    **(scrape_options or {}),
                 )
 
                 if result.success and result.data:

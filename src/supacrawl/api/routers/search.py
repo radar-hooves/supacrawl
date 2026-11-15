@@ -19,7 +19,7 @@ from supacrawl.api.models.search import (
     WebResultItem,
 )
 from supacrawl.models import SearchFilters, SearchResult, SearchSourceType
-from supacrawl.services.search.service import SearchService
+from supacrawl.services.search.service import ScrapeOptions, SearchService
 
 logger = logging.getLogger(__name__)
 
@@ -101,10 +101,17 @@ async def search(
             "exclude_domains": req.exclude_domains,
         }
     )
+    scrape_options = None
+    if req.scrape_options is not None:
+        scrape_options = ScrapeOptions(
+            formats=req.scrape_options.get("formats"),
+            only_main_content=req.scrape_options.get("onlyMainContent", True),
+        )
     result = await service.search(
         query=req.query,
         limit=req.limit,
         sources=req.sources,  # type: ignore[arg-type]
+        scrape_options=scrape_options,
         filters=None if filters.is_empty() else filters,
     )
     return _search_result_to_response(result)
