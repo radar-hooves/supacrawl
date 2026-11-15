@@ -257,3 +257,17 @@ class TestParseActions:
         assert len(actions) == 2
         assert actions[0].type == "scrape"
         assert actions[1].type == "click"
+
+
+class TestRawDictActions:
+    """REST and the Foleon rung hand ActionRunner raw dicts."""
+
+    async def test_dict_actions_run_like_action_objects(self):
+        page = MagicMock()
+        page.evaluate = AsyncMock()
+        runner = ActionRunner()
+
+        results = await runner.run(page, [{"type": "scroll", "direction": "down", "amount": 3}])  # type: ignore[list-item]
+
+        assert [r.success for r in results] == [True]
+        assert page.evaluate.await_count == 3

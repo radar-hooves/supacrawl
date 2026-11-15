@@ -57,6 +57,7 @@ class Action:
     key: str | None = None
     script: str | None = None
     full_page: bool = True
+    amount: int = 1
 
 
 class ActionRunner:
@@ -91,7 +92,10 @@ class ActionRunner:
         """
         results: list[ActionResult] = []
 
-        for action in actions:
+        # REST and platform profiles pass raw dicts; normalise once here.
+        parsed = [a for item in actions for a in (parse_actions([item]) if isinstance(item, dict) else [item])]
+
+        for action in parsed:
             try:
                 result = await self._execute_action(page, action)
                 results.append(result)
@@ -218,10 +222,9 @@ class ActionRunner:
         direction = action.direction or "down"
 
         try:
-            if direction == "down":
-                await page.evaluate("window.scrollBy(0, window.innerHeight)")
-            else:
-                await page.evaluate("window.scrollBy(0, -window.innerHeight)")
+            sign = "" if direction == "down" else "-"
+            for _ in range(max(action.amount, 1)):
+                await page.evaluate(f"window.scrollBy(0, {sign}window.innerHeight)")
             return ActionResult(success=True, action_type="scroll")
         except Exception as e:
             return ActionResult(
@@ -346,6 +349,7 @@ def parse_actions(actions_json: list[dict[str, Any]]) -> list[Action]:
             key=item.get("key"),
             script=item.get("script"),
             full_page=item.get("fullPage", True),
+            amount=item.get("amount", 1),
         )
         actions.append(action)
 
