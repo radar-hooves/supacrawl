@@ -112,18 +112,18 @@ def validate_url(
     # Parse and validate URL structure
     try:
         parsed = urlparse(url)
-        if not parsed.netloc:
-            raise SupacrawlValidationError(
-                f"{field_name} must have a valid host, got '{url}'",
-                field=field_name,
-                value=value,
-            )
-    except Exception as e:
+    except ValueError as e:
         raise SupacrawlValidationError(
             f"{field_name} is not a valid URL: {e}",
             field=field_name,
             value=value,
         ) from e
+    if not parsed.netloc:
+        raise SupacrawlValidationError(
+            f"{field_name} must have a valid host, got '{url}'",
+            field=field_name,
+            value=value,
+        )
 
     # Cheap, offline SSRF check (#152): scheme already verified above, so this
     # only adds the blocked-IP-literal check. It cannot catch a hostname that

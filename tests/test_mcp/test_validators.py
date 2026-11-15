@@ -28,6 +28,13 @@ class TestValidateUrl:
         result = validate_url("http://example.com")
         assert result == "http://example.com"
 
+    def test_missing_host_message_is_not_double_wrapped(self):
+        """The host error must reach the caller as written, not inside 'is not a valid URL'."""
+        with pytest.raises(Exception) as exc:
+            validate_url("http://")
+        assert "is not a valid URL" not in str(exc.value)
+        assert "must have a valid host" in str(exc.value)
+
     def test_valid_https_url(self):
         """Should accept valid HTTPS URL."""
         result = validate_url("https://example.com/path?query=1")
