@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- Crawl `include`/`exclude` patterns are regular expressions on every surface (CLI, REST, MCP), as the REST and MCP docs said; the code used shell globs, so the MCP tool's documented examples matched nothing. Glob patterns such as `*/docs/*` are no longer valid.
+
 ## [2026.11.5] - 02/11/2026
 
 ### Fixed

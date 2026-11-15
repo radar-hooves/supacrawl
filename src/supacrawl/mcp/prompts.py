@@ -173,8 +173,8 @@ Include or exclude patterns:
 ```
 supacrawl_crawl(
     url="https://blog.example.com",
-    include_patterns=["*/posts/*", "*/articles/*"],
-    exclude_patterns=["*/tag/*", "*/author/*"],
+    include_patterns=["/posts/", "/articles/"],
+    exclude_patterns=["/tag/", "/author/"],
     limit=100
 )
 ```

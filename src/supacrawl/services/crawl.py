@@ -3,6 +3,7 @@
 import hashlib
 import json
 import logging
+import re
 from collections.abc import AsyncGenerator
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
@@ -569,7 +570,7 @@ class CrawlService:
         )
 
     def _matches_patterns(self, url: str, patterns: list[str]) -> bool:
-        """Check if URL matches any pattern.
+        """Check if URL matches any regular expression.
 
         Args:
             url: URL to check
@@ -578,9 +579,7 @@ class CrawlService:
         Returns:
             True if URL matches any pattern
         """
-        import fnmatch
-
-        return any(fnmatch.fnmatch(url, pattern) for pattern in patterns)
+        return any(re.search(pattern, url) for pattern in patterns)
 
     def _load_resume_state(self, output_dir: Path) -> set[str]:
         """Load URLs that have already been scraped.

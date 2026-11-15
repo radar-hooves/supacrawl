@@ -27,12 +27,12 @@ from supacrawl.cli._common import app, parse_header_string, parse_headers_env
 @click.option(
     "--include",
     multiple=True,
-    help="URL patterns to include (glob patterns)",
+    help="URL regex patterns to include",
 )
 @click.option(
     "--exclude",
     multiple=True,
-    help="URL patterns to exclude (glob patterns)",
+    help="URL regex patterns to exclude",
 )
 @click.option(
     "--output",

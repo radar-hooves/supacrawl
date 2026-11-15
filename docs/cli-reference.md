@@ -159,8 +159,8 @@ supacrawl crawl URL [OPTIONS]
 
 - `--limit INT` - Maximum pages to crawl (default: 100)
 - `--depth INT` - Maximum crawl depth (default: 3)
-- `--include TEXT` - URL patterns to include (glob patterns, can specify multiple)
-- `--exclude TEXT` - URL patterns to exclude (glob patterns, can specify multiple)
+- `--include TEXT` - URL regex patterns to include (can specify multiple)
+- `--exclude TEXT` - URL regex patterns to exclude (can specify multiple)
 - `-o, --output DIRECTORY` - Output directory for scraped content (required)
 - `--resume` - Resume from previous crawl
 - `-f, --format FORMAT` - Output format: `markdown`, `html`, `json`, `changeTracking` (default: `markdown`, can specify multiple)
@@ -189,7 +189,7 @@ $ supacrawl crawl https://docs.example.com -o ./docs --limit 50
 $ supacrawl crawl https://example.com -o ./output --depth 2
 # Crawl with limited depth
 
-$ supacrawl crawl https://example.com -o ./output --include "/docs/*" --exclude "/api/*"
+$ supacrawl crawl https://example.com -o ./output --include "/docs/" --exclude "/api/"
 # Crawl with URL pattern filtering
 
 $ supacrawl crawl https://example.com -o ./output --deduplicate-similar-urls
@@ -546,13 +546,13 @@ supacrawl map https://docs.example.com --search "/api/" --limit 50
 
 # Crawl only API documentation
 supacrawl crawl https://docs.example.com -o ./api-docs \
-  --include "/api/*" \
+  --include "/api/" \
   --limit 100
 
 # Exclude changelog and release notes
 supacrawl crawl https://docs.example.com -o ./docs \
-  --exclude "/changelog/*" \
-  --exclude "/releases/*" \
+  --exclude "/changelog/" \
+  --exclude "/releases/" \
   --limit 200
 ```
 

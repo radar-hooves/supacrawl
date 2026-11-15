@@ -77,9 +77,16 @@ class TestCrawlService:
     def test_matches_patterns(self):
         """Test URL pattern matching."""
         service = CrawlService()
-        assert service._matches_patterns("https://example.com/api/v1", ["*/api/*"])
-        assert not service._matches_patterns("https://example.com/docs", ["*/api/*"])
-        assert service._matches_patterns("https://example.com/docs/guide", ["*/docs/*", "*/api/*"])
+        assert service._matches_patterns("https://example.com/api/v1", [".*/api/.*"])
+        assert not service._matches_patterns("https://example.com/docs", [".*/api/.*"])
+        assert service._matches_patterns("https://example.com/docs/guide", [".*/docs/.*", ".*/api/.*"])
+
+    def test_matches_patterns_documented_mcp_examples(self):
+        """The regex examples in the crawl tool's own description must match."""
+        service = CrawlService()
+        assert service._matches_patterns("https://example.com/docs/intro", [".*\\/docs\\/.*"])
+        assert service._matches_patterns("https://example.com/a.pdf", [".*\\.pdf$"])
+        assert not service._matches_patterns("https://example.com/a.html", [".*\\.pdf$"])
 
     @pytest.mark.e2e
     @pytest.mark.asyncio
