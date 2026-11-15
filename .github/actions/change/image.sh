@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# An image member's deploy: build once on the household builder, smoke it, push :<sha>,
+# An image member's deploy: build once on the household builder, pushing :<sha> from BuildKit, pull and smoke it,
 # point :latest at it, ask Watchtower to update, have the host apply its declared compose config
 # to those containers (Watchtower keeps the old container's config), then watch this host's containers of
 # :latest come up healthy on that very image. A failed or interrupted go-live points :latest
@@ -14,9 +14,12 @@
 # maps a BuildKit secret id to the runner environment variable naming the file that holds it
 # (`secrets = { npmrc = "NPM_CONFIG_USERCONFIG" }`); `netrc` is $NETRC unless declared.
 # The image ref is <registry>/<owner>/<name>, lowercased.
-# A phase splits the work across two runners: `build` builds, smokes and pushes :<sha>;
+# A phase splits the work across two runners: `build` builds and pushes :<sha> from BuildKit, then pulls and smokes it;
 # `release` (on the host that runs it) points :latest at that :<sha> and goes live. Without
 # one, a single runner does both.
+# Where the host keeps its locks, two runs rolling one image here take turns: the second waits,
+# then skips when this host already runs its commit or a newer one. A build phase only waits.
+# A host without the directory (or flock) rolls unlocked.
 # Usage: image.sh <member-dir> <image-name> <sha> [build|release]
 #        image.sh <member-dir> <image-name> --rollback
 . "$(dirname "$0")/lib.sh"
@@ -223,6 +226,19 @@ if [ "$sha" = --rollback ]; then
   exit 1
 fi
 
+locks=${CHANGE_LOCKS:-/var/lib/ci-locks}
+if [ -d "$locks" ] && command -v flock >/dev/null; then
+  exec 9>"$locks/image-$name.lock"
+  flock 9
+fi
+if [ "$phase" != build ]; then
+  cur=$(running "$ref" | sole 1)
+  if [ -n "$cur" ] && git -C "$dir" cat-file -e "$cur^{commit}" 2>/dev/null && git -C "$dir" merge-base --is-ancestor "$sha" "$cur"; then
+    note "$name: this host already runs $cur, which is $sha or newer; skipping"
+    exit 0
+  fi
+fi
+
 if [ "$phase" != release ]; then
   ctx=$dir
   c=$(jq -r '.context // ""' <<<"$cfg")
@@ -232,18 +248,20 @@ if [ "$phase" != release ]; then
     docker buildx create --name household --driver docker-container --driver-opt network=host >/dev/null ||
     docker buildx inspect household >/dev/null 2>&1 ||
     die "cannot create the household builder"
-  docker buildx build --builder household --load --pull --build-arg "GIT_SHA=$sha" \
+  login
+  docker buildx build --builder household --push --provenance=false --sbom=false --pull --build-arg "GIT_SHA=$sha" \
     "${secrets[@]}" -f "$dir/Dockerfile" -t "$ref:$sha" "$ctx"
+  docker pull -q "$ref:$sha" >/dev/null
   img=$(docker image inspect --format '{{.ID}}' "$ref:$sha")
   [ "$(docker image inspect --format "$revision" "$ref:$sha")" = "$sha" ] ||
-    die "$ref:$sha does not carry REVISION=$sha (its Dockerfile needs ARG GIT_SHA and ENV REVISION=\${GIT_SHA}), so no watch could see it go live; nothing pushed"
+    die "$ref:$sha does not carry REVISION=$sha (its Dockerfile needs ARG GIT_SHA and ENV REVISION=\${GIT_SHA}), so no watch could see it go live; not released"
 
   probe=$dir/.github/image-smoke.sh
   [ -f "$probe" ] || probe=$dir/image-smoke.sh
   if [ -f "$probe" ]; then
-    IMAGE=$ref:$sha bash "$probe" || die "smoke: ${probe#"$dir"/} failed on $ref:$sha; nothing pushed"
+    IMAGE=$ref:$sha bash "$probe" || die "smoke: ${probe#"$dir"/} failed on $ref:$sha; not released"
   else
-    boot "$ref:$sha" || die "smoke: $ref:$sha did not come up; nothing pushed"
+    boot "$ref:$sha" || die "smoke: $ref:$sha did not come up; not released"
   fi
 else
   # Built elsewhere: the image id a container here runs is the config digest of the :<sha> manifest.
@@ -253,11 +271,7 @@ else
   [ -n "$img" ] || die "$ref:$sha is not a single-platform manifest, so no watch could tell its image"
 fi
 
-[ "$phase" = release ] || login
-if [ "$phase" = build ]; then
-  docker push -q "$ref:$sha"
-  exit 0
-fi
+[ "$phase" != build ] || exit 0
 if out=$(docker buildx imagetools inspect --format '{{json .Manifest}}' "$ref:latest" 2>&1); then
   prev=$(jq -r .digest <<<"$out")
 else
@@ -273,7 +287,6 @@ live=$(sole 1 <<<"$rows") old=$(sole 1 <<<"$towered") oldimg=$(sole 5 <<<"$tower
 [ -z "$live" ] || [ "$live" = "$sha" ] || no_rollback "$dir" "$name" "$live" "$sha" || exit 1
 unpulled "$towered"
 
-[ "$phase" = release ] || docker push -q "$ref:$sha"
 pid=$$
 declare -p ref name sha img prev old oldimg before held pid >"$state"
 trap 'rollback || :; exit 1' EXIT

@@ -3,7 +3,7 @@
 # fleet that needs uv, in place of calling astral-sh/setup-uv directly:
 #
 #   - name: Set up uv
-#     uses: ./.github/actions/setup-uv
+#     uses: radar-hooves/master-project/.github/actions/setup-uv@main
 #
 # Why this exists rather than each workflow calling setup-uv itself
 # (master-project#173). Two independent network dependencies had to go, and
