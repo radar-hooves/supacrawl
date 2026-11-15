@@ -13,12 +13,13 @@ Condensed from the maintainer's working review (tracked in #192). Security findi
 
 **2. The `agent` command: keep or cut.**
 - **Today:**
-  - The command is `services/agent.py` (390 lines) and `cli/agent.py` (438 lines). Both arrived in the initial release (`dc0e59b`).
+  - The command is `services/agent.py` (390 lines) and the `agent` command in `cli/agent.py` (lines 294-438). That file also holds the `search` and `llm-extract` commands, which stay. Both arrived in the initial release (`dc0e59b`).
+  - It has two faults of its own: one failed page discards the whole run's result, and the compiled result ignores the schema.
   - It has no test file. No issue asks for it, and no issue since the initial release names it.
   - It is left out of MCP on purpose: "the controlling LLM is the agent" (`wiring.py:60-62`).
   - the product requirements document, line 44 and P09:77 keep it in scope. CLI runs leave no record, so its use is unknown.
 - **Recommendation:** cut it. Every household caller is already the agent, it is untested, and its default model is a 3B local model.
-- **Cost:** 828 lines and `features/agent/` deleted, the product requirements document, line 44 and P09:77 struck, and one CHANGELOG line for public users.
+- **Cost:** about 535 lines (the service, the command and the `AgentService` export; no estate repo imports it) and `features/agent/` deleted, the product requirements document, line 44 and P09:77 struck, and one CHANGELOG line for public users.
 - **Against:** P01 lists Agent as a feature module. A stranger among the 373 monthly downloads may use it, and nothing would tell either of us before it breaks for them.
 
 **3. The #138 settings seam (the dashboard's half).**
@@ -30,3 +31,8 @@ Condensed from the maintainer's working review (tracked in #192). Security findi
 - **Recommendation:** say whether the dashboard is still wanted. If not, the schema endpoint and its `x-ui` metadata go when master folds the store into `SupacrawlSettings`. The `supacrawl config` command and the four readers stay.
 - **Cost:** your word. The fold is a package either way.
 - **Against:** the seam is data only, cheap to keep, and rebuilt in a day if you want the dashboard later.
+- **Direction of the fold:** `SupacrawlConfig` stays the one model and `SupacrawlSettings` shrinks to the MCP transport fields (token, origins, output filter, broker credential). `SupacrawlSettings` subclasses mcp-common's settings and needs pydantic-settings, which only the `mcp` extra carries, so the public CLI and REST surfaces cannot import it.
+
+## Second-lab read (15/11/2026)
+
+A read by a model from another lab, checked against the code, left all three decisions open and the verdict (carry on) unchanged. It added the two facts above and found faults, fixed in the same pass: REST `actions` crashed; crawl patterns were globs where the docs and the MCP tool said regex; MCP search rewrote a year the caller wrote; REST dropped documented request fields; `parse_pdf` ran on the event loop; a malformed `SUPACRAWL_API_PORT` crashed every CLI command; thin-main recovery undid the query filter; WordPress detection matched any `post-` class; `validate_url` double-wrapped its host error; search telemetry named the primary provider. Still open, with no decision needed: the CLI's stdout and exit-code contract, map's per-URL fetch, the one-ladder and options-model refactors, and the stale product documents.
