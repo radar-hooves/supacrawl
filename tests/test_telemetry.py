@@ -167,3 +167,16 @@ def test_scrape_event_is_also_logged_on_the_telemetry_logger(tmp_path, caplog) -
     assert record.domain == "a.example"
     assert record.latency_ms == 42
     assert record.verdict == "ok"
+
+
+def test_search_telemetry_records_the_provider_that_served():
+    """Fallback must not be logged under the chain's primary provider."""
+    from unittest.mock import MagicMock
+
+    from supacrawl.models import SearchResult
+    from supacrawl.services.search.service import SearchService
+
+    sink = MagicMock()
+    service = SearchService(providers=["duckduckgo"], telemetry=sink)
+    service._finalize_search(SearchResult(success=True, data=[], provider="tavily"), "q", 0.0)
+    assert sink.record_search.call_args.kwargs["provider"] == "tavily"

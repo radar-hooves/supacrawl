@@ -557,7 +557,7 @@ class SearchService:
             latency_ms = int((time.monotonic() - started) * 1000)
             self._telemetry.record_search(
                 query=query,
-                provider=self._provider,
+                provider=result.provider or self._provider,
                 result_count=len(result.data),
                 success=result.success,
                 latency_ms=latency_ms,
