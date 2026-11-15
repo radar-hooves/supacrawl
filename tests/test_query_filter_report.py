@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 import pytest
 
-from supacrawl.models import ScrapeData, ScrapeMetadata, ScrapeResult
+from supacrawl.models import QueryFilter, ScrapeData, ScrapeMetadata, ScrapeResult
 from supacrawl.services.content_filter import QUERY_OUTCOME, available_extras
 from supacrawl.services.converter import MarkdownConverter
 from supacrawl.services.scrape import ScrapeService
@@ -89,3 +89,42 @@ def test_finish_with_a_query_that_never_reached_extraction_says_so():
 def test_available_extras_agrees_with_the_filter_guard():
     with patch("supacrawl.services.content_filter._is_rank_bm25_available", return_value=False):
         assert available_extras()["query_filter"] is False
+
+
+RICH = "<html><body><p>" + " ".join(f"word{i}" for i in range(300)) + "</p></body></html>"
+
+
+def _recover(main_markdown: str, outcome: QueryFilter):
+    QUERY_OUTCOME.set(outcome)
+    recovered = ScrapeService()._recover_thin_main_content(
+        html=RICH,
+        main_markdown=main_markdown,
+        url="https://example.com",
+        exclude_tags=None,
+        content_mode=0.5,
+        query="bananas",
+    )
+    return recovered, QUERY_OUTCOME.get()
+
+
+def test_thin_recovery_does_not_undo_an_applied_query_filter():
+    filtered = "bananas " * 15
+    recovered, outcome = _recover(filtered, QueryFilter(applied=True, sections_total=3, sections_kept=1))
+    assert recovered == filtered
+    assert outcome is not None and outcome.applied is True
+
+
+def test_thin_recovery_keeping_main_keeps_its_outcome():
+    short = "short page"
+    flat = QueryFilter(applied=False, reason="flat_page", sections_total=1, sections_kept=1)
+    QUERY_OUTCOME.set(flat)
+    svc = ScrapeService()
+    svc._converter.convert = lambda *a, **k: (
+        QUERY_OUTCOME.set(QueryFilter(applied=False, reason="only_main_content_false")),
+        "tiny",
+    )[1]  # type: ignore[method-assign]
+    kept = svc._recover_thin_main_content(
+        html=RICH, main_markdown=short, url="https://example.com", exclude_tags=None, content_mode=0.5, query="bananas"
+    )
+    assert kept == short
+    assert QUERY_OUTCOME.get() == flat

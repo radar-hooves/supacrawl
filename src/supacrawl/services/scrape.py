@@ -1508,6 +1508,10 @@ class ScrapeService:
         main_words = len(main_markdown.split())
         if main_words >= _THIN_MAIN_FLOOR:
             return main_markdown
+        outcome = QUERY_OUTCOME.get()
+        if outcome is not None and outcome.applied:
+            # The query made main thin; recovering the full page would undo it.
+            return main_markdown
         full = self._converter.convert(
             html,
             base_url=url,
@@ -1526,6 +1530,7 @@ class ScrapeService:
                 url,
             )
             return full
+        QUERY_OUTCOME.set(outcome)
         return main_markdown
 
     def _build_failure_result(
