@@ -142,3 +142,14 @@ class TestCrawlCommand:
         )
         assert result.returncode == 0, f"Command failed: {result.stderr}"
         # Just verify command succeeded - manifest creation depends on implementation
+
+
+def test_malformed_api_port_env_does_not_break_other_commands():
+    """SUPACRAWL_API_PORT is read when `serve` runs, not when the CLI is imported."""
+    import os
+    import subprocess
+    import sys
+
+    env = {**os.environ, "SUPACRAWL_API_PORT": "abc"}
+    proc = subprocess.run([sys.executable, "-c", "import supacrawl.cli"], env=env, capture_output=True, text=True)
+    assert proc.returncode == 0, proc.stderr

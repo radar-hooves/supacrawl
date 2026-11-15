@@ -928,3 +928,21 @@ class TestPdfCacheVariant:
                 assert result2.success is True
                 assert result2.data is not None
                 assert result2.data.metadata.cache_hit is True
+
+
+async def test_parse_pdf_extracts_off_the_event_loop():
+    """A large parse must not stall every concurrent request on the loop."""
+    import threading
+
+    from supacrawl.services import pdf
+
+    seen: list[int] = []
+
+    def fake_extract(_data: bytes):
+        seen.append(threading.get_ident())
+        return pdf.PdfExtractionResult(markdown="word " * 500)
+
+    with patch.object(pdf, "extract_text", fake_extract), patch.object(pdf, "_is_pdfplumber_available", lambda: True):
+        await pdf.parse_pdf("https://e.com/a.pdf", mode="fast", pdf_bytes=b"%PDF-1.4 x")
+
+    assert seen and seen[0] != threading.get_ident()

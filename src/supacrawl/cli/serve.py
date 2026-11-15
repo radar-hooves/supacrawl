@@ -1,25 +1,22 @@
 """Serve command for the REST API."""
 
-import os
-
 import click
 
 from supacrawl.cli._common import app
-
-_DEFAULT_HOST = os.environ.get("SUPACRAWL_API_HOST", "0.0.0.0")
-_DEFAULT_PORT = int(os.environ.get("SUPACRAWL_API_PORT", "8308"))
 
 
 @app.command("serve", help="Start the supacrawl REST API server.")
 @click.option(
     "--host",
-    default=_DEFAULT_HOST,
+    default="0.0.0.0",
+    envvar="SUPACRAWL_API_HOST",
     show_default=True,
     help="Host to bind to. Also reads SUPACRAWL_API_HOST env.",
 )
 @click.option(
     "--port",
-    default=_DEFAULT_PORT,
+    default=8308,
+    envvar="SUPACRAWL_API_PORT",
     type=int,
     show_default=True,
     help="Port to listen on. Also reads SUPACRAWL_API_PORT env.",

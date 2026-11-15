@@ -10,6 +10,7 @@ When detected, the PDF is downloaded directly via httpx (bypassing the browser)
 and processed through the appropriate extraction pipeline.
 """
 
+import asyncio
 import io
 import logging
 import re
@@ -551,14 +552,14 @@ async def parse_pdf(
                 "OCR mode requires pytesseract and pdf2image. Install with: pip install supacrawl[pdf-ocr]"
             )
         LOGGER.info(f"Extracting text from PDF via OCR: {url}")
-        return extract_ocr(pdf_bytes)
+        return await asyncio.to_thread(extract_ocr, pdf_bytes)
 
     # fast or auto: try text extraction first
     if not _is_pdfplumber_available():
         raise ImportError("PDF text extraction requires pdfplumber. Install with: pip install pdfplumber")
 
     LOGGER.info(f"Extracting text from PDF: {url}")
-    result = extract_text(pdf_bytes)
+    result = await asyncio.to_thread(extract_text, pdf_bytes)
 
     # auto mode: check if text extraction was sufficient
     if mode == "auto":
@@ -566,7 +567,7 @@ async def parse_pdf(
         if word_count < MIN_WORDS_FOR_SUCCESS:
             if _is_ocr_available():
                 LOGGER.info(f"Text extraction yielded only {word_count} words, falling back to OCR: {url}")
-                return extract_ocr(pdf_bytes)
+                return await asyncio.to_thread(extract_ocr, pdf_bytes)
             else:
                 LOGGER.warning(
                     f"Text extraction yielded only {word_count} words for {url}. "
