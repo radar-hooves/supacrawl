@@ -1,5 +1,5 @@
 # The change pipeline's one caller: every repo carries this file byte for byte, as
-# .github/workflows/change.yaml. Design: docs/research/2026-10-11-estate-ci-design.md §2.
+# .github/workflows/change.yaml. The pipeline lives in radar-hooves/app-factory.
 name: change
 on:
   push: { branches: [main], tags: ['v*'] }
@@ -9,5 +9,5 @@ concurrency: { group: '${{ github.workflow }}-${{ github.ref }}', cancel-in-prog
 permissions: { contents: read, actions: read, id-token: write }
 jobs:
   change:
-    uses: ./.github/workflows/change-pipeline.yaml
+    uses: radar-hooves/app-factory/.github/workflows/change.yaml@main
     with: { roll: '${{ inputs.roll }}' }
