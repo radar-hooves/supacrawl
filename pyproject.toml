@@ -145,7 +145,6 @@ filterwarnings = [
 
 [tool.ruff]
 line-length = 120
-extend-exclude = [".github"]  # checked copy of the change pipeline; never hand-edited
 target-version = "py314"
 
 [tool.ruff.lint]

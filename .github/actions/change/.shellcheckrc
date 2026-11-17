@@ -1,3 +1,0 @@
-# The step scripts source lib.sh beside them.
-source-path=SCRIPTDIR
-external-sources=true
