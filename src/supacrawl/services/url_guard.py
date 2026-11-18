@@ -102,9 +102,13 @@ _PRIVATE_NETWORKS: tuple[IPNetwork, ...] = (
     ipaddress.IPv4Network("127.0.0.0/8"),  # Loopback
     ipaddress.IPv4Network("0.0.0.0/8"),  # "This host on this network"
     ipaddress.IPv4Network("100.64.0.0/10"),  # Carrier-grade NAT
+    ipaddress.IPv4Network("192.0.0.0/24"),  # IETF protocol assignments
+    ipaddress.IPv4Network("198.18.0.0/15"),  # Benchmarking
+    ipaddress.IPv4Network("224.0.0.0/4"),  # Multicast
     ipaddress.IPv6Network("::1/128"),  # IPv6 loopback
     ipaddress.IPv6Network("::/128"),  # IPv6 unspecified — a connect() to it is routed to loopback
     ipaddress.IPv6Network("fc00::/7"),  # IPv6 unique-local
+    ipaddress.IPv6Network("ff00::/8"),  # Multicast
 )
 
 # The well-known NAT64 prefix (RFC 6052): a 64:ff9b::/96 address embeds a
@@ -433,6 +437,26 @@ def pinned_url(url: str, address: str) -> str:
     return urlunparse(parsed._replace(netloc=netloc))
 
 
+def _same_origin(first: str, second: str) -> bool:
+    """Whether two URLs have the same scheme, host, and effective port."""
+    try:
+        first_parsed = urlparse(first)
+        second_parsed = urlparse(second)
+        first_origin = (
+            first_parsed.scheme.lower(),
+            (first_parsed.hostname or "").lower(),
+            first_parsed.port or (443 if first_parsed.scheme.lower() == "https" else 80),
+        )
+        second_origin = (
+            second_parsed.scheme.lower(),
+            (second_parsed.hostname or "").lower(),
+            second_parsed.port or (443 if second_parsed.scheme.lower() == "https" else 80),
+        )
+    except ValueError:
+        return False
+    return first_origin == second_origin
+
+
 def _authority(host: str, port: int | None) -> str:
     """The value for the ``Host`` header: the real hostname, port preserved.
 
@@ -469,11 +493,12 @@ async def guarded_stream(
     refused like a direct request to it.
 
     Args:
-        client: The client to issue requests on. Its own default headers
-            (User-Agent, Accept, etc. set at construction) still apply; this
-            only overrides the connection target and Host/SNI per hop. Must
-            not itself be configured with ``follow_redirects=True`` — that
-            would let a hop through unguarded.
+        client: The client to issue requests on. Its default headers apply to
+            the initial request and same-origin redirects. A cross-origin hop
+            receives only its explicit Host header and SNI, so caller headers
+            and client authentication cannot leak to another origin. Must not
+            itself be configured with ``follow_redirects=True`` — that would
+            let a hop through unguarded.
         method: HTTP method, e.g. "GET" or "HEAD".
         url: The URL to fetch.
         max_redirects: Maximum redirect hops to follow before giving up.
@@ -497,6 +522,7 @@ async def guarded_stream(
     current_url = url
     hops: list[str] = []
     history: list[httpx.Response] = []
+    forward_sensitive_headers = True
     for _ in range(max_redirects + 1):
         if current_url in hops:
             raise RedirectLimitError(f"Redirect loop at {current_url!r} starting from {url!r}", field="url", value=url)
@@ -510,13 +536,23 @@ async def guarded_stream(
         # The connection goes to the pinned address, but the server still needs
         # the real hostname: Host (with any non-default port) for virtual
         # hosting, SNI so TLS presents and verifies the right certificate.
-        request = client.build_request(
-            method,
-            request_url,
-            headers={"Host": _authority(host, urlparse(current_url).port)},
-            extensions={"sni_hostname": host},
-        )
-        response = await client.send(request, stream=True, follow_redirects=False)
+        request_headers = {"Host": _authority(host, urlparse(current_url).port)}
+        if forward_sensitive_headers:
+            request = client.build_request(
+                method,
+                request_url,
+                headers=request_headers,
+                extensions={"sni_hostname": host},
+            )
+            response = await client.send(request, stream=True, follow_redirects=False)
+        else:
+            request = httpx.Request(
+                method,
+                request_url,
+                headers=request_headers,
+                extensions={"sni_hostname": host},
+            )
+            response = await client.send(request, stream=True, auth=None, follow_redirects=False)
 
         if not response.is_redirect:
             response.history = history
@@ -544,13 +580,15 @@ async def guarded_stream(
         # returning a rejectable string; that must surface as the same
         # ValidationError every other hop refusal does.
         try:
-            current_url = urljoin(current_url, location)
+            next_url = urljoin(current_url, location)
         except ValueError as exc:
             raise RedirectLimitError(
                 f"Redirect Location {location!r} from {current_url!r} could not be parsed: {exc}",
                 field="url",
                 value=location,
             ) from exc
+        forward_sensitive_headers = forward_sensitive_headers and _same_origin(current_url, next_url)
+        current_url = next_url
 
     raise RedirectLimitError(f"Too many redirects (>{max_redirects}) starting from {url!r}", field="url", value=url)
 

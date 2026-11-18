@@ -212,6 +212,30 @@ class TestActionRunner:
         assert results[0].action_type == "click"
         mock_page.click.assert_called_once()
 
+    @pytest.mark.asyncio
+    async def test_execute_javascript_is_refused_when_page_scripts_are_blocked(self, mock_page, monkeypatch):
+        monkeypatch.setenv("SUPACRAWL_BLOCK_PAGE_SCRIPTS", "1")
+
+        results = await ActionRunner().run(mock_page, [Action(type="executeJavascript", script="undefined")])
+
+        assert results == [
+            ActionResult(
+                success=False,
+                action_type="executeJavascript",
+                error="ExecuteJavascript is disabled when page scripts are blocked",
+            )
+        ]
+        mock_page.evaluate.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_scroll_remains_available_when_page_scripts_are_blocked(self, mock_page, monkeypatch):
+        monkeypatch.setenv("SUPACRAWL_BLOCK_PAGE_SCRIPTS", "1")
+
+        results = await ActionRunner().run(mock_page, [Action(type="scroll", direction="down")])
+
+        assert results == [ActionResult(success=True, action_type="scroll")]
+        mock_page.evaluate.assert_awaited_once()
+
 
 class TestParseActions:
     """Tests for parse_actions function."""

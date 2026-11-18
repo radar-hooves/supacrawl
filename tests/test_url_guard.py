@@ -198,6 +198,12 @@ class TestIsBlockedAddress:
         with patch.dict(os.environ, {"SUPACRAWL_BLOCK_PRIVATE_NETWORKS": "true"}):
             assert is_blocked_address(ipaddress.ip_address("192.168.1.1")) is True
 
+    @pytest.mark.parametrize("address", ["192.0.0.1", "198.18.0.1", "224.0.0.1", "ff02::1"])
+    def test_reserved_address_blocked_in_strict_mode(self, address: str) -> None:
+        import ipaddress
+
+        assert is_blocked_address(ipaddress.ip_address(address), strict=True) is True
+
 
 class TestResolveAndPin:
     """resolve_and_pin closes the DNS-rebinding window (#152)."""
@@ -334,20 +340,22 @@ class TestGuardedRequestRedirectChain:
     """guarded_request/guarded_stream guard and pin every redirect hop (#152)."""
 
     @staticmethod
-    def _client(responses):
+    def _client(responses, default_headers: dict[str, str] | None = None):
         """Build a fake httpx.AsyncClient whose .send() replays *responses* in order.
 
         Each entry is (status_code, headers dict).
         """
         calls: list[dict[str, object]] = []
+        default_auth = object()
 
-        async def mock_send(request, *, stream, follow_redirects):
+        async def mock_send(request, *, stream, auth=default_auth, follow_redirects):
             status, headers = responses[len(calls)]
             calls.append(
                 {
                     "url": str(request.url),
                     "headers": dict(request.headers),
                     "extensions": request.extensions,
+                    "auth": auth,
                 }
             )
             resp = MagicMock()
@@ -364,7 +372,12 @@ class TestGuardedRequestRedirectChain:
             def build_request(self, method, url, *, headers=None, extensions=None):
                 import httpx
 
-                return httpx.Request(method, url, headers=headers, extensions=extensions)
+                return httpx.Request(
+                    method,
+                    url,
+                    headers={**(default_headers or {}), **(headers or {})},
+                    extensions=extensions,
+                )
 
             send = staticmethod(mock_send)
 
@@ -419,6 +432,44 @@ class TestGuardedRequestRedirectChain:
         assert response.status_code == 200
         assert seen == ["https://example.com/report.pdf", "https://cdn.example.com/real.pdf"]
         assert len(calls) == 2
+
+    async def test_cross_origin_redirect_strips_caller_credentials(self) -> None:
+        client, calls = self._client(
+            [(302, {"location": "https://cdn.example.com/real.pdf"}), (200, {})],
+            default_headers={
+                "Authorization": "Bearer dummy",
+                "Cookie": "session=dummy",
+                "X-Caller-Metadata": "inert",
+            },
+        )
+
+        def fake_resolve(url, strict=None):
+            return ("93.184.216.34", "cdn.example.com" if "cdn" in url else "example.com")
+
+        with patch("supacrawl.services.url_guard.resolve_and_pin", side_effect=fake_resolve):
+            await guarded_request(client, "GET", "https://example.com/report.pdf")
+
+        assert calls[0]["headers"]["authorization"] == "Bearer dummy"
+        assert calls[0]["headers"]["cookie"] == "session=dummy"
+        assert calls[0]["headers"]["x-caller-metadata"] == "inert"
+        assert calls[1]["headers"] == {"host": "cdn.example.com"}
+        assert calls[1]["extensions"]["sni_hostname"] == "cdn.example.com"
+        assert calls[1]["auth"] is None
+
+    async def test_same_origin_redirect_keeps_caller_credentials(self) -> None:
+        client, calls = self._client(
+            [(302, {"location": "/real.pdf"}), (200, {})],
+            default_headers={"Authorization": "Bearer dummy", "Cookie": "session=dummy"},
+        )
+
+        with patch(
+            "supacrawl.services.url_guard.resolve_and_pin",
+            return_value=("93.184.216.34", "example.com"),
+        ):
+            await guarded_request(client, "GET", "https://example.com/report.pdf")
+
+        assert calls[1]["headers"]["authorization"] == "Bearer dummy"
+        assert calls[1]["headers"]["cookie"] == "session=dummy"
 
     async def test_too_many_redirects_is_refused(self) -> None:
         """A redirect chain deeper than max_redirects is refused, not followed forever."""

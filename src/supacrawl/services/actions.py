@@ -12,6 +12,8 @@ from typing import Any, Literal
 
 from playwright.async_api import Page
 
+from supacrawl.services.url_guard import block_page_scripts
+
 LOGGER = logging.getLogger(__name__)
 
 
@@ -273,6 +275,12 @@ class ActionRunner:
 
     async def _action_execute_js(self, page: Page, action: Action) -> ActionResult:
         """Execute custom JavaScript."""
+        if block_page_scripts():
+            return ActionResult(
+                success=False,
+                action_type="executeJavascript",
+                error="ExecuteJavascript is disabled when page scripts are blocked",
+            )
         if not action.script:
             return ActionResult(
                 success=False,
