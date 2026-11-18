@@ -92,3 +92,19 @@ async def test_unreadable_image_keeps_its_hint(monkeypatch):
     monkeypatch.setattr(image_details, "guarded_stream", Boom)
     details = await measure_images('<img srcset="/a.png 900w">', "https://example.com/")
     assert (details[0].width, details[0].height) == (900, None)
+
+
+@pytest.mark.asyncio
+async def test_a_non_ascii_page_url_is_sent_as_an_ascii_referer(monkeypatch):
+    seen = {}
+    real = httpx.AsyncClient
+
+    def client(**kwargs):
+        seen.update(kwargs["headers"])
+        return real(**kwargs)
+
+    monkeypatch.setattr(image_details.httpx, "AsyncClient", client)
+
+    await measure_images("<html></html>", "https://ja.wikipedia.org/wiki/ウェブ?a=b%20c")
+
+    assert seen["Referer"] == "https://ja.wikipedia.org/wiki/%E3%82%A6%E3%82%A7%E3%83%96?a=b%20c"

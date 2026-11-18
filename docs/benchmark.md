@@ -40,6 +40,12 @@ Reading the table: supacrawl is the only reader that both keeps the content and 
 
 Run one page at a time, as a CLI user does, on the same loaded host, supacrawl's figures were: 88% of 33 pages, median 4.0 s, mean 8.3 s, and 1,433 MB peak (proportional set size, from a later run at load 47 to 68); the median is less than half the concurrent figure, the memory about half.
 
+### Re-run, 18/11/2026
+
+supacrawl 2026.11.5 (188a00e), three pages at a time, no reference renderer, on the same host at a one-minute load of 7.1 at the start and 8.0 at the end: 85% of 33 pages, content kept 93%, boilerplate gone 92%, median 6.4 s, mean 11.2 s, peak 3,012 MB, search 5 of 5. The five failures are the three bot-wall probes, Stack Overflow and Project Gutenberg's plain-text file, which now answers 503 to any client, curl included.
+
+A run that reads far lower than this is a host fault before it is a regression: the ladder's browsers must launch. `PLAYWRIGHT_BROWSERS_PATH` must hold the Chromium revision the installed Playwright asks for (Nix's `playwright-driver` can lag it), and `SUPACRAWL_CAMOUFOX_LIBS` must hold Camoufox's GTK libraries. Without either, every page that needs a browser fails in seconds, and a page whose URL has non-ASCII characters failed on 2026.11.2 to 2026.11.5 with an `'ascii' codec` error until the fix to the image-size probe's `Referer`.
+
 ### Before and after this release
 
 The same corpus, one page at a time, at the commit before the fast-path changes and after them, run back to back on the same loaded host (so the two rows compare with each other, not with a quiet machine):
