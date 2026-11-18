@@ -11,7 +11,7 @@ rendering, not the original.
 import asyncio
 import logging
 import re
-from urllib.parse import urljoin, urlparse
+from urllib.parse import quote, urljoin, urlparse
 
 import httpx
 from bs4 import BeautifulSoup
@@ -118,6 +118,11 @@ async def _probe(client: httpx.AsyncClient, url: str, hint: int | None, semaphor
     return detail
 
 
+def _ascii_url(url: str) -> str:
+    """A URL with any non-ASCII characters percent-encoded: a header value must be ASCII."""
+    return quote(url, safe=":/?#[]@!$&'()*+,;=%~-._")
+
+
 async def measure_images(html: str, base_url: str) -> list[ImageDetail]:
     """Sized images on a page, largest first, with site icons flagged ``icon``."""
     candidates = collect_candidates(html, base_url)
@@ -127,7 +132,11 @@ async def measure_images(html: str, base_url: str) -> list[ImageDetail]:
     async with httpx.AsyncClient(
         follow_redirects=False,
         timeout=httpx.Timeout(PROBE_TIMEOUT_S),
-        headers={"User-Agent": DEFAULT_USER_AGENT, "Referer": base_url, "Range": f"bytes=0-{HEADER_BYTES - 1}"},
+        headers={
+            "User-Agent": DEFAULT_USER_AGENT,
+            "Referer": _ascii_url(base_url),
+            "Range": f"bytes=0-{HEADER_BYTES - 1}",
+        },
     ) as client:
         details = await gather_results(_probe(client, url, hint, semaphore) for url, hint in ordered)
     for detail in details:
