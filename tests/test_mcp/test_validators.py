@@ -9,7 +9,6 @@ from supacrawl.mcp.exceptions import SupacrawlValidationError
 from supacrawl.mcp.validators import (
     enhance_query_with_current_year,
     validate_limit,
-    validate_max_steps,
     validate_prompt,
     validate_query,
     validate_timeout,
@@ -262,30 +261,6 @@ class TestValidatePrompt:
         with pytest.raises(SupacrawlValidationError) as exc_info:
             validate_prompt("hi", min_length=10)
         assert "10" in str(exc_info.value)
-
-
-class TestValidateMaxSteps:
-    """Test max_steps validation."""
-
-    def test_valid_max_steps(self):
-        """Should accept valid max_steps."""
-        result = validate_max_steps(10)
-        assert result == 10
-
-    def test_clamps_to_minimum(self):
-        """Should clamp to minimum (1)."""
-        result = validate_max_steps(0)
-        assert result == 1
-
-    def test_clamps_to_maximum(self):
-        """Should clamp to maximum (20)."""
-        result = validate_max_steps(50)
-        assert result == 20
-
-    def test_uses_default_for_none(self):
-        """Should use default for None."""
-        result = validate_max_steps(None)
-        assert result == 10
 
 
 class TestEnhanceQueryWithCurrentYear:

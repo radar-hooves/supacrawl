@@ -13,7 +13,6 @@ The `supacrawl` CLI provides commands for web scraping, URL mapping, search, and
 - `map` - Map URLs from a website
 - `search` - Search the web (requires provider API key; see [search](#search))
 - `llm-extract` - Extract structured data using LLM
-- `agent` - Run autonomous web agent
 - `cache` - Manage the local scrape cache
 - `config` - Inspect and edit settings; emit the GUI settings schema (see [configuration](configuration.md))
 - `strategy` - Inspect and reset per-domain strategy memory
@@ -350,47 +349,6 @@ $ supacrawl llm-extract https://a.com https://b.com --prompt "Extract titles" -o
 # Extract from multiple URLs
 ```
 
-### agent
-
-Run an autonomous web agent that searches, navigates, and extracts data.
-
-**Usage:**
-
-```bash
-supacrawl agent PROMPT [OPTIONS]
-```
-
-**Arguments:**
-
-- `PROMPT` - Natural language description of data to find
-
-**Options:**
-
-- `-u, --url URL` - Starting URLs (can specify multiple). If omitted, agent searches first
-- `-s, --schema FILE` - Path to JSON schema for structured output
-- `--max-steps INT` - Maximum pages to visit (default: 10)
-- `-o, --output PATH` - Output file (JSON). If omitted, prints to stdout
-- `-q, --quiet` - Suppress progress output, only show final result
-
-**Environment Variables (required):**
-
-- `SUPACRAWL_LLM_PROVIDER` - LLM provider: `ollama`, `openai`, or `anthropic`
-- `SUPACRAWL_LLM_MODEL` - Model name
-- `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` - API key for cloud providers
-
-**Example:**
-
-```bash
-$ supacrawl agent "Find the pricing plans for Anthropic Claude API"
-# Agent will search and navigate to find pricing info
-
-$ supacrawl agent "Extract all team member names and roles" --url https://example.com/about
-# Start from a specific URL
-
-$ supacrawl agent "Find Python tutorial websites" --max-steps 5 --quiet
-# Limit steps and suppress progress output
-```
-
 ### cache
 
 Manage the local scrape cache.
@@ -712,9 +670,6 @@ supacrawl llm-extract \
   https://shop.example.com/product/2 \
   --prompt "Extract product name and price" \
   -o products.json
-
-# Autonomous agent for complex tasks
-supacrawl agent "Find the pricing plans for Acme Corp" -o pricing.json
 ```
 
 ### Caching

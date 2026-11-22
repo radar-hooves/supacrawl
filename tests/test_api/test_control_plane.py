@@ -14,7 +14,6 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from supacrawl.api.app import create_app
-from supacrawl.config import SupacrawlSecrets
 
 
 @pytest.fixture()
@@ -27,39 +26,6 @@ def app() -> FastAPI:
 def client(app: FastAPI) -> TestClient:
     """Return a ``TestClient`` wired to the app."""
     return TestClient(app)
-
-
-# GET /supacrawl/config/schema
-
-
-class TestConfigSchema:
-    """Schema endpoint returns the full GUI-renderable JSON schema."""
-
-    def test_returns_200(self, client: TestClient) -> None:
-        resp = client.get("/supacrawl/config/schema")
-        assert resp.status_code == 200
-
-    def test_response_is_object_schema(self, client: TestClient) -> None:
-        data = client.get("/supacrawl/config/schema").json()
-        assert data["type"] == "object"
-        assert "properties" in data
-
-    def test_includes_telemetry_fields(self, client: TestClient) -> None:
-        props = client.get("/supacrawl/config/schema").json()["properties"]
-        assert "metrics" in props
-        assert "metrics_full_url" in props
-
-    def test_x_ui_metadata_present(self, client: TestClient) -> None:
-        """Every property must carry x-ui metadata (dashboard renders from this)."""
-        props = client.get("/supacrawl/config/schema").json()["properties"]
-        for name, prop in props.items():
-            assert "x-ui" in prop, f"{name} is missing x-ui metadata"
-
-    def test_no_secret_fields_in_schema(self, client: TestClient) -> None:
-        """Secret fields must never appear in the config schema endpoint."""
-        props = set(client.get("/supacrawl/config/schema").json()["properties"])
-        secret_fields = set(SupacrawlSecrets.model_fields)
-        assert props.isdisjoint(secret_fields)
 
 
 # GET /supacrawl/config

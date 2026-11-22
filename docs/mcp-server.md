@@ -35,7 +35,7 @@ With both installed, the server runs over stdio or HTTP:
 | `supacrawl_diagnose` | Why a URL scrapes badly: bot wall, JavaScript, PDF |
 | `supacrawl_health` | Engine, browser, search and LLM liveness in one shape |
 
-The CLI's `agent` command is deliberately absent: over MCP the calling model is the agent. The server also exposes resources (format references, search providers, capabilities) and prompts (workflow guides for scraping, extraction, research and error handling).
+The server also exposes resources (format references, search providers, capabilities) and prompts (workflow guides for scraping, extraction, research and error handling).
 
 ## Quality signal
 

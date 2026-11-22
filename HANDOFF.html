@@ -131,29 +131,13 @@ No scripts, no external loads, no secret values, no names of anyone outside the 
 <header class="masthead">
 <p class="eyebrow">supacrawl</p>
 <h1>Open work</h1>
-<p class="updated">Updated <time datetime="2026-11-18">18/11/2026</time></p>
+<p class="updated">Updated <time datetime="2026-11-22">22/11/2026</time></p>
 </header>
 
 <section class="operator" aria-labelledby="for-the-operator">
 <h2 id="for-the-operator">For the operator</h2>
 
-<section class="when today">
-<h3>Today</h3>
-<div class="asks">
-<article class="ask" data-id="promise-to-strangers" data-kind="decide" data-track="#192">
-<h4>What does supacrawl promise someone who installs it from PyPI?</h4>
-<p>The README and product brief say one install gives a command line, a Python library, a Firecrawl-style web API and an MCP server. From PyPI the MCP server cannot start, because it is built on a private library. It is also the part your own sessions use most (over ten thousand calls in a month). Suggested wording: "a CLI, a Python library and a Firecrawl-shaped REST API from one pip install; the MCP server runs from the maintainer's container image". Your sentence is all that waits; about five documents then follow, no code. Detail: <code>docs/research/holistic-review-decisions.md</code>.</p>
-</article>
-<article class="ask" data-id="keep-agent-command" data-kind="decide" data-track="#192">
-<h4>Should the "agent" command, which lets a local model browse on its own, be deleted?</h4>
-<p>It is about 535 lines, has no tests, nobody has asked for it since the first release, and every household caller is already an agent. Suggested: cut it, with one changelog line. The risk is a stranger among the monthly PyPI downloads who uses it and would find it gone. Detail: <code>docs/research/holistic-review-decisions.md</code>.</p>
-</article>
-<article class="ask" data-id="keep-settings-dashboard-seam" data-kind="decide" data-track="#192">
-<h4>Do you still want the settings dashboard that the config schema endpoint was built for?</h4>
-<p>Five months on, nothing in the estate calls that endpoint. If the dashboard is dead, the endpoint and its display metadata go when the settings are folded into one system; the config command and its readers stay. If you may want it later, keeping the endpoint is cheap and it could be rebuilt in a day. Detail: <code>docs/research/holistic-review-decisions.md</code>.</p>
-</article>
-</div>
-</section>
+<p>Nothing waits on the operator.</p>
 </section>
 
 </main>

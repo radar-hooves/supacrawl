@@ -19,7 +19,6 @@ Install: `pip install supacrawl` then `playwright install chromium` (add `[steal
 | A site → the list of its URLs (no content) | `supacrawl map <url>`                            |
 | A site → scrape many pages into a folder   | `supacrawl crawl <url> --output dir/`            |
 | URLs → specific fields as JSON (LLM)       | `supacrawl llm-extract <url...> --schema s.json` |
-| An open-ended gathering task               | `supacrawl agent "<task>"`                       |
 
 Rule of thumb: if you already have the URL, `scrape`; if you don't, `search`; for a whole site, `map` (just links) or `crawl` (links + content).
 

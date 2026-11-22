@@ -6,7 +6,7 @@
 
 _Clean markdown from the web, for the terminal and for AI assistants._
 
-One `pip install`, no Docker, no database, no hosted account: a CLI, a Python library, a Firecrawl-compatible REST API and an MCP server over the same engine.
+One `pip install`, no Docker, no database, no hosted account: a CLI, a Python library and a Firecrawl-compatible REST API. The MCP server runs from the maintainer's container image, not from PyPI (see [the MCP guide](docs/mcp-server.md)).
 
 [Installation](#installation) · [Features](#features) · [Benchmark](docs/benchmark.md) · [Docs](docs/)
 

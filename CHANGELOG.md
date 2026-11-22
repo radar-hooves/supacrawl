@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Removed
+
+- The `supacrawl agent` command and `AgentService` (untested, never requested since the first release; over MCP the calling model is the agent). Use `search`, `scrape` and `llm-extract`.
+- `GET /supacrawl/config/schema` on the REST server: nothing called it. `supacrawl config schema` and `GET /supacrawl/config` remain.
+
 ### Fixed
 
 - A page whose URL has non-ASCII characters (`ja.wikipedia.org/wiki/ウェブスクレイピング`) no longer fails the whole scrape when `images` is requested: the image-size probe sent the URL raw as its `Referer`, and an ASCII-only header refused it. It is percent-encoded now. Seen as the benchmark's Japanese and Arabic Wikipedia cases failing since 2026.11.2.

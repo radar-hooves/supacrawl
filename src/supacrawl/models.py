@@ -702,24 +702,3 @@ class ExtractResult(BaseModel):
     success: bool
     data: list[ExtractResultItem]
     error: str | None = None
-
-
-# Agent Models
-
-
-class AgentEvent(BaseModel):
-    """Event emitted during agent execution."""
-
-    type: Literal["thinking", "action", "result", "complete", "error"]
-    message: str | None = None
-    url: str | None = None
-    data: dict[str, Any] | None = None
-
-
-class AgentResult(BaseModel):
-    """Final agent result."""
-
-    success: bool
-    data: dict[str, Any] | None = None
-    urls_visited: list[str] = Field(default_factory=list)
-    error: str | None = None

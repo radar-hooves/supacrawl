@@ -597,46 +597,11 @@ def validate_prompt(
     return prompt
 
 
-def validate_max_steps(
-    value: Any,
-    field_name: str = "max_steps",
-    min_value: int = 1,
-    max_value: int = 20,
-    default: int = 10,
-) -> int:
-    """
-    Validate max_steps parameter for agent operations.
-
-    Clamps the value to the valid range instead of raising an error.
-
-    Args:
-        value: The value to validate
-        field_name: Name of the field for error messages
-        min_value: Minimum allowed value (default: 1)
-        max_value: Maximum allowed value (default: 20)
-        default: Default value if None (default: 10)
-
-    Returns:
-        Validated max_steps as integer (clamped to range)
-    """
-    if value is None:
-        return default
-
-    try:
-        steps = int(value)
-    except ValueError, TypeError:
-        return default
-
-    # Clamp to valid range
-    return max(min_value, min(steps, max_value))
-
-
 __all__ = [
     "enhance_query_with_current_year",
     "validate_formats",
     "validate_json_object",
     "validate_limit",
-    "validate_max_steps",
     "validate_prompt",
     "validate_query",
     "validate_sources",

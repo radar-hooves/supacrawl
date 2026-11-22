@@ -6,7 +6,7 @@ into modules by functionality:
 - scrape: Single URL scraping
 - crawl: Website crawling with URL discovery
 - map: URL discovery and mapping
-- agent: Search, extraction, and agent commands (search, llm-extract, agent)
+- agent: Search and extraction commands (search, llm-extract)
 - cache: Cache management subcommands (cache stats/clear/prune)
 - config: Settings store and GUI schema (config get/set/schema/path/secrets)
 - strategy: Per-domain strategy memory (strategy list/show/forget/clear)

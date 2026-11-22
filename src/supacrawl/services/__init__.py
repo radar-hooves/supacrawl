@@ -8,10 +8,8 @@ This module provides the core services:
 - MapService: URL discovery and mapping
 - SearchService: Web search with optional scraping
 - ExtractService: LLM-powered structured data extraction
-- AgentService: Autonomous web agent for data gathering
 """
 
-from supacrawl.services.agent import AgentService
 from supacrawl.services.browser import BrowserManager
 from supacrawl.services.converter import MarkdownConverter
 from supacrawl.services.crawl import CrawlService
@@ -21,7 +19,6 @@ from supacrawl.services.scrape import ScrapeService
 from supacrawl.services.search import SearchService
 
 __all__ = [
-    "AgentService",
     "BrowserManager",
     "CrawlService",
     "ExtractService",

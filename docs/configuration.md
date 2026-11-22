@@ -68,7 +68,7 @@ Every setting is a standing default; a per-request flag or API argument still ov
 
 ## LLM provider
 
-`llm-extract`, `agent`, the `json` and `summary` formats, and the MCP `supacrawl_extract` and `supacrawl_summary` tools need a model:
+`llm-extract`, the `json` and `summary` formats, and the MCP `supacrawl_extract` and `supacrawl_summary` tools need a model:
 
 | Env var | Notes |
 | --- | --- |
@@ -159,7 +159,6 @@ When `supacrawl serve` is running, the settings and telemetry state are also exp
 
 | Endpoint                                | Returns                                                                   |
 | --------------------------------------- | ------------------------------------------------------------------------- |
-| `GET /supacrawl/config/schema`          | the `x-ui` settings schema, to render a form                              |
 | `GET /supacrawl/config`                 | effective non-secret values plus a secret **presence** map (never values) |
 | `GET /supacrawl/metrics/summary?days=N` | the telemetry rollup, without parsing the raw JSONL                       |
 

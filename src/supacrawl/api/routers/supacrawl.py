@@ -54,22 +54,6 @@ async def health() -> dict[str, Any]:
     }
 
 
-@router.get("/config/schema")
-async def config_schema_endpoint(
-    _api_key: str | None = Depends(get_api_key),
-) -> dict[str, Any]:
-    """Return the JSON schema a GUI uses to render the settings form.
-
-    The schema carries ``x-ui`` metadata on each field (group, widget hint,
-    help text, and optional conditional-visibility rules). No secret ever
-    appears here — credentials live only in ``SupacrawlSecrets`` and are
-    structurally absent from this schema.
-    """
-    from supacrawl.config import config_schema
-
-    return config_schema()
-
-
 @router.get("/config")
 async def config_effective(
     _api_key: str | None = Depends(get_api_key),
