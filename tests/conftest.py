@@ -35,8 +35,15 @@ from tests.helpers import _LLM_ENV_VARS, LLMWire, wire_llm  # noqa: E402
 
 
 def _chromium_installed() -> bool:
+    """True when the Chromium revision the installed Playwright expects is on disk (an older one does not launch)."""
+    import json
+
+    import playwright
+
     root = Path(os.environ.get("PLAYWRIGHT_BROWSERS_PATH") or Path.home() / ".cache" / "ms-playwright")
-    return any(root.glob("chromium*-*"))
+    spec = json.loads((Path(playwright.__file__).parent / "driver/package/browsers.json").read_text())
+    rev = next(b["revision"] for b in spec["browsers"] if b["name"] == "chromium")
+    return any(root.glob(f"chromium*-{rev}"))
 
 
 @pytest.fixture(autouse=True)
