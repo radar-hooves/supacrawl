@@ -172,7 +172,30 @@ async def run_batch_scrape(
     if scrape_kwargs:
         call_kwargs.update(scrape_kwargs)
 
+    # The first URL of each domain runs alone so the strategy it learns (the
+    # engine that got past a wall) seeds its siblings instead of each one
+    # climbing the escalation ladder and tripping the same throttle.
+    domain_leaders: dict[str, asyncio.Event] = {}
+
     async def _do_scrape(idx: int, url: str) -> None:
+        from supacrawl.services.strategy_memory import registrable_domain
+
+        domain = registrable_domain(url)
+        leader = domain_leaders.get(domain) if domain else None
+        if leader is not None:
+            await leader.wait()
+            await _scrape_one(idx, url)
+            return
+        if domain is None:
+            await _scrape_one(idx, url)
+            return
+        domain_leaders[domain] = done = asyncio.Event()
+        try:
+            await _scrape_one(idx, url)
+        finally:
+            done.set()
+
+    async def _scrape_one(idx: int, url: str) -> None:
         """Scrape one URL, honouring the semaphore and retry budget."""
         if cancelled is not None and cancelled.is_set():
             LOGGER.info("Batch scrape cancelled; skipping %s", url)

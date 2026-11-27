@@ -1194,7 +1194,8 @@ class ScrapeService:
                 change_tracking_modes=change_tracking_modes,
                 expand_iframes=(expand_iframes if retry_expand_iframes is None else retry_expand_iframes),  # type: ignore[arg-type]
                 expand_disclosures=expand_disclosures,
-                device=device,
+                # Camoufox generates its own fingerprint and refuses device emulation.
+                device=None if engine == "camoufox" else device,
                 parse_pdf=parse_pdf,
                 engine=engine,
                 headers=headers,

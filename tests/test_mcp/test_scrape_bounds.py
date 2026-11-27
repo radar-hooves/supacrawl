@@ -8,7 +8,7 @@ import pytest
 
 from supacrawl.mcp.tools.health import supacrawl_health
 from supacrawl.mcp.tools.scrape import LARGE_RESPONSE_CHARS, supacrawl_scrape
-from supacrawl.models import ScrapeData, ScrapeMetadata, ScrapeResult
+from supacrawl.models import ScrapeData, ScrapeMetadata, ScrapeResult, StructuredData
 
 pytestmark = [pytest.mark.mcp, pytest.mark.asyncio]
 
@@ -95,3 +95,35 @@ async def test_an_unmatched_section_returns_the_page_whole_and_says_so():
     out = await supacrawl_scrape(_client(text), url="https://example.com", section="nope")
     assert out["data"]["markdown"] == text
     assert out["section"]["found"] is False
+
+
+async def test_max_chars_bounds_structured_data_and_keeps_the_small_product_node():
+    product = {"@type": "Product", "name": "Glass set", "offers": {"price": "29.00"}}
+    sd = StructuredData(
+        json_ld=[product, {"@type": "WebPage", "blob": "y" * 5000}],
+        next_data={"props": "x" * 20000},
+        opengraph={"og:title": "Glass set"},
+    )
+    client = MagicMock()
+    result = ScrapeResult(success=True, data=ScrapeData(markdown="m", structured_data=sd, metadata=ScrapeMetadata()))
+    client.scrape_service.scrape = AsyncMock(return_value=result)
+
+    out = await supacrawl_scrape(client, url="https://example.com", formats=["structuredData"], max_chars=1000)
+
+    kept = out["data"]["structured_data"]
+    assert "next_data" not in kept
+    assert kept["json_ld"][0] == product
+    assert out["truncation"]["fields"]["structured_data"]["returned_chars"] <= 1000
+
+
+async def test_a_product_node_heavy_with_reviews_is_slimmed_not_dropped():
+    product = {"@type": "Product", "name": "Glass set", "offers": {"price": "29.00"}, "review": [{"t": "z" * 900}] * 30}
+    client = MagicMock()
+    sd = StructuredData(json_ld=[product])
+    result = ScrapeResult(success=True, data=ScrapeData(markdown="m", structured_data=sd, metadata=ScrapeMetadata()))
+    client.scrape_service.scrape = AsyncMock(return_value=result)
+
+    out = await supacrawl_scrape(client, url="https://example.com", formats=["structuredData"], max_chars=1500)
+
+    node = out["data"]["structured_data"]["json_ld"][0]
+    assert node["offers"] == {"price": "29.00"} and len(node["review"]) <= 3

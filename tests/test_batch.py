@@ -461,3 +461,25 @@ class TestBatchCliExitCodes:
         runner = CliRunner()
         result = runner.invoke(app, ["batch", str(tmp_path / "nonexistent.txt")])
         assert result.exit_code == 1
+
+
+class TestRunBatchScrapeDomainLeader:
+    """The first URL on a domain finishes before its siblings start, so what it learns seeds them."""
+
+    async def test_siblings_wait_for_the_first_url_of_their_domain(self) -> None:
+        order: list[str] = []
+
+        async def _scrape(url: str, **kwargs: object) -> ScrapeResult:
+            order.append(f"start {url}")
+            await asyncio.sleep(0.01)
+            order.append(f"end {url}")
+            return _make_scrape_result(url)
+
+        service = MagicMock()
+        service.scrape = AsyncMock(side_effect=_scrape)
+        urls = ["https://a.com/1", "https://a.com/2", "https://b.com/1"]
+
+        await run_batch_scrape(urls=urls, scrape_service=service, concurrency=5)
+
+        assert order.index("end https://a.com/1") < order.index("start https://a.com/2")
+        assert order.index("start https://b.com/1") < order.index("end https://a.com/1")

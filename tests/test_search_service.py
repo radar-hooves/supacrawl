@@ -613,3 +613,23 @@ class TestRateLimiting:
         finally:
             service._rate_limiter.release()
             await service.close()
+
+
+class TestDomainFilterHolds:
+    @pytest.mark.asyncio
+    async def test_results_off_the_requested_domains_are_dropped(self):
+        from supacrawl.models import SearchFilters
+
+        service = _ddg_service()
+        items = [
+            SearchResultItem(url="https://www.target.com.au/p/a", title="a"),
+            SearchResultItem(url="https://news.com.au/x", title="b"),
+        ]
+        try:
+            with patch.object(service._chain, "search", AsyncMock(return_value=items)):
+                result = await service.search("q", filters=SearchFilters(include_domains=["target.com.au"]))
+                assert [r.url for r in result.data] == ["https://www.target.com.au/p/a"]
+                result = await service.search("q", filters=SearchFilters(include_domains=["bigw.com.au"]))
+                assert not result.success and "ignored the site: filter" in (result.error or "")
+        finally:
+            await service.close()

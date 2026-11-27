@@ -20,6 +20,7 @@ from collections import deque
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal
+from urllib.parse import urlsplit
 
 import httpx
 
@@ -160,6 +161,19 @@ class ScrapeOptions:
 
     formats: list[Literal["markdown", "html"]] | None = None
     only_main_content: bool = True
+
+
+def _domain_allowed(url: str, filters: SearchFilters) -> bool:
+    """True when ``url``'s host is on an included domain (or a subdomain) and not on an excluded one."""
+    host = (urlsplit(url).hostname or "").lower()
+
+    def on(domain: str) -> bool:
+        d = domain.lower().removeprefix("www.")
+        return host == d or host.endswith("." + d)
+
+    if filters.exclude_domains and any(on(d) for d in filters.exclude_domains):
+        return False
+    return not filters.include_domains or any(on(d) for d in filters.include_domains)
 
 
 class SearchService:
@@ -461,6 +475,28 @@ class SearchService:
                 # is this request's own; the last source that answered wins.
                 served_by = self._chain.last_provider
                 all_results.extend(results)
+
+            # Providers that only honour ``site:`` operators routinely ignore
+            # them; the filter holds here whatever the engine did.
+            if filters and (filters.include_domains or filters.exclude_domains) and all_results:
+                kept = [r for r in all_results if _domain_allowed(r.url, filters)]
+                if not kept:
+                    return self._finalize_search(
+                        SearchResult(
+                            success=False,
+                            data=[],
+                            error=(
+                                f"The search engine returned {len(all_results)} result(s), none on the requested "
+                                "domains: it ignored the site: filter. Retry with a more specific query "
+                                "(product name plus shop name) or scrape the shop's own search page."
+                            ),
+                            provider=served_by,
+                        ),
+                        query,
+                        telemetry_started,
+                        record_recent,
+                    )
+                all_results = kept
 
             # Optionally scrape results (web results only)
             if scrape_options and self._scrape_service:

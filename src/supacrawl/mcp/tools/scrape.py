@@ -4,6 +4,7 @@ Scrape tool for Supacrawl MCP server.
 Wraps supacrawl library's ScrapeService for MCP consumption.
 """
 
+import json
 from typing import Annotated, Any, Literal
 
 from api_common.correlation import generate_correlation_id
@@ -51,7 +52,58 @@ def _bound_response(response: dict[str, Any], max_chars: int | None, query: str 
             cut, strategy = text[:max_chars], "head"
         data[name] = cut
         fields[name] = {"total_chars": len(text), "returned_chars": len(cut), "strategy": strategy}
+    if cut_sd := _bound_structured_data(data, max_chars):
+        fields["structured_data"] = cut_sd
     response["truncation"] = {"max_chars": max_chars, "truncated": bool(fields), "fields": fields}
+
+
+def _slim(value: Any, items: int, chars: int) -> Any:
+    """Shorten a JSON-LD node: strings cut to ``chars``, lists to their first ``items``, scalars kept."""
+    if isinstance(value, str):
+        return value[:chars]
+    if isinstance(value, list):
+        return [_slim(v, items, chars) for v in value[:items]]
+    if isinstance(value, dict):
+        return {k: _slim(v, items, chars) for k, v in value.items()}
+    return value
+
+
+def _bound_structured_data(data: dict[str, Any], max_chars: int) -> dict[str, int | str] | None:
+    """Fit ``structured_data`` within ``max_chars`` of JSON, dropping its bulkiest parts first.
+
+    Sources go whole, largest first (the hydration blob, then microdata, then
+    opengraph); json_ld nodes are slimmed (long strings and lists cut) and then, if still over,
+    dropped largest first, so the Product node survives with its price. Returns the cut report, or
+    None when nothing was cut.
+    """
+    sd = data.get("structured_data")
+    if not sd:
+        return None
+
+    def size(value: Any) -> int:
+        return len(json.dumps(value, default=str, separators=(",", ":")))
+
+    total = size(sd)
+    if total <= max_chars:
+        return None
+    for key in sorted((k for k in sd if k != "json_ld"), key=lambda k: -size(sd[k])):
+        if size(sd) <= max_chars:
+            break
+        del sd[key]
+    ld = sd.get("json_ld")
+    if ld and size(sd) > max_chars:
+        for items, chars in ((3, 300), (1, 120)):
+            sd["json_ld"] = ld = [_slim(o, items, chars) for o in ld]
+            if size(sd) <= max_chars:
+                break
+        for i in sorted(range(len(ld)), key=lambda i: -size(ld[i])):
+            if size(sd) <= max_chars:
+                break
+            ld[i] = None
+        sd["json_ld"] = [o for o in ld if o is not None] or None
+        if sd["json_ld"] is None:
+            del sd["json_ld"]
+    return {"total_chars": total, "returned_chars": size(sd), "strategy": "drop_largest"}
 
 
 def _select_section(response: dict[str, Any], section: str | None) -> None:
@@ -197,7 +249,7 @@ async def supacrawl_scrape(
     max_chars: Annotated[
         int | None,
         Field(
-            description="Cap markdown/html/rawHtml at this many characters so a large page cannot overflow your tool-result budget. The response then carries `truncation` with the full length of every field it cut. With `query` set, markdown keeps the passages that best match it (strategy: query_ranked), otherwise the head. Default: no cap (a warning is added when markdown exceeds 100,000 characters).",
+            description="Cap markdown/html/rawHtml/structuredData at this many characters so a large page cannot overflow your tool-result budget. The response then carries `truncation` with the full length of every field it cut. With `query` set, markdown keeps the passages that best match it (strategy: query_ranked), otherwise the head. Default: no cap (a warning is added when markdown exceeds 100,000 characters).",
         ),
     ] = None,
     section: Annotated[
