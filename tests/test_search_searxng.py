@@ -882,3 +882,23 @@ class TestBrokeredCredentialThreading:
 
         assert search_cls.call_args.kwargs["searxng_username"] is None
         assert search_cls.call_args.kwargs["searxng_password"] is None
+
+
+async def test_search_web_checks_explicit_site_path_against_provider_url() -> None:
+    title = "The 2 Best Dry Food Storage Containers | Reviews by Wirecutter"
+    article = "https://www.nytimes.com/wirecutter/reviews/best-dry-food-storage-containers/"
+    response = httpx.Response(
+        200,
+        json={
+            "results": [
+                {"url": "https://www.nytimes.com/", "title": title},
+                {"url": article, "title": title},
+            ]
+        },
+    )
+    async with httpx.AsyncClient(transport=httpx.MockTransport(lambda request: response)) as client:
+        provider = SearXNGProvider(url="http://searxng.invalid", http_client=client)
+        results = await provider.search_web(
+            "site:nytimes.com/wirecutter/reviews/ dry food storage containers", 1, CORRELATION_ID
+        )
+        assert [item.url for item in results] == [article]

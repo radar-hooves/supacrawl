@@ -374,6 +374,7 @@ _VERDICT_SCORE_CEILING: dict[QualityVerdict, int] = {
     QualityVerdict.GARBLED_PDF: 25,
     QualityVerdict.EMPTY: 0,
     QualityVerdict.TARPIT: 10,
+    QualityVerdict.WRONG_PAGE: 10,
 }
 
 
@@ -415,6 +416,8 @@ def _classify(
     spacing: float | None,
     page_url: str | None = None,
     declared_link_index: bool = False,
+    product_offer: bool = False,
+    wrong_page: str | None = None,
 ) -> tuple[QualityVerdict, list[str]]:
     """Resolve the verdict from cheap structural signals (the "gate").
 
@@ -440,12 +443,20 @@ def _classify(
             return QualityVerdict.THIN, [f"PDF extracted only {word_count} words"]
         return QualityVerdict.OK, reasons
 
-    # HTTP status is the most reliable hard signal.
-    if status_code is not None:
-        if status_code in (403, 429, 503):
-            return QualityVerdict.BOT_CHALLENGE, [f"HTTP {status_code} (access throttled or blocked)"]
-        if status_code >= 400:
-            return QualityVerdict.ERROR_STATUS, [f"HTTP {status_code} error response"]
+    recovered = (
+        status_code == 429
+        and product_offer
+        and word_count >= _THIN_WORD_FLOOR
+        and not any(detect_bot_protection(text).values())
+    )
+    if status_code in (403, 429, 503) and not recovered:
+        return QualityVerdict.BOT_CHALLENGE, [f"HTTP {status_code} (access throttled or blocked)"]
+    if status_code is not None and status_code >= 400 and not recovered:
+        return QualityVerdict.ERROR_STATUS, [f"HTTP {status_code} error response"]
+    if wrong_page:
+        return QualityVerdict.WRONG_PAGE, [wrong_page]
+    if recovered:
+        reasons.append("HTTP 429 with substantive page content and an embedded Product offer")
 
     if not html:
         if word_count == 0:
@@ -533,6 +544,8 @@ def assess_quality(
     is_pdf: bool = False,
     url: str | None = None,
     link_index: bool = False,
+    product_offer: bool = False,
+    wrong_page: str | None = None,
 ) -> QualityAssessment:
     """Assess how usable a scrape result is: a verdict plus a 0-100 score.
 
@@ -555,6 +568,8 @@ def assess_quality(
             link with anchor text then makes a short page ``ok``; undeclared, it takes
             ``MIN_INDEX_LINKS``. Walls, error statuses, CAPTCHAs, tarpits and a shell
             with no content links are judged the same either way.
+        product_offer: Structured offer evidence tied to the fetched product URL.
+        wrong_page: Reason the fetched content does not match the requested page.
 
     Returns:
         A :class:`QualityAssessment` carrying the verdict, score, reasons, and a
@@ -573,6 +588,8 @@ def assess_quality(
         spacing=spacing,
         page_url=url,
         declared_link_index=link_index,
+        product_offer=product_offer,
+        wrong_page=wrong_page,
     )
 
     link_count = count_structure(text)["links"] if text else 0

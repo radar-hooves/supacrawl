@@ -127,3 +127,23 @@ async def test_a_product_node_heavy_with_reviews_is_slimmed_not_dropped():
 
     node = out["data"]["structured_data"]["json_ld"][0]
     assert node["offers"] == {"price": "29.00"} and len(node["review"]) <= 3
+
+
+async def test_largest_product_is_compacted_before_losing_its_offer():
+    from supacrawl.mcp.tools.scrape import _bound_structured_data
+
+    product = {
+        "@type": "Product",
+        "name": "Kitchen Pro Airlock Glass Container Set 10pc",
+        "offers": {"@type": "Offer", "price": 99.95, "priceCurrency": "AUD"},
+        "additionalProperty": {f"prop{i}": "x" * 500 for i in range(500)},
+    }
+    offer = {"@type": "Offer", "price": 59.95, "priceCurrency": "AUD"}
+    data = {"structured_data": {"json_ld": [{"@type": "WebSite"}, {"@type": "ItemList"}, product, offer]}}
+
+    report = _bound_structured_data(data, 450)
+
+    assert report["returned_chars"] <= 450
+    kept_product, kept_offer = data["structured_data"]["json_ld"]
+    assert kept_product["offers"] == product["offers"]
+    assert kept_offer == offer

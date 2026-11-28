@@ -362,6 +362,7 @@ class QualityVerdict(StrEnum):
     CAPTCHA = "captcha"  # an explicit CAPTCHA challenge
     ERROR_STATUS = "error_status"  # an HTTP >= 400 response (including soft-404 shells)
     GARBLED_PDF = "garbled_pdf"  # PDF text extracted but spacing/encoding is corrupt
+    WRONG_PAGE = "wrong_page"  # the requested content was replaced by a different page
     EMPTY = "empty"  # no content could be extracted at all
     INFRASTRUCTURE = "infrastructure"  # supacrawl's own engine failed; says nothing about the site
     TARPIT = "tarpit"  # a self-referential link maze of generated content (Nepenthes/iocaine-style)
@@ -377,6 +378,7 @@ HARD_FAIL_VERDICTS: frozenset[QualityVerdict] = frozenset(
         QualityVerdict.EMPTY,
         QualityVerdict.INFRASTRUCTURE,
         QualityVerdict.TARPIT,
+        QualityVerdict.WRONG_PAGE,
     }
 )
 
@@ -423,6 +425,7 @@ VERDICT_SUGGESTIONS: dict[QualityVerdict, str] = {
         "restart the supacrawl server and check its logs. Changing engine, wait_for, or other scrape options "
         "will not help."
     ),
+    QualityVerdict.WRONG_PAGE: "Check the requested URL and any required search parameters.",
     QualityVerdict.TARPIT: (
         "This page is a crawler tarpit: an infinite maze of generated content designed to poison and trap "
         "bots, not a real page. Do not retry with a different engine or a longer wait_for — the maze "

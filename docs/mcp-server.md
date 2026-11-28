@@ -39,7 +39,7 @@ The server also exposes resources (format references, search providers, capabili
 
 ## Quality signal
 
-Every scrape result carries `quality`: a `verdict` (`ok`, `thin`, `js_shell`, `paywall`, `bot_challenge`, `captcha`, `error_status`, `garbled_pdf`, `tarpit`, `infrastructure`, `empty`), a 0 to 100 score, a `suggestion` when the result is not clean, and `tried`, each strategy that ran with its verdict. `success` is honest: bot blocks, CAPTCHAs, HTTP errors and empty pages are `success: false`. An `infrastructure` verdict means supacrawl's own engine failed and the request never left the building.
+Every scrape result carries `quality`: a `verdict` (`ok`, `thin`, `js_shell`, `paywall`, `bot_challenge`, `captcha`, `error_status`, `garbled_pdf`, `tarpit`, `infrastructure`, `wrong_page`, `empty`), a 0 to 100 score, a `suggestion` when the result is not clean, and `tried`, each strategy that ran with its verdict. Bot blocks, CAPTCHAs, wrong pages, HTTP errors and empty pages normally return `success: false`. A throttled product page can still succeed when it has readable content and a priced offer for its own URL. The metadata carries the HTTP 429. An `infrastructure` verdict means the scrape failed inside Supacrawl’s browser engine.
 
 On a poor verdict the server escalates through its engines (Patchright, then Camoufox, then Camoufox over HTTP/1.1) within a bounded number of attempts, and remembers per domain the strategy that produced a clean result. Install the extras to unlock the full ladder:
 

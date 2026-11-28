@@ -1,7 +1,10 @@
 """Tests for deterministic embedded structured-data extraction (#120)."""
 
+from unittest.mock import AsyncMock
+
 import pytest
 
+from supacrawl.services.browser import BrowserManager, PageContent
 from supacrawl.services.scrape import ScrapeService
 from supacrawl.services.structured_data import extract_structured_data
 
@@ -124,3 +127,21 @@ class TestScrapeStructuredDataFormat:
         assert result.data.structured_data is not None
         assert result.data.structured_data.json_ld is not None
         assert result.data.structured_data.json_ld[0]["name"] == "Widget"
+
+
+@pytest.mark.parametrize("offer_url, success", [("/product/widget", True), ("/product/other", False)])
+async def test_throttled_scrape_requires_a_priced_offer_for_the_fetched_page(monkeypatch, offer_url, success):
+    url = "https://example.com/product/widget"
+    html = JSON_LD_HTML.replace('"price": "19.99"', f'"url": "{offer_url}", "price": "19.99"')
+    html = html.replace("</h1>", "</h1><p>" + ("A glass container with a durable airtight lid. " * 12) + "</p>")
+    browser = BrowserManager()
+    monkeypatch.setattr(browser, "fetch_page", AsyncMock(return_value=PageContent(url, html, "Widget", 429)))
+
+    result = await ScrapeService(browser=browser).scrape(
+        url, formats=["markdown", "structuredData"], http_first=False, escalate=False
+    )
+
+    assert result.success is success
+    assert (result.error is None) is success
+    assert result.data.metadata.status_code == 429
+    assert result.data.structured_data.json_ld[0]["offers"]["price"] == "19.99"

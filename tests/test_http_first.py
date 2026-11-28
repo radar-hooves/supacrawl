@@ -581,3 +581,18 @@ class TestFetchStatic:
         resp = self._make_fake_response(content_type="application/pdf", body=oversized_body)
         result = await self._call(resp)
         assert result is None
+
+
+@pytest.mark.parametrize("redirected", [False, True])
+async def test_search_shell_and_homepage_redirect_fail_quality(redirected):
+    url = "https://example.com/search?text=glass+food+storage+containers"
+    html = GOOD_HTML.replace("An illustrative page.", "Search results for undefined on Example")
+    fetched = _fetched(html)
+    fetched.url = "https://example.com/" if redirected else url
+
+    with patch("supacrawl.services.scrape.fetch_static", AsyncMock(return_value=fetched)):
+        result = await ScrapeService().scrape(url, escalate=False)
+
+    assert not result.success
+    assert result.quality.verdict == "wrong_page"
+    assert ("homepage" if redirected else "search term") in result.error

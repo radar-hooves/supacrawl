@@ -684,6 +684,7 @@ class PageContent:
     screenshot: bytes | None = None
     pdf: bytes | None = None
     action_results: list[Any] | None = None  # Results from ActionRunner
+    final_url: str | None = None
 
 
 @dataclass
@@ -1646,6 +1647,7 @@ class BrowserManager:
                 screenshot=screenshot_bytes,
                 pdf=pdf_bytes,
                 action_results=action_results_list,
+                final_url=page.url,
             )
 
         except Exception as e:

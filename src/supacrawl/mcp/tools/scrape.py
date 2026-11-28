@@ -69,13 +69,7 @@ def _slim(value: Any, items: int, chars: int) -> Any:
 
 
 def _bound_structured_data(data: dict[str, Any], max_chars: int) -> dict[str, int | str] | None:
-    """Fit ``structured_data`` within ``max_chars`` of JSON, dropping its bulkiest parts first.
-
-    Sources go whole, largest first (the hydration blob, then microdata, then
-    opengraph); json_ld nodes are slimmed (long strings and lists cut) and then, if still over,
-    dropped largest first, so the Product node survives with its price. Returns the cut report, or
-    None when nothing was cut.
-    """
+    """Bound embedded data, retaining Product and Offer facts before site metadata."""
     sd = data.get("structured_data")
     if not sd:
         return None
@@ -96,14 +90,59 @@ def _bound_structured_data(data: dict[str, Any], max_chars: int) -> dict[str, in
             sd["json_ld"] = ld = [_slim(o, items, chars) for o in ld]
             if size(sd) <= max_chars:
                 break
-        for i in sorted(range(len(ld)), key=lambda i: -size(ld[i])):
-            if size(sd) <= max_chars:
+
+        def is_commerce(node: Any) -> bool:
+            if not isinstance(node, dict):
+                return False
+            types = node.get("@type")
+            return any(
+                t in ("Product", "Offer", "AggregateOffer") for t in (types if isinstance(types, list) else [types])
+            )
+
+        for node in sorted(ld, key=lambda node: (is_commerce(node), -size(node))):
+            if size(sd) <= max_chars or is_commerce(node):
                 break
-            ld[i] = None
-        sd["json_ld"] = [o for o in ld if o is not None] or None
-        if sd["json_ld"] is None:
+            ld.remove(node)
+        if size(sd) > max_chars:
+            sd["json_ld"] = ld = [_commerce_facts(node) for node in ld]
+            for node in sorted(ld, key=size, reverse=True):
+                if size(sd) <= max_chars:
+                    break
+                ld.remove(node)
+        if not ld:
             del sd["json_ld"]
-    return {"total_chars": total, "returned_chars": size(sd), "strategy": "drop_largest"}
+    if size(sd) > max_chars:
+        del data["structured_data"]
+    return {
+        "total_chars": total,
+        "returned_chars": size(sd) if "structured_data" in data else 0,
+        "strategy": "prioritize_commerce",
+    }
+
+
+def _commerce_facts(node: dict[str, Any]) -> dict[str, Any]:
+    fields = {
+        "@type",
+        "@id",
+        "name",
+        "url",
+        "sku",
+        "price",
+        "priceCurrency",
+        "priceSpecification",
+        "lowPrice",
+        "highPrice",
+        "offerCount",
+        "availability",
+        "offers",
+    }
+    facts = {key: value for key, value in node.items() if key in fields}
+    offers = facts.get("offers")
+    if isinstance(offers, dict):
+        facts["offers"] = _commerce_facts(offers)
+    elif isinstance(offers, list):
+        facts["offers"] = [_commerce_facts(offer) for offer in offers if isinstance(offer, dict)]
+    return facts
 
 
 def _select_section(response: dict[str, Any], section: str | None) -> None:
@@ -289,7 +328,7 @@ async def supacrawl_scrape(
     ```
     {
       "verdict": "ok" | "thin" | "js_shell" | "paywall" | "bot_challenge" |
-                 "captcha" | "error_status" | "garbled_pdf" | "empty" |
+                 "captcha" | "error_status" | "garbled_pdf" | "wrong_page" | "empty" |
                  "infrastructure",
       "score": 0-100,
       "reasons": [...],

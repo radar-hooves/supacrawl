@@ -7,10 +7,11 @@ data layer, so it is more reliable than scraping the rendered DOM and free of an
 model call. This module harvests all four sources with BeautifulSoup and json.
 """
 
+import contextlib
 import json
 import logging
 from typing import Any
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlsplit
 
 from bs4 import BeautifulSoup, Tag
 
@@ -52,6 +53,28 @@ def extract_structured_data(html: str, *, base_url: str | None = None) -> Struct
         opengraph=_extract_opengraph(soup) or None,
         next_data=_extract_next_data(soup) or None,
     )
+
+
+def has_product_offer(data: StructuredData, page_url: str) -> bool:
+    """Require a priced offer tied to this URL before trusting a throttled body."""
+    page = urlsplit(page_url)
+    for node in data.json_ld or []:
+        if not isinstance(node, dict):
+            continue
+        types = node.get("@type")
+        if "Product" not in (types if isinstance(types, list) else [types]):
+            continue
+        offers = node.get("offers")
+        for offer in offers if isinstance(offers, list) else [offers]:
+            if not isinstance(offer, dict) or all(offer.get(key) is None for key in ("price", "lowPrice")):
+                continue
+            url = offer.get("url") or node.get("url")
+            if isinstance(url, str) and url:
+                with contextlib.suppress(ValueError):
+                    target = urlsplit(urljoin(page_url, url))
+                    if target.hostname == page.hostname and target.path.rstrip("/") == page.path.rstrip("/"):
+                        return True
+    return False
 
 
 def _extract_json_ld(soup: BeautifulSoup) -> list[Any]:

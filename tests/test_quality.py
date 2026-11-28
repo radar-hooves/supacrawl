@@ -303,3 +303,10 @@ def test_runtime_verdict_agrees_with_bench_composite() -> None:
     fused_q = assess_quality(status_code=200, html=None, markdown=fused, is_pdf=True)
     assert not fused_q.is_usable
     assert _bench_reference_free_composite(fused) <= 40
+
+
+def test_throttled_response_with_product_offer_and_readable_content_is_usable():
+    markdown = "The glass container includes an airtight and leakproof lid. " * 12
+    html = f"<main><h1>Glass container</h1><p>{markdown}</p></main>"
+    assert assess_quality(status_code=429, html=html, markdown=markdown, product_offer=True).is_usable
+    assert not assess_quality(status_code=429, html=html, markdown=markdown).is_usable

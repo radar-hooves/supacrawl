@@ -29,6 +29,7 @@ import time
 from collections.abc import Awaitable, Callable, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, NamedTuple
+from urllib.parse import urlparse
 
 if TYPE_CHECKING:
     from supacrawl.services.strategy_memory import StrategyChoice, StrategyStore
@@ -71,7 +72,7 @@ from supacrawl.services.http_fetch import fetch_static
 from supacrawl.services.image_details import measure_images
 from supacrawl.services.platform import detect_platform
 from supacrawl.services.remediation import remediation_hint, thin_content_hint
-from supacrawl.services.structured_data import extract_structured_data
+from supacrawl.services.structured_data import extract_structured_data, has_product_offer
 
 LOGGER = logging.getLogger(__name__)
 
@@ -135,6 +136,7 @@ _ESCALATABLE_VERDICTS: frozenset[QualityVerdict] = frozenset(
     {
         QualityVerdict.BOT_CHALLENGE,
         QualityVerdict.JS_SHELL,
+        QualityVerdict.WRONG_PAGE,
         QualityVerdict.EMPTY,
     }
 )
@@ -1105,6 +1107,7 @@ class ScrapeService:
         seed_requires_browser = bool(attempt_stealth or attempt_engine not in (None, "playwright"))
 
         http_attempt: AttemptRecord | None = None
+        wrong_static_page: ScrapeResult | None = None
 
         # HTTP-first fast path: try a cheap httpx GET and skip the browser
         # entirely when the page needs no JavaScript and shows no bot challenge.
@@ -1140,7 +1143,11 @@ class ScrapeService:
                 # poor result, and do not record it as a champion.
                 fast_verdict = fast_result.quality.verdict if fast_result.quality else None
                 http_attempt = _attempt_record(fast_result, "http")
-                if fast_verdict not in _ESCALATABLE_VERDICTS:
+                if fast_verdict is QualityVerdict.WRONG_PAGE:
+                    wrong_static_page = fast_result
+                if fast_verdict not in _ESCALATABLE_VERDICTS or (
+                    fast_verdict is QualityVerdict.WRONG_PAGE and not escalate
+                ):
                     if memory_domain and self._strategy_store is not None:
                         self._strategy_store.record(
                             memory_domain,
@@ -1443,6 +1450,11 @@ class ScrapeService:
             record_wait_for=wait_for,
             record_only_main=only_main_content,
         )
+        if wrong_static_page is not None and final_result.data is None:
+            if final_result.quality and wrong_static_page.quality:
+                wrong_static_page.quality.attempts = final_result.quality.attempts
+                wrong_static_page.quality.tried = final_result.quality.tried
+            final_result = wrong_static_page
         if http_attempt is not None and final_result.quality is not None:
             final_result.quality.tried.insert(0, http_attempt)
             final_result.quality.attempts += 1
@@ -1770,14 +1782,12 @@ class ScrapeService:
             f"Expected content not found: {expect!r}. The page loaded but the asserted content never "
             f"appeared after escalation. {remediation} [correlation_id={correlation_id}]"
         )
-        # The verdict stays honest — the content that came back really was fine,
-        # it just was not what the caller asserted — but a failure handed to a
-        # caller must still carry a next step in the structured field, not only in
-        # the error prose.
         if result.quality is not None:
-            result.quality.suggestion = (
-                f"The page loaded cleanly but never showed the asserted content ({expect!r}). {remediation} "
-                f"If the assertion itself is wrong, re-check it against the returned markdown."
+            result.quality = QualityAssessment(
+                verdict=QualityVerdict.WRONG_PAGE,
+                score=0,
+                reasons=[f"Expected content not found: {expect!r}"],
+                suggestion=f"Re-check the expected content {expect!r} against the returned markdown. {remediation}",
             )
         return result
 
@@ -2191,9 +2201,9 @@ class ScrapeService:
             extractor = BrandingExtractor()
             branding = extractor.extract(page_content.html, url)
 
-        if "structuredData" in formats:
-            # Deterministic, no-LLM extraction of the site's own embedded data.
-            structured_data = extract_structured_data(page_content.html, base_url=url)
+        observed_url = page_content.final_url or page_content.url
+        if "structuredData" in formats or page_content.status_code == 429:
+            structured_data = extract_structured_data(page_content.html, base_url=observed_url)
 
         if capture_screenshot and page_content.screenshot:
             screenshot_b64 = base64.b64encode(page_content.screenshot).decode("utf-8")
@@ -2254,12 +2264,31 @@ class ScrapeService:
         quality_text = markdown
         if quality_text is None and page_content.html:
             quality_text = BeautifulSoup(page_content.html, "html.parser").get_text(" ", strip=True)
+        requested = urlparse(url)
+        landed = urlparse(observed_url)
+        wrong_page = None
+        if (
+            requested.path.strip("/")
+            and not (landed.path.strip("/") or landed.query)
+            and not page_content.action_results
+        ):
+            wrong_page = "Requested page redirected to a site homepage"
+        elif requested.query and any(
+            re.search(r"\bsearch results for (?:undefined|null)\b", text or "", re.IGNORECASE)
+            for text in (metadata.title, metadata.description, metadata.og_title, metadata.og_description)
+        ):
+            wrong_page = "Search page did not resolve the requested search term"
+
         quality = assess_quality(
             status_code=page_content.status_code,
             html=page_content.html,
             markdown=markdown,
             visible_text=quality_text if markdown is None else None,
-            url=url,
+            url=observed_url,
+            product_offer=bool(
+                page_content.status_code == 429 and structured_data and has_product_offer(structured_data, observed_url)
+            ),
+            wrong_page=wrong_page,
         )
         quality_error = _quality_error(quality)
 
@@ -2275,7 +2304,7 @@ class ScrapeService:
                 screenshot=screenshot_b64,
                 pdf=pdf_b64,
                 llm_extraction=json_data,
-                structured_data=structured_data,
+                structured_data=structured_data if "structuredData" in formats else None,
                 summary=summary,
                 metadata=ScrapeMetadata(
                     # Core metadata

@@ -172,7 +172,7 @@ class SearXNGProvider:
     async def _search(
         self,
         query: str,
-        limit: int,
+        limit: int | None,
         categories: str,
         correlation_id: str,
         filters: SearchFilters | None = None,
@@ -242,17 +242,31 @@ class SearXNGProvider:
     async def search_web(
         self, query: str, limit: int, correlation_id: str, filters: SearchFilters | None = None
     ) -> list[SearchResultItem]:
-        raw_results, unresponsive = await self._search(query, limit, "general", correlation_id, filters)
+        scopes = re.findall(r'(?<!\S)site:([\w.-]+)(/[^\s"()]+)', query, re.IGNORECASE)
+        scope = scopes[0] if len(scopes) == 1 and not re.search(r"\sOR\s", query, re.IGNORECASE) else None
+        raw_results, unresponsive = await self._search(
+            query, None if scope else limit, "general", correlation_id, filters
+        )
         results: list[SearchResultItem] = []
         for item in raw_results:
+            url = item.get("url", "")
+            if scope:
+                domain, path = scope
+                parts = urlsplit(url)
+                host = (parts.hostname or "").casefold()
+                domain = domain.casefold()
+                if not (host == domain or host.endswith("." + domain)) or not parts.path.startswith(path):
+                    continue
             results.append(
                 SearchResultItem(
-                    url=item.get("url", ""),
+                    url=url,
                     title=item.get("title", ""),
                     description=item.get("content", ""),
                     source_type=SearchSourceType.WEB,
                 )
             )
+            if len(results) == limit:
+                break
 
         log_with_correlation(
             LOGGER,
