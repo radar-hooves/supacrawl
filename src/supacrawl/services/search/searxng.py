@@ -26,7 +26,7 @@ import logging
 import os
 import re
 from typing import Any
-from urllib.parse import unquote, urlsplit, urlunsplit
+from urllib.parse import unquote, urlsplit, urlunparse, urlunsplit
 
 import httpx
 
@@ -250,9 +250,32 @@ class SearXNGProvider:
         results: list[SearchResultItem] = []
         for item in raw_results:
             url = item.get("url", "")
+            try:
+                parts = urlsplit(url)
+            except ValueError:
+                continue
+            url_warning = None
+            if parts.netloc and parts.path in ("", "/") and not (parts.query or parts.fragment):
+                parsed = item.get("parsed_url")
+                if (
+                    isinstance(parsed, list)
+                    and len(parsed) == 6
+                    and all(isinstance(value, str) for value in parsed)
+                    and parsed[0] in ("http", "https")
+                    and parsed[1] == parts.netloc
+                    and "@" not in parsed[1]
+                    and parsed[2].startswith("/")
+                    and parsed[2] != "/"
+                ):
+                    url = urlunparse(tuple(parsed))
+                    parts = urlsplit(url)
+                else:
+                    url_warning = (
+                        "SearXNG supplied only a homepage URL. The title and snippet may describe a different page. "
+                        "Search the site for the result title to find its page."
+                    )
             if scope:
                 domain, path = scope
-                parts = urlsplit(url)
                 host = (parts.hostname or "").casefold()
                 domain = domain.casefold()
                 if not (host == domain or host.endswith("." + domain)) or not parts.path.startswith(path):
@@ -263,6 +286,7 @@ class SearXNGProvider:
                     title=item.get("title", ""),
                     description=item.get("content", ""),
                     source_type=SearchSourceType.WEB,
+                    url_warning=url_warning,
                 )
             )
             if len(results) == limit:

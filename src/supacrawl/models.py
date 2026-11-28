@@ -631,6 +631,7 @@ class SearchResultItem(BaseModel):
     title: str
     description: str | None = None
     source_type: SearchSourceType = SearchSourceType.WEB
+    url_warning: str | None = None
 
     # Image-specific fields: ``url`` is the page the image sits on, ``image_url`` the image itself
     image_url: str | None = None

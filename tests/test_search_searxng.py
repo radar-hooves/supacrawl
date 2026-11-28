@@ -884,6 +884,40 @@ class TestBrokeredCredentialThreading:
         assert search_cls.call_args.kwargs["searxng_password"] is None
 
 
+@pytest.mark.parametrize("parsed_path", [None, "/", "/price-beat"])
+async def test_search_web_qualifies_homepage_under_a_deep_page_title(parsed_path: str | None) -> None:
+    homepage = "https://www.kitchenwarehouse.com.au/"
+    title = "Guaranteed lowest price, Our Price Beat Promise"
+    response = httpx.Response(
+        200,
+        json={
+            "results": [
+                {
+                    "url": homepage,
+                    "parsed_url": ["https", "www.kitchenwarehouse.com.au", parsed_path, "", "", ""]
+                    if parsed_path
+                    else None,
+                    "title": title,
+                    "content": "Buy what you love, with confidence; our guaranteed lowest price.",
+                }
+            ]
+        },
+    )
+    async with httpx.AsyncClient(transport=httpx.MockTransport(lambda request: response)) as client:
+        provider = SearXNGProvider(url="http://searxng.invalid", http_client=client)
+        (result,) = await provider.search_web(
+            '"Kitchen Warehouse" "beat it by 5%" price guarantee conditions', 5, CORRELATION_ID
+        )
+
+    assert result.title == title
+    if parsed_path == "/price-beat":
+        assert result.url == homepage.rstrip("/") + parsed_path
+        assert result.url_warning is None
+    else:
+        assert result.url == homepage
+        assert "Search the site for the result title" in (result.url_warning or "")
+
+
 async def test_search_web_checks_explicit_site_path_against_provider_url() -> None:
     title = "The 2 Best Dry Food Storage Containers | Reviews by Wirecutter"
     article = "https://www.nytimes.com/wirecutter/reviews/best-dry-food-storage-containers/"
